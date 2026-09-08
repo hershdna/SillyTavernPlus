@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Alt Greeting Reorder fixture</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { color: #eee; background: #202124; font: 14px sans-serif; padding: 20px; }
+    .alternate_grettings { max-width: 850px; }
+    .alternate_greetings_list { display: flex; flex-direction: column; gap: 8px; }
+    .alternate_greeting { border: 1px solid #555; padding: 8px; }
+    summary { cursor: pointer; }
+    .title_restorable { display: flex; align-items: center; gap: 8px; }
+    .expander { flex: 1; }
+    textarea { display: block; width: 100%; min-height: 80px; margin-top: 8px; }
+    button, input { font: inherit; }
+  </style>
+</head>
+<body>
+  <div class="alternate_grettings">
+    <h2>Alternate Greetings</h2>
+    <div class="alternate_greetings_list">
+      <div class="alternate_greeting" data-index="0">
+        <details open><summary><div class="title_restorable"><strong>Alternate Greeting #<span class="greeting_index">1</span></strong><span class="expander"></span></div></summary><textarea class="alternate_greeting_text">Greeting one</textarea></details>
+      </div>
+      <div class="alternate_greeting" data-index="1">
+        <details open><summary><div class="title_restorable"><strong>Alternate Greeting #<span class="greeting_index">2</span></strong><span class="expander"></span></div></summary><textarea class="alternate_greeting_text">Greeting two</textarea></details>
+      </div>
+      <div class="alternate_greeting" data-index="2">
+        <details open><summary><div class="title_restorable"><strong>Alternate Greeting #<span class="greeting_index">3</span></strong><span class="expander"></span></div></summary><textarea class="alternate_greeting_text">Greeting three</textarea></details>
+      </div>
+    </div>
+  </div>
+  <script src="index.js"></script>
+</body>
+</html>

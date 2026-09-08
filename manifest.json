@@ -1,0 +1,10 @@
+{
+  "display_name": "Alt Greeting Reorder",
+  "version": "0.1.0",
+  "author": "hershdna",
+  "homePage": "https://github.com/hershdna/AltGreetingReorder",
+  "loading_order": 9998,
+  "js": "index.js",
+  "css": "style.css",
+  "auto_update": true
+}

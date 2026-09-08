@@ -1,0 +1,46 @@
+.gp-alt-greeting-reorder .gp-alt-position-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 6px;
+    white-space: nowrap;
+}
+
+.gp-alt-position-label {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.gp-alt-position-input {
+    width: 4.4em;
+    min-width: 4.4em;
+    padding: 2px 4px;
+    text-align: center;
+}
+
+.gp-alt-position-apply {
+    padding: 2px 6px;
+    font-size: 0.85em;
+}
+
+.gp-alt-reorder-status {
+    display: block;
+    min-height: 1.2em;
+    margin: 4px 0;
+    color: var(--SmartThemeQuoteColor, #9ecbff);
+}
+
+.gp-alt-reorder-status.error {
+    color: var(--SmartThemeEmColor, #ff8a8a);
+}
+
+@media (max-width: 700px) {
+    .gp-alt-greeting-reorder .gp-alt-position-control {
+        margin-left: 2px;
+    }
+
+    .gp-alt-position-label,
+    .gp-alt-position-apply span {
+        display: none;
+    }
+}
