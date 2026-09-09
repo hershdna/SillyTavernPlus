@@ -203,6 +203,62 @@
     cursor: nwse-resize;
 }
 
+/* Four-corner handles for every panel participating in MovingUI, including
+   windows supplied by third-party extensions. They are disabled with MovingUI
+   so the native window behavior remains untouched when MovingUI is off. */
+.stplus-movingui-resize-handle {
+    position: absolute;
+    z-index: 2002;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    color: var(--SmartThemeBodyColor, #eee);
+    opacity: 0.55;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+}
+
+body:not(.movingUI) .stplus-movingui-resize-handle {
+    display: none !important;
+}
+
+.stplus-movingui-resize-handle::after {
+    position: absolute;
+    inset: 2px;
+    content: '';
+    border: 1px solid currentColor;
+    pointer-events: none;
+}
+
+.stplus-movingui-resize-handle:hover {
+    opacity: 1;
+}
+
+.stplus-movingui-resize-nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+}
+
+.stplus-movingui-resize-ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+}
+
+.stplus-movingui-resize-sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+}
+
+.stplus-movingui-resize-se {
+    right: 0;
+    bottom: 0;
+    cursor: nwse-resize;
+}
+
 .stplus-settings-window.stplus-settings-window-open {
     display: block;
 }
