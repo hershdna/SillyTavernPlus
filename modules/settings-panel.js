@@ -202,6 +202,15 @@ function createSettingsWindow() {
             callbacks?.onGreetingModsChanged?.();
         },
     ));
+    body.append(createCheckbox(
+        'stplus-movingui-resize-enabled',
+        'MovingUI corner resizing',
+        'Add four-corner resize handles to SillyTavern and third-party MovingUI windows.',
+        (enabled) => {
+            settings.movingUiResizeEnabled = enabled;
+            callbacks?.onMovingUiResizeChanged?.();
+        },
+    ));
 
     panel.append(header, body);
     document.body.appendChild(panel);
@@ -245,7 +254,9 @@ export function refresh() {
     installSettingsButton();
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
+    const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
+    if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
 }
 
