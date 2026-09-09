@@ -14,19 +14,22 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, settingsPanel] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, settingsPanel, movingUiResize] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
                 loadModule('settings-panel'),
+                loadModule('movingui-resize'),
             ]);
             const settings = settingsStore.initializeSettings(context);
 
             greetingMods.initialize(settings);
             lorebookMods.initialize(context, settings);
+            movingUiResize.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
                 onLorebookModsChanged: () => lorebookMods.refresh(),
+                onMovingUiResizeChanged: () => movingUiResize.refresh(),
             });
 
             let scanScheduled = false;
@@ -35,6 +38,7 @@
                 greetingMods.refresh();
                 lorebookMods.refresh();
                 settingsPanel.refresh();
+                movingUiResize.refresh();
             };
             const scheduleScan = () => {
                 if (scanScheduled) return;
@@ -44,11 +48,12 @@
             };
             const isRelevantMutation = (mutation) => {
                 const target = mutation.target instanceof Element ? mutation.target : null;
-                if (target?.closest('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar')) return true;
+                if (target === document.body || target?.matches('#movingDivs') || target?.closest('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar')) return true;
                 return Array.from(mutation.addedNodes).some((node) => {
                     if (!(node instanceof Element)) return false;
-                    return node.matches('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar')
-                        || Boolean(node.querySelector('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar'));
+                    return node.matches('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, #movingDivs')
+                        || node.parentElement?.matches('#movingDivs')
+                        || Boolean(node.querySelector('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, #movingDivs'));
                 });
             };
 
@@ -56,7 +61,7 @@
             const observer = new MutationObserver((mutations) => {
                 if (mutations.some(isRelevantMutation)) scheduleScan();
             });
-            observer.observe(document.body, { childList: true, subtree: true });
+            observer.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
         } catch (error) {
             console.error('[SillyTavernPlus] Failed to initialize:', error);
         }
