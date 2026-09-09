@@ -1,8 +1,8 @@
 {
-  "display_name": "Alt Greeting Reorder",
-  "version": "0.1.0",
+  "display_name": "SillyTavernPlus",
+  "version": "0.2.0",
   "author": "hershdna",
-  "homePage": "https://github.com/hershdna/AltGreetingReorder",
+  "homePage": "https://github.com/hershdna/SillyTavernPlus",
   "loading_order": 9998,
   "js": "index.js",
   "css": "style.css",

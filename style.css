@@ -1,4 +1,4 @@
-.gp-alt-greeting-reorder .gp-alt-position-control {
+.stplus-alt-greeting-reorder .stplus-alt-position-control {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -6,41 +6,117 @@
     white-space: nowrap;
 }
 
-.gp-alt-position-label {
+.stplus-alt-position-label {
     font-size: 0.85em;
     opacity: 0.75;
 }
 
-.gp-alt-position-input {
+.stplus-alt-position-input {
     width: 4.4em;
     min-width: 4.4em;
     padding: 2px 4px;
     text-align: center;
 }
 
-.gp-alt-position-apply {
+.stplus-alt-position-apply {
     padding: 2px 6px;
     font-size: 0.85em;
 }
 
-.gp-alt-reorder-status {
+.stplus-alt-reorder-status {
     display: block;
     min-height: 1.2em;
     margin: 4px 0;
     color: var(--SmartThemeQuoteColor, #9ecbff);
 }
 
-.gp-alt-reorder-status.error {
+.stplus-alt-reorder-status.error {
     color: var(--SmartThemeEmColor, #ff8a8a);
 }
 
+/* SillyTavernPlus Worlds/Lorebooks floating editor */
+.stplus-worlds-toolbar-button {
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    flex-flow: row;
+    width: 100%;
+}
+
+.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon {
+    display: inline-block;
+    cursor: pointer;
+    font-size: var(--topBarIconSize, calc(var(--mainFontSize, 16px) * 2));
+    padding: 1px 3px;
+}
+
+.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon.closedIcon {
+    opacity: 0.3;
+    transition: all var(--animation-duration-2x, 250ms);
+}
+
+.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon.closedIcon:hover,
+.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon.closedIcon:focus-visible {
+    opacity: 1;
+}
+
+#WorldInfo.stplus-floating-worlds {
+    position: fixed !important;
+    z-index: 4005 !important;
+    display: block !important;
+    visibility: visible !important;
+    box-sizing: border-box;
+    width: min(860px, calc(100vw - 48px)) !important;
+    height: min(720px, calc(100vh - 48px)) !important;
+    min-width: 320px !important;
+    min-height: 240px !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: auto !important;
+    resize: both !important;
+    transform: none !important;
+    margin: 0 !important;
+}
+
+#WorldInfo.stplus-floating-worlds #WorldInfoheader {
+    display: block !important;
+    pointer-events: none;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-title-row {
+    position: relative;
+    cursor: move;
+    user-select: none;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-title-row > h3 {
+    padding-right: 42px;
+}
+
+.stplus-worlds-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+}
+
 @media (max-width: 700px) {
-    .gp-alt-greeting-reorder .gp-alt-position-control {
+    .stplus-alt-greeting-reorder .stplus-alt-position-control {
         margin-left: 2px;
     }
 
-    .gp-alt-position-label,
-    .gp-alt-position-apply span {
+    .stplus-alt-position-label,
+    .stplus-alt-position-apply span {
         display: none;
+    }
+
+    #WorldInfo.stplus-floating-worlds {
+        width: calc(100vw - 16px) !important;
+        height: calc(100vh - 16px) !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
     }
 }

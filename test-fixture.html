@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Alt Greeting Reorder fixture</title>
+  <title>SillyTavernPlus fixture</title>
   <link rel="stylesheet" href="style.css">
   <style>
     body { color: #eee; background: #202124; font: 14px sans-serif; padding: 20px; }
@@ -14,9 +14,28 @@
     .expander { flex: 1; }
     textarea { display: block; width: 100%; min-height: 80px; margin-top: 8px; }
     button, input { font: inherit; }
+    #top-settings-holder { display: flex; gap: 8px; min-height: 42px; }
+    .drawer { display: flex; align-items: center; }
+    .drawer-icon { font-size: 28px; padding: 3px; }
+    .closedDrawer { display: none; }
+    .openDrawer { display: block; }
+    #WorldInfo { width: 520px; height: 360px; background: #303238; padding: 12px; }
   </style>
 </head>
 <body>
+  <div id="top-settings-holder">
+    <div id="fixture-native-icon" class="drawer">
+      <div class="drawer-toggle drawer-header"><div class="drawer-icon fa-solid fa-sliders fa-fw closedIcon" title="Native icon"></div></div>
+    </div>
+  </div>
+  <div id="WI-SP-button" class="drawer">
+    <div id="WIDrawerIcon" class="drawer-icon fa-solid fa-book-atlas fa-fw closedIcon" title="World Info"></div>
+    <div id="WorldInfo" class="drawer-content closedDrawer">
+      <div id="WorldInfoheader" class="fa-solid fa-grip drag-grabber"></div>
+      <div class="flex-container alignitemscenter gap10px"><h3>Worlds/Lorebooks</h3></div>
+      <div id="world_popup_entries_list">Native World Info editor content</div>
+    </div>
+  </div>
   <div class="alternate_grettings">
     <h2>Alternate Greetings</h2>
     <div class="alternate_greetings_list">
@@ -31,6 +50,13 @@
       </div>
     </div>
   </div>
+  <script>
+    document.getElementById('WIDrawerIcon').addEventListener('click', () => {
+      const panel = document.getElementById('WorldInfo');
+      panel.classList.toggle('openDrawer');
+      panel.classList.toggle('closedDrawer');
+    });
+  </script>
   <script src="index.js"></script>
 </body>
 </html>

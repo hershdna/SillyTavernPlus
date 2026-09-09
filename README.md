@@ -1,20 +1,18 @@
-# Alt Greeting Reorder
+# SillyTavernPlus
 
-A SillyTavern extension that adds a numeric position control to every alternate greeting in the character editor.
+A SillyTavern extension with small quality-of-life tools for the character and World Info editors.
 
-## Use
+## Features
 
-1. Open a character's **Alt. Greetings** editor.
-2. Enter the desired 1-based position in a greeting's **Position** field.
-3. Press Enter, use **Move**, or leave the field to apply the move.
-4. Close the native greeting editor to let SillyTavern save the character normally.
-
-The extension keeps SillyTavern's native editor and save flow intact. It only rewrites the greeting values in their existing editor fields and emits the same input events used by the native editor.
+- Reorder alternate greetings with numeric position controls.
+- Open Worlds/Lorebooks from a dedicated top-toolbar icon.
+- Use the native World Info editor in a floating window that can be moved and resized.
+- Floating window position and size persist between sessions.
 
 ## Installation
 
 Copy this repository into:
 
-`SillyTavern/public/scripts/extensions/third-party/AltGreetingReorder`
+`SillyTavern/public/scripts/extensions/third-party/SillyTavernPlus`
 
 Then enable it from SillyTavern's Extensions panel or restart SillyTavern.
