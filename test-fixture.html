@@ -23,7 +23,7 @@
     #wiActivationSettings { max-width: 520px; margin: 14px 0; padding: 10px; border: 1px solid #555; }
   </style>
 </head>
-<body>
+<body class="movingUI">
   <div id="top-settings-holder">
     <div id="fixture-native-icon" class="drawer">
       <div class="drawer-toggle drawer-header"><div class="drawer-icon fa-solid fa-sliders fa-fw closedIcon" title="Native icon"></div></div>
@@ -40,6 +40,14 @@
       <div id="WorldInfoheader" class="fa-solid fa-grip drag-grabber"></div>
       <div class="flex-container alignitemscenter gap10px"><h3>Worlds/Lorebooks</h3></div>
       <div id="world_popup_entries_list">Native World Info editor content</div>
+    </div>
+  </div>
+  <div id="movingDivs">
+    <div id="floatingPrompt" style="position: fixed; left: 80px; top: 80px; width: 260px; height: 180px; background: #303238; padding: 12px;">
+      <div id="floatingPromptheader" class="drag-grabber">Author's Note</div>
+    </div>
+    <div id="gallery" style="position: fixed; left: 380px; top: 80px; width: 260px; height: 180px; background: #303238; padding: 12px;">
+      Gallery test window
     </div>
   </div>
   <div class="alternate_grettings">
@@ -63,6 +71,8 @@
       getContext() {
         return {
           extensionSettings: fixtureExtensionSettings,
+          powerUserSettings: { movingUI: true, movingUIState: {} },
+          isMobile: () => false,
           saveSettingsDebounced() {},
           chat: [
             { is_user: true, mes: 'User message' },
@@ -95,3 +105,4 @@
   <script src="index.js"></script>
 </body>
 </html>
+
