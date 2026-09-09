@@ -1,6 +1,7 @@
 import { save } from './settings-store.js';
 
-const SETTINGS_BUTTON_ID = 'stplus-settings-button';
+const SETTINGS_BUTTON_ID = 'stplus-module-manager-button';
+const LEGACY_SETTINGS_BUTTON_ID = 'stplus-settings-button';
 const SETTINGS_WINDOW_ID = 'stplus-settings-window';
 const RESIZE_HANDLE_CLASS = 'stplus-settings-resize-handle';
 
@@ -12,9 +13,16 @@ function closeSettingsWindow() {
 }
 
 function toggleSettingsWindow(event) {
-    event.preventDefault();
-    event.stopPropagation();
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
     document.getElementById(SETTINGS_WINDOW_ID)?.classList.toggle('stplus-settings-window-open');
+}
+
+function getToolbarHost() {
+    const candidates = ['#top-settings-holder', '#top-bar', '#extensionTopBar'];
+    return candidates
+        .map((selector) => document.querySelector(selector))
+        .find((element) => element instanceof HTMLElement) ?? null;
 }
 
 function createCheckbox(id, labelText, description, onChange) {
@@ -96,7 +104,12 @@ function addResizeHandles(panel) {
         handle.title = `Resize SillyTavernPlus settings from the ${label} corner`;
         const startResizing = (event) => {
             if (event.button !== undefined && event.button !== 0) return;
-            if (resizeState) return;
+            if (resizeState) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation?.();
+                return;
+            }
             const rect = panel.getBoundingClientRect();
             const styles = getComputedStyle(panel);
             panel.style.transform = 'none';
@@ -118,12 +131,14 @@ function addResizeHandles(panel) {
             if (event.pointerId !== undefined) handle.setPointerCapture?.(event.pointerId);
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation?.();
         };
         handle.addEventListener('pointerdown', startResizing);
         handle.addEventListener('mousedown', startResizing);
         handle.addEventListener('pointermove', resize);
         handle.addEventListener('pointerup', stopResizing);
         handle.addEventListener('pointercancel', stopResizing);
+        handle.addEventListener('lostpointercapture', stopResizing);
         panel.appendChild(handle);
     });
     const resizeWithMouse = (event) => {
@@ -195,18 +210,10 @@ function createSettingsWindow() {
 }
 
 function installSettingsButton() {
-    const host = document.querySelector('#top-settings-holder') || document.querySelector('#top-bar');
+    const host = getToolbarHost();
     if (!(host instanceof HTMLElement)) return;
+    document.querySelector(`#${LEGACY_SETTINGS_BUTTON_ID}[data-stplus-owned="1"]`)?.remove();
     let button = document.getElementById(SETTINGS_BUTTON_ID);
-    if (button instanceof HTMLElement && !button.dataset.stplusOwned) {
-        if (!button.classList.contains('stplus-settings-button')) return;
-        button.remove();
-        button = null;
-    }
-    if (button instanceof HTMLElement && !(button instanceof HTMLButtonElement)) {
-        button.remove();
-        button = null;
-    }
     if (!(button instanceof HTMLButtonElement)) {
         button = document.createElement('button');
         button.type = 'button';
@@ -224,7 +231,7 @@ function installSettingsButton() {
             toggleSettingsWindow(event);
         });
     }
-    button.className = 'stplus-settings-button';
+    button.className = 'stplus-module-manager-button';
     if (button.parentElement !== host) host.appendChild(button);
 }
 
@@ -241,3 +248,4 @@ export function refresh() {
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
 }
+
