@@ -317,6 +317,8 @@
         if (button.parentElement !== host || host.lastElementChild !== button) host.appendChild(button);
     }
 
+    let scanScheduled = false;
+
     function scan() {
         document.querySelectorAll(POPUP_SELECTOR).forEach(decorateGreetingPopup);
         const worldPanel = document.getElementById('WorldInfo');
@@ -324,9 +326,34 @@
         installWorldsToolbarButton();
     }
 
+    function scheduleScan() {
+        if (scanScheduled) return;
+        scanScheduled = true;
+        const run = () => {
+            scanScheduled = false;
+            scan();
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+        else setTimeout(run, 0);
+    }
+
+    function isRelevantMutation(mutation) {
+        const target = mutation.target instanceof Element ? mutation.target : null;
+        if (target?.closest(`${POPUP_SELECTOR}, #top-settings-holder, #top-bar`)) return true;
+
+        return Array.from(mutation.addedNodes).some((node) => {
+            if (!(node instanceof Element)) return false;
+            if (node.id === WORLD_WINDOW_ID || node.classList.contains('stplus-worlds-close')) return false;
+            return node.matches(`${POPUP_SELECTOR}, #WorldInfo, #top-settings-holder, #top-bar`)
+                || Boolean(node.querySelector(`${POPUP_SELECTOR}, #WorldInfo, #top-settings-holder, #top-bar`));
+        });
+    }
+
     function initialize() {
         scan();
-        const observer = new MutationObserver(scan);
+        const observer = new MutationObserver((mutations) => {
+            if (mutations.some(isRelevantMutation)) scheduleScan();
+        });
         observer.observe(document.body, { childList: true, subtree: true });
         window.addEventListener('resize', () => {
             const panel = document.getElementById('WorldInfo');
