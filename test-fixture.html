@@ -20,6 +20,7 @@
     .closedDrawer { display: none; }
     .openDrawer { display: block; }
     #WorldInfo { width: 520px; height: 360px; background: #303238; padding: 12px; }
+    #wiActivationSettings { max-width: 520px; margin: 14px 0; padding: 10px; border: 1px solid #555; }
   </style>
 </head>
 <body>
@@ -28,6 +29,11 @@
       <div class="drawer-toggle drawer-header"><div class="drawer-icon fa-solid fa-sliders fa-fw closedIcon" title="Native icon"></div></div>
     </div>
   </div>
+  <section id="wiActivationSettings">
+    <strong>Global World Info/Lorebook activation settings</strong>
+    <div id="wiCheckboxes"></div>
+  </section>
+  <output id="fixture-reasoning-prompt" hidden></output>
   <div id="WI-SP-button" class="drawer">
     <div id="WIDrawerIcon" class="drawer-icon fa-solid fa-book-atlas fa-fw closedIcon" title="World Info"></div>
     <div id="WorldInfo" class="drawer-content closedDrawer">
@@ -51,6 +57,35 @@
     </div>
   </div>
   <script>
+    const fixtureExtensionSettings = {};
+    const fixtureEventHandlers = new Map();
+    window.SillyTavern = {
+      getContext() {
+        return {
+          extensionSettings: fixtureExtensionSettings,
+          saveSettingsDebounced() {},
+          chat: [
+            { is_user: true, mes: 'User message' },
+            { is_user: false, mes: 'Earlier assistant response', extra: { reasoning: 'The assistant considered the old stone tower.' } },
+            { is_user: false, mes: 'Assistant response', extra: { reasoning: 'The assistant considered a moonlit forest.' } },
+          ],
+          setExtensionPrompt(id, value, position, depth, scan) {
+            const output = document.getElementById('fixture-reasoning-prompt');
+            output.dataset.id = id;
+            output.dataset.position = String(position);
+            output.dataset.depth = String(depth);
+            output.dataset.scan = String(scan);
+            output.textContent = value;
+          },
+          eventSource: {
+            on(event, handler) {
+              fixtureEventHandlers.set(event, handler);
+            },
+          },
+          eventTypes: { GENERATION_STARTED: 'generation_started' },
+        };
+      },
+    };
     document.getElementById('WIDrawerIcon').addEventListener('click', () => {
       const panel = document.getElementById('WorldInfo');
       panel.classList.toggle('openDrawer');
