@@ -1,7 +1,6 @@
 import { normalizeDepth, save } from './settings-store.js';
 
 const WORLD_WINDOW_CLASS = 'stplus-floating-worlds';
-const WORLD_WINDOW_ID = 'stplus-worlds-button';
 const WORLD_WINDOW_STATE_KEY = 'stplus.worldsWindow';
 const REASONING_PROMPT_ID = 'SillyTavernPlusReasoning';
 const REASONING_SETTING_ID = 'stplus-reasoning-scan-setting';
@@ -42,21 +41,18 @@ function applyWorldWindowState(panel) {
     const top = Number.isFinite(state.top) ? Math.max(8, Math.min(state.top, window.innerHeight - height - 8)) : Math.max(8, (window.innerHeight - height) / 2);
     panel.style.setProperty('width', `${width}px`, 'important');
     panel.style.setProperty('height', `${height}px`, 'important');
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
+    panel.style.setProperty('left', `${left}px`, 'important');
+    panel.style.setProperty('top', `${top}px`, 'important');
 }
 
 function closeFloatingWorlds() {
     const panel = document.getElementById('WorldInfo');
     if (!panel) return;
     writeWorldWindowState(panel);
-    const icon = document.getElementById('WIDrawerIcon');
-    if (panel.classList.contains('openDrawer') && icon instanceof HTMLElement) {
-        icon.click();
-    } else {
-        panel.classList.add('closedDrawer');
-        panel.classList.remove('openDrawer');
-    }
+    panel.classList.add('closedDrawer');
+    panel.classList.remove('openDrawer', WORLD_WINDOW_CLASS);
+    if (panel.dataset.stplusOriginalStyle) panel.setAttribute('style', panel.dataset.stplusOriginalStyle);
+    else panel.removeAttribute('style');
 }
 
 function openFloatingWorlds() {
@@ -71,12 +67,6 @@ function openFloatingWorlds() {
     panel.classList.add('openDrawer');
     panel.style.display = 'block';
     applyWorldWindowState(panel);
-}
-
-function toggleFloatingWorlds() {
-    const panel = document.getElementById('WorldInfo');
-    if (panel?.classList.contains('openDrawer') && panel.classList.contains(WORLD_WINDOW_CLASS)) closeFloatingWorlds();
-    else openFloatingWorlds();
 }
 
 function addWorldWindowResizeHandles(panel) {
@@ -126,8 +116,8 @@ function addWorldWindowResizeHandles(panel) {
             height = bottom - top;
         }
 
-        panel.style.left = `${Math.round(left)}px`;
-        panel.style.top = `${Math.round(top)}px`;
+        panel.style.setProperty('left', `${Math.round(left)}px`, 'important');
+        panel.style.setProperty('top', `${Math.round(top)}px`, 'important');
         panel.style.setProperty('width', `${Math.round(width)}px`, 'important');
         panel.style.setProperty('height', `${Math.round(height)}px`, 'important');
     };
@@ -142,7 +132,12 @@ function addWorldWindowResizeHandles(panel) {
         const startResizing = (event) => {
             if (!panel.classList.contains(WORLD_WINDOW_CLASS)) return;
             if (event.button !== undefined && event.button !== 0) return;
-            if (resizeState) return;
+            if (resizeState) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation?.();
+                return;
+            }
             const rect = panel.getBoundingClientRect();
             const styles = getComputedStyle(panel);
             resizeState = {
@@ -161,12 +156,14 @@ function addWorldWindowResizeHandles(panel) {
             if (event.pointerId !== undefined) handle.setPointerCapture?.(event.pointerId);
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation?.();
         };
         handle.addEventListener('pointerdown', startResizing);
         handle.addEventListener('mousedown', startResizing);
         handle.addEventListener('pointermove', resize);
         handle.addEventListener('pointerup', stopResizing);
         handle.addEventListener('pointercancel', stopResizing);
+        handle.addEventListener('lostpointercapture', stopResizing);
         panel.appendChild(handle);
     });
 
@@ -178,7 +175,6 @@ function addWorldWindowResizeHandles(panel) {
     };
     document.addEventListener('mousemove', resizeWithMouse);
     document.addEventListener('mouseup', stopMouseResize);
-    document.addEventListener('mouseleave', stopMouseResize);
     const resizeWithPointer = (event) => {
         if (resizeState?.pointerId !== null && resizeState?.pointerId !== undefined) resize(event);
     };
@@ -191,7 +187,6 @@ function addWorldWindowResizeHandles(panel) {
     return () => {
         document.removeEventListener('mousemove', resizeWithMouse);
         document.removeEventListener('mouseup', stopMouseResize);
-        document.removeEventListener('mouseleave', stopMouseResize);
         document.removeEventListener('pointermove', resizeWithPointer);
         document.removeEventListener('pointerup', stopPointerResize);
         document.removeEventListener('pointercancel', stopPointerResize);
@@ -203,6 +198,17 @@ function setupWorldWindow(panel) {
     panel.dataset.stplusWindowReady = '1';
     panel.dataset.stplusOriginalStyle = panel.getAttribute('style') ?? '';
     panel._stplusResizeCleanup = addWorldWindowResizeHandles(panel);
+
+    const nativeWorldInfoIcon = document.getElementById('WIDrawerIcon');
+    if (nativeWorldInfoIcon instanceof HTMLElement && nativeWorldInfoIcon.dataset.stplusToggleReady !== '1') {
+        nativeWorldInfoIcon.dataset.stplusToggleReady = '1';
+        nativeWorldInfoIcon.addEventListener('click', () => {
+            window.setTimeout(() => {
+                if (panel.classList.contains('openDrawer')) openFloatingWorlds();
+                else closeFloatingWorlds();
+            }, 0);
+        });
+    }
 
     const titleRow = panel.querySelector('#WorldInfoheader')?.nextElementSibling;
     if (titleRow instanceof HTMLElement) {
@@ -232,8 +238,8 @@ function setupWorldWindow(panel) {
             if (!dragState) return;
             const width = panel.offsetWidth;
             const height = panel.offsetHeight;
-            panel.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, event.clientX - dragState.offsetX))}px`;
-            panel.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, event.clientY - dragState.offsetY))}px`;
+            panel.style.setProperty('left', `${Math.max(8, Math.min(window.innerWidth - width - 8, event.clientX - dragState.offsetX))}px`, 'important');
+            panel.style.setProperty('top', `${Math.max(8, Math.min(window.innerHeight - height - 8, event.clientY - dragState.offsetY))}px`, 'important');
         });
         const stopDragging = () => {
             if (!dragState) return;
@@ -265,45 +271,8 @@ function teardownWorldWindow(panel) {
     delete panel.dataset.stplusWindowReady;
 }
 
-function installWorldsToolbarButton() {
-    const host = document.querySelector('#top-settings-holder') || document.querySelector('#top-bar');
-    if (!(host instanceof HTMLElement)) return;
-    let button = document.getElementById(WORLD_WINDOW_ID);
-    if (!(button instanceof HTMLElement)) {
-        button = document.createElement('div');
-        button.id = WORLD_WINDOW_ID;
-        button.title = 'Open floating Worlds/Lorebooks';
-        button.setAttribute('aria-label', button.title);
-        button.setAttribute('role', 'button');
-        button.setAttribute('tabindex', '0');
-        button.addEventListener('click', toggleFloatingWorlds);
-        button.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            toggleFloatingWorlds();
-        });
-    }
-    button.className = 'drawer stplus-worlds-toolbar-button';
-    if (!button.querySelector('.stplus-worlds-toolbar-icon')) {
-        button.replaceChildren();
-        const toggle = document.createElement('div');
-        toggle.className = 'drawer-toggle drawer-header';
-        const icon = document.createElement('div');
-        icon.className = 'drawer-icon fa-solid fa-book-atlas fa-fw closedIcon stplus-worlds-toolbar-icon';
-        icon.title = button.title;
-        icon.setAttribute('aria-hidden', 'true');
-        toggle.appendChild(icon);
-        button.appendChild(toggle);
-    }
-    if (button.parentElement !== host) host.appendChild(button);
-}
-
-function removeWorldsToolbarButton() {
-    document.getElementById(WORLD_WINDOW_ID)?.remove();
-}
-
 function installReasoningSettings() {
-    const host = document.getElementById('wiCheckboxes') || document.getElementById('wiActivationSettings');
+    const host = document.getElementById('wiActivationSettings') || document.getElementById('wiCheckboxes');
     if (!(host instanceof HTMLElement)) return;
     let setting = document.getElementById(REASONING_SETTING_ID);
     if (!(setting instanceof HTMLElement)) {
@@ -351,6 +320,8 @@ function installReasoningSettings() {
         depthRow.append(depthLabel, depth);
         setting.append(label, depthRow);
         host.appendChild(setting);
+    } else if (setting.parentElement !== host) {
+        host.appendChild(setting);
     }
     syncReasoningSettings();
 }
@@ -394,7 +365,6 @@ function refresh() {
     if (!settings.lorebookModsEnabled) {
         const panel = document.getElementById('WorldInfo');
         if (panel?.classList.contains(WORLD_WINDOW_CLASS)) teardownWorldWindow(panel);
-        removeWorldsToolbarButton();
         updateReasoningPrompt();
         syncReasoningSettings();
         return;
@@ -402,7 +372,6 @@ function refresh() {
 
     const panel = document.getElementById('WorldInfo');
     if (panel instanceof HTMLElement) setupWorldWindow(panel);
-    installWorldsToolbarButton();
     updateReasoningPrompt();
     syncReasoningSettings();
 }
@@ -416,3 +385,4 @@ export function initialize(stContext, stSettings) {
 }
 
 export { refresh };
+
