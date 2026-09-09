@@ -1,8 +1,9 @@
 (() => {
     'use strict';
 
-    const scriptUrl = document.currentScript?.src;
-    const extensionRoot = scriptUrl ? new URL('.', scriptUrl) : new URL('./', window.location.href);
+    // SillyTavern loads extension entrypoints as ES modules, where
+    // document.currentScript is null. Resolve sibling modules from this file.
+    const extensionRoot = new URL('./', import.meta.url);
     const loadModule = (name) => import(new URL(`modules/${name}.js`, extensionRoot));
 
     async function initialize() {
