@@ -1,6 +1,7 @@
 const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
     lorebookModsEnabled: true,
+    movingUiResizeEnabled: true,
     reasoningScanEnabled: false,
     reasoningScanDepth: 1,
 });
@@ -22,6 +23,7 @@ export function initializeSettings(stContext) {
         ...saved,
         greetingModsEnabled: saved.greetingModsEnabled !== false,
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,
+        movingUiResizeEnabled: saved.movingUiResizeEnabled !== false,
         reasoningScanEnabled: saved.reasoningScanEnabled === true,
         reasoningScanDepth: normalizeDepth(saved.reasoningScanDepth),
     };
@@ -38,3 +40,4 @@ export function getSettings() {
 }
 
 export { normalizeDepth };
+
