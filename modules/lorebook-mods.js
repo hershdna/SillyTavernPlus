@@ -272,7 +272,7 @@ function teardownWorldWindow(panel) {
 }
 
 function installReasoningSettings() {
-    const host = document.getElementById('wiActivationSettings') || document.getElementById('wiCheckboxes');
+    const host = document.getElementById('wiCheckboxes') || document.getElementById('wiActivationSettings');
     if (!(host instanceof HTMLElement)) return;
     let setting = document.getElementById(REASONING_SETTING_ID);
     if (!(setting instanceof HTMLElement)) {
@@ -281,7 +281,7 @@ function installReasoningSettings() {
         setting.className = 'stplus-wi-reasoning-setting';
 
         const label = document.createElement('label');
-        label.className = 'checkbox_label';
+        label.className = 'checkbox_label flex1';
         label.htmlFor = 'stplus-reasoning-scan-enabled';
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -292,7 +292,8 @@ function installReasoningSettings() {
             updateReasoningPrompt();
             syncReasoningSettings();
         });
-        const text = document.createElement('span');
+        const text = document.createElement('small');
+        text.className = 'whitespacenowrap flex1';
         text.textContent = 'Include thinking output in World Info scanning';
         label.append(checkbox, text);
 
