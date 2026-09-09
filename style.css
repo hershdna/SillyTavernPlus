@@ -34,29 +34,33 @@
     color: var(--SmartThemeEmColor, #ff8a8a);
 }
 
-/* SillyTavernPlus Worlds/Lorebooks floating editor */
-.stplus-worlds-toolbar-button {
+/* SillyTavernPlus module manager toolbar icon */
+.stplus-module-manager-button {
     align-items: center;
     justify-content: center;
     display: flex;
     flex-flow: row;
     width: 100%;
+    min-width: 38px;
+    height: 42px;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
 }
 
-.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon {
+.stplus-module-manager-button .stplus-settings-icon {
     display: inline-block;
     cursor: pointer;
     font-size: var(--topBarIconSize, calc(var(--mainFontSize, 16px) * 2));
     padding: 1px 3px;
-}
-
-.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon.closedIcon {
     opacity: 0.3;
-    transition: all var(--animation-duration-2x, 250ms);
+    transition: opacity var(--animation-duration-2x, 250ms);
 }
 
-.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon.closedIcon:hover,
-.stplus-worlds-toolbar-button .stplus-worlds-toolbar-icon.closedIcon:focus-visible {
+.stplus-module-manager-button:hover .stplus-settings-icon,
+.stplus-module-manager-button:focus-visible .stplus-settings-icon {
     opacity: 1;
 }
 
@@ -123,11 +127,6 @@
     cursor: nwse-resize;
 }
 
-#WorldInfo.stplus-floating-worlds #WorldInfoheader {
-    display: block !important;
-    pointer-events: none;
-}
-
 #WorldInfo.stplus-floating-worlds .stplus-worlds-title-row {
     position: relative;
     cursor: move;
@@ -148,40 +147,10 @@
     padding: 0;
 }
 
-/* SillyTavernPlus settings icon and floating settings window */
-.stplus-settings-button {
-    align-items: center;
-    justify-content: center;
-    display: flex;
-    flex-flow: row;
-    width: 100%;
-    min-width: 38px;
-    height: 42px;
-    padding: 0;
-    color: inherit;
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-}
-
-.stplus-settings-icon {
-    display: inline-block;
-    cursor: pointer;
-    font-size: var(--topBarIconSize, calc(var(--mainFontSize, 16px) * 2));
-    padding: 1px 3px;
-    opacity: 0.3;
-    transition: opacity var(--animation-duration-2x, 250ms);
-}
-
-.stplus-settings-button:hover .stplus-settings-icon,
-.stplus-settings-button:focus-visible .stplus-settings-icon {
-    opacity: 1;
-}
-
 .stplus-settings-window {
     display: none;
     position: fixed;
-    z-index: 4010;
+    z-index: 10000;
     top: 12vh;
     left: 50%;
     width: min(380px, calc(100vw - 24px));
@@ -201,7 +170,7 @@
 
 .stplus-settings-window .stplus-settings-resize-handle {
     position: absolute;
-    z-index: 3;
+    z-index: 10001;
     width: 14px;
     height: 14px;
     box-sizing: border-box;
@@ -293,14 +262,11 @@
 }
 
 .stplus-wi-reasoning-setting {
-    flex: 1 1 100%;
+    flex: 0 0 100%;
     margin-top: 8px;
     padding: 8px;
+    box-sizing: border-box;
     border-top: 1px solid var(--SmartThemeBorderColor, #666);
-}
-
-#wiCheckboxes > .stplus-wi-reasoning-setting {
-    flex: 0 0 auto;
 }
 
 .stplus-wi-reasoning-setting .checkbox_label {
@@ -341,3 +307,4 @@
         min-height: 0 !important;
     }
 }
+
