@@ -124,12 +124,12 @@ function addResizeHandles(panel) {
             height = bottom - top;
         }
 
-        panel.style.setProperty('left', `${Math.round(left)}px`, 'important');
-        panel.style.setProperty('top', `${Math.round(top)}px`, 'important');
-        panel.style.setProperty('right', 'unset', 'important');
-        panel.style.setProperty('bottom', 'unset', 'important');
-        panel.style.setProperty('width', `${Math.round(width)}px`, 'important');
-        panel.style.setProperty('height', `${Math.round(height)}px`, 'important');
+        panel.style.left = `${Math.round(left)}px`;
+        panel.style.top = `${Math.round(top)}px`;
+        panel.style.right = 'unset';
+        panel.style.bottom = 'unset';
+        panel.style.width = `${Math.round(width)}px`;
+        panel.style.height = `${Math.round(height)}px`;
         stopEvent(event);
     };
 
