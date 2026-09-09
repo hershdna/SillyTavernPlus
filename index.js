@@ -7,7 +7,7 @@
 
     async function initialize() {
         const context = window.SillyTavern?.getContext?.();
-        if (!context) {
+        if (!context || !document.body) {
             window.setTimeout(initialize, 250);
             return;
         }
@@ -43,11 +43,11 @@
             };
             const isRelevantMutation = (mutation) => {
                 const target = mutation.target instanceof Element ? mutation.target : null;
-                if (target?.closest('.alternate_grettings, #wiActivationSettings, #top-settings-holder, #top-bar')) return true;
+                if (target?.closest('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar')) return true;
                 return Array.from(mutation.addedNodes).some((node) => {
                     if (!(node instanceof Element)) return false;
-                    return node.matches('.alternate_grettings, #WorldInfo, #wiActivationSettings, #top-settings-holder, #top-bar')
-                        || Boolean(node.querySelector('.alternate_grettings, #WorldInfo, #wiActivationSettings, #top-settings-holder, #top-bar'));
+                    return node.matches('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar')
+                        || Boolean(node.querySelector('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar'));
                 });
             };
 
@@ -63,3 +63,4 @@
 
     initialize();
 })();
+
