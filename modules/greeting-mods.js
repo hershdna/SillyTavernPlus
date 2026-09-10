@@ -3,7 +3,7 @@ const CONTROL_CLASS = 'stplus-alt-position-control';
 const POPUP_SELECTOR = '.alternate_grettings';
 
 let settings = null;
-const boundGreetingLists = new WeakMap();
+let controlsBound = false;
 
 function getGreetingList(popup) {
     return popup?.querySelector('.alternate_greetings_list');
@@ -52,39 +52,56 @@ function swapGreetingValues(list, sourceIndex, targetIndex) {
     return true;
 }
 
-function bindNativeMoveControls(list) {
-    if (boundGreetingLists.has(list)) return;
-
-    const handler = (event) => {
-        const target = event.target instanceof Element
-            ? event.target.closest('.move_up_alternate_greeting, .move_down_alternate_greeting')
-            : null;
-        if (!target || !list.contains(target)) return;
-
-        const block = target.closest('.alternate_greeting');
-        const sourceIndex = getGreetingBlocks(list).indexOf(block);
-        const direction = target.classList.contains('move_up_alternate_greeting') ? -1 : 1;
-        const targetIndex = sourceIndex + direction;
-        const blocks = getGreetingBlocks(list);
-
-        event.preventDefault();
-        event.stopPropagation();
-        if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= blocks.length) return;
-        swapGreetingValues(list, sourceIndex, targetIndex);
-        syncPositionFields(list);
-    };
-
-    // Capture the event so this remains reliable when SillyTavern has either
-    // direct handlers or no handlers at all on the native arrow controls.
-    list.addEventListener('click', handler, true);
-    boundGreetingLists.set(list, handler);
+function getPositionInput(event) {
+    return event.target instanceof Element
+        ? event.target.closest(`.${CONTROL_CLASS} input`)
+        : null;
 }
 
-function unbindNativeMoveControls(list) {
-    const handler = boundGreetingLists.get(list);
-    if (!handler) return;
-    list.removeEventListener('click', handler, true);
-    boundGreetingLists.delete(list);
+function handleNativeMoveClick(event) {
+    const target = event.target instanceof Element
+        ? event.target.closest('.move_up_alternate_greeting, .move_down_alternate_greeting')
+        : null;
+    const list = target?.closest('.alternate_greetings_list');
+    const popup = target?.closest(POPUP_SELECTOR);
+    if (!target || !list || !popup) return;
+
+    const block = target.closest('.alternate_greeting');
+    const sourceIndex = getGreetingBlocks(list).indexOf(block);
+    const direction = target.classList.contains('move_up_alternate_greeting') ? -1 : 1;
+    const targetIndex = sourceIndex + direction;
+    const blocks = getGreetingBlocks(list);
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= blocks.length) return;
+    swapGreetingValues(list, sourceIndex, targetIndex);
+    syncPositionFields(list, true);
+}
+
+function bindControls() {
+    if (controlsBound) return;
+
+    // These listeners run before SillyTavern's document-level summary and
+    // hotkey listeners. The controls are dynamically rendered, so binding at
+    // the window also survives greeting-list re-renders and cloned templates.
+    window.addEventListener('click', handleNativeMoveClick, true);
+    window.addEventListener('keydown', (event) => {
+        const input = getPositionInput(event);
+        if (!input) return;
+
+        // Do not let SillyTavern's global hotkey handlers consume the edit.
+        // Stopping propagation does not cancel the browser's normal text
+        // insertion for ordinary keys.
+        event.stopPropagation();
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        applyRequestedPosition(input);
+    }, true);
+    window.addEventListener('keyup', (event) => {
+        if (getPositionInput(event)) event.stopPropagation();
+    }, true);
+    controlsBound = true;
 }
 
 function reorderGreetingValues(list, sourceIndex, targetIndex) {
@@ -97,13 +114,13 @@ function reorderGreetingValues(list, sourceIndex, targetIndex) {
     return true;
 }
 
-function syncPositionFields(list) {
+function syncPositionFields(list, force = false) {
     const blocks = getGreetingBlocks(list);
     blocks.forEach((block, index) => {
         const input = block.querySelector(`.${CONTROL_CLASS} input`);
         if (!input) return;
         input.max = String(blocks.length);
-        input.value = String(index + 1);
+        if (force || document.activeElement !== input) input.value = String(index + 1);
         input.setAttribute('aria-label', `Move alternate greeting ${index + 1} to position`);
     });
 }
@@ -115,13 +132,13 @@ function reorderGreeting(list, sourceIndex, requestedPosition) {
         return { ok: false, message: `Choose a position from 1 to ${blocks.length}.` };
     }
     if (sourceIndex === targetIndex) {
-        syncPositionFields(list);
+        syncPositionFields(list, true);
         return { ok: true, moved: false, message: 'Already in that position.' };
     }
 
     reorderGreetingValues(list, sourceIndex, targetIndex);
 
-    syncPositionFields(list);
+    syncPositionFields(list, true);
     return { ok: true, moved: true, message: `Moved greeting ${sourceIndex + 1} to position ${requestedPosition}.` };
 }
 
@@ -148,17 +165,8 @@ function applyRequestedPosition(input) {
     showStatus(popup, result.message);
 }
 
-function stopSummaryToggle(event) {
-    event.stopPropagation();
-}
-
-function preventSummaryToggle(event) {
-    event.preventDefault();
-    event.stopPropagation();
-}
-
 function createPositionControl(block) {
-    const control = document.createElement('span');
+    const control = document.createElement('div');
     control.className = CONTROL_CLASS;
     control.title = 'Type a position and press Enter to move this greeting';
 
@@ -179,20 +187,6 @@ function createPositionControl(block) {
     moveButton.className = 'menu_button menu_button_icon stplus-alt-position-apply';
     moveButton.innerHTML = '<i class="fa-solid fa-arrow-right"></i><span>Move</span>';
 
-    input.addEventListener('pointerdown', stopSummaryToggle);
-    input.addEventListener('click', stopSummaryToggle);
-    moveButton.addEventListener('pointerdown', preventSummaryToggle);
-    moveButton.addEventListener('click', preventSummaryToggle);
-    input.addEventListener('keydown', (event) => {
-        // Keep SillyTavern's document-level hotkey handlers from swallowing
-        // numeric key presses while this position field is being edited.
-        event.stopPropagation();
-        if (event.key !== 'Enter') return;
-        event.preventDefault();
-        applyRequestedPosition(input);
-    });
-    input.addEventListener('keyup', (event) => event.stopPropagation());
-    input.addEventListener('input', (event) => event.stopPropagation());
     moveButton.addEventListener('click', () => applyRequestedPosition(input));
 
     control.append(label, input, moveButton);
@@ -204,19 +198,20 @@ function decorateGreetingPopup(popup) {
     if (!list) return;
 
     popup.classList.add(EXTENSION_CLASS);
-    bindNativeMoveControls(list);
     getGreetingBlocks(list).forEach((block) => {
         if (block.querySelector(`.${CONTROL_CLASS}`)) return;
-        const title = block.querySelector('summary .title_restorable');
-        const expander = title?.querySelector('.expander');
-        if (!title) return;
-        title.insertBefore(createPositionControl(block), expander ?? null);
+        const details = block.querySelector('details');
+        const summary = details?.querySelector(':scope > summary');
+        if (!details || !summary) return;
+        // Keep interactive editing controls out of <summary>. Summary is a
+        // disclosure control and SillyTavern attaches global click/keyboard
+        // handlers to it, which can prevent focus and text entry.
+        details.insertBefore(createPositionControl(block), summary.nextSibling);
     });
     syncPositionFields(list);
 }
 
 function undecorateGreetingPopup(popup) {
-    popup.querySelectorAll('.alternate_greetings_list').forEach((list) => unbindNativeMoveControls(list));
     popup.querySelectorAll(`.${CONTROL_CLASS}`).forEach((control) => control.remove());
     popup.querySelectorAll('.stplus-alt-reorder-status').forEach((status) => status.remove());
     popup.classList.remove(EXTENSION_CLASS);
@@ -224,6 +219,7 @@ function undecorateGreetingPopup(popup) {
 
 export function initialize(stSettings) {
     settings = stSettings;
+    bindControls();
 }
 
 export function refresh() {
