@@ -1,8 +1,11 @@
 .stplus-alt-greeting-reorder .stplus-alt-position-control {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 4px;
-    margin-left: 6px;
+    width: 100%;
+    margin: 6px 0;
+    box-sizing: border-box;
     white-space: nowrap;
 }
 
