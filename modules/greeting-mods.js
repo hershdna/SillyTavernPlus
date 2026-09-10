@@ -3,6 +3,7 @@ const CONTROL_CLASS = 'stplus-alt-position-control';
 const POPUP_SELECTOR = '.alternate_grettings';
 
 let settings = null;
+const boundGreetingLists = new WeakMap();
 
 function getGreetingList(popup) {
     return popup?.querySelector('.alternate_greetings_list');
@@ -37,39 +38,62 @@ function emitInput(textarea) {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function getNativeMoveButton(block, direction) {
-    const selector = direction < 0 ? '.move_up_alternate_greeting' : '.move_down_alternate_greeting';
-    return block?.querySelector(selector);
+function swapGreetingValues(list, sourceIndex, targetIndex) {
+    const blocks = getGreetingBlocks(list);
+    const sourceTextarea = getGreetingTextarea(blocks[sourceIndex]);
+    const targetTextarea = getGreetingTextarea(blocks[targetIndex]);
+    if (!sourceTextarea || !targetTextarea) return false;
+
+    const sourceValue = sourceTextarea.value;
+    sourceTextarea.value = targetTextarea.value;
+    targetTextarea.value = sourceValue;
+    emitInput(sourceTextarea);
+    emitInput(targetTextarea);
+    return true;
 }
 
-function moveWithNativeControls(list, sourceIndex, targetIndex) {
+function bindNativeMoveControls(list) {
+    if (boundGreetingLists.has(list)) return;
+
+    const handler = (event) => {
+        const target = event.target instanceof Element
+            ? event.target.closest('.move_up_alternate_greeting, .move_down_alternate_greeting')
+            : null;
+        if (!target || !list.contains(target)) return;
+
+        const block = target.closest('.alternate_greeting');
+        const sourceIndex = getGreetingBlocks(list).indexOf(block);
+        const direction = target.classList.contains('move_up_alternate_greeting') ? -1 : 1;
+        const targetIndex = sourceIndex + direction;
+        const blocks = getGreetingBlocks(list);
+
+        event.preventDefault();
+        event.stopPropagation();
+        if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= blocks.length) return;
+        swapGreetingValues(list, sourceIndex, targetIndex);
+        syncPositionFields(list);
+    };
+
+    // Capture the event so this remains reliable when SillyTavern has either
+    // direct handlers or no handlers at all on the native arrow controls.
+    list.addEventListener('click', handler, true);
+    boundGreetingLists.set(list, handler);
+}
+
+function unbindNativeMoveControls(list) {
+    const handler = boundGreetingLists.get(list);
+    if (!handler) return;
+    list.removeEventListener('click', handler, true);
+    boundGreetingLists.delete(list);
+}
+
+function reorderGreetingValues(list, sourceIndex, targetIndex) {
     const direction = targetIndex < sourceIndex ? -1 : 1;
     let currentIndex = sourceIndex;
-    const blocks = getGreetingBlocks(list);
-
-    // Do not partially use the native path: the fallback path starts from the
-    // original order, so every required native control must be present first.
-    for (let index = sourceIndex; index !== targetIndex; index += direction) {
-        if (!getNativeMoveButton(blocks[index], direction)) return false;
-    }
-
     while (currentIndex !== targetIndex) {
-        const currentBlock = blocks[currentIndex];
-        const nativeButton = getNativeMoveButton(currentBlock, direction);
-        if (!nativeButton) return false;
-
-        // SillyTavern's native handler updates both its backing array and the
-        // two textareas involved. Moving the block that now contains the
-        // original greeting is important because native data-index values do
-        // not change when the values are swapped.
-        nativeButton.dispatchEvent(new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-        }));
+        if (!swapGreetingValues(list, currentIndex, currentIndex + direction)) return false;
         currentIndex += direction;
     }
-
     return true;
 }
 
@@ -95,18 +119,7 @@ function reorderGreeting(list, sourceIndex, requestedPosition) {
         return { ok: true, moved: false, message: 'Already in that position.' };
     }
 
-    if (!moveWithNativeControls(list, sourceIndex, targetIndex)) {
-        const values = blocks.map(getGreetingTextarea).map((textarea) => textarea?.value ?? '');
-        const [moved] = values.splice(sourceIndex, 1);
-        values.splice(targetIndex, 0, moved);
-
-        blocks.forEach((block, index) => {
-            const textarea = getGreetingTextarea(block);
-            if (!textarea) return;
-            textarea.value = values[index];
-            emitInput(textarea);
-        });
-    }
+    reorderGreetingValues(list, sourceIndex, targetIndex);
 
     syncPositionFields(list);
     return { ok: true, moved: true, message: `Moved greeting ${sourceIndex + 1} to position ${requestedPosition}.` };
@@ -172,7 +185,6 @@ function createPositionControl(block) {
         event.stopPropagation();
         applyRequestedPosition(input);
     });
-    input.addEventListener('change', () => applyRequestedPosition(input));
     moveButton.addEventListener('click', () => applyRequestedPosition(input));
 
     control.append(label, input, moveButton);
@@ -184,6 +196,7 @@ function decorateGreetingPopup(popup) {
     if (!list) return;
 
     popup.classList.add(EXTENSION_CLASS);
+    bindNativeMoveControls(list);
     getGreetingBlocks(list).forEach((block) => {
         if (block.querySelector(`.${CONTROL_CLASS}`)) return;
         const title = block.querySelector('summary .title_restorable');
@@ -195,6 +208,7 @@ function decorateGreetingPopup(popup) {
 }
 
 function undecorateGreetingPopup(popup) {
+    popup.querySelectorAll('.alternate_greetings_list').forEach((list) => unbindNativeMoveControls(list));
     popup.querySelectorAll(`.${CONTROL_CLASS}`).forEach((control) => control.remove());
     popup.querySelectorAll('.stplus-alt-reorder-status').forEach((status) => status.remove());
     popup.classList.remove(EXTENSION_CLASS);
