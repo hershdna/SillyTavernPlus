@@ -37,6 +37,42 @@ function emitInput(textarea) {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function getNativeMoveButton(block, direction) {
+    const selector = direction < 0 ? '.move_up_alternate_greeting' : '.move_down_alternate_greeting';
+    return block?.querySelector(selector);
+}
+
+function moveWithNativeControls(list, sourceIndex, targetIndex) {
+    const direction = targetIndex < sourceIndex ? -1 : 1;
+    let currentIndex = sourceIndex;
+    const blocks = getGreetingBlocks(list);
+
+    // Do not partially use the native path: the fallback path starts from the
+    // original order, so every required native control must be present first.
+    for (let index = sourceIndex; index !== targetIndex; index += direction) {
+        if (!getNativeMoveButton(blocks[index], direction)) return false;
+    }
+
+    while (currentIndex !== targetIndex) {
+        const currentBlock = blocks[currentIndex];
+        const nativeButton = getNativeMoveButton(currentBlock, direction);
+        if (!nativeButton) return false;
+
+        // SillyTavern's native handler updates both its backing array and the
+        // two textareas involved. Moving the block that now contains the
+        // original greeting is important because native data-index values do
+        // not change when the values are swapped.
+        nativeButton.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+        }));
+        currentIndex += direction;
+    }
+
+    return true;
+}
+
 function syncPositionFields(list) {
     const blocks = getGreetingBlocks(list);
     blocks.forEach((block, index) => {
@@ -59,16 +95,18 @@ function reorderGreeting(list, sourceIndex, requestedPosition) {
         return { ok: true, moved: false, message: 'Already in that position.' };
     }
 
-    const values = blocks.map(getGreetingTextarea).map((textarea) => textarea?.value ?? '');
-    const [moved] = values.splice(sourceIndex, 1);
-    values.splice(targetIndex, 0, moved);
+    if (!moveWithNativeControls(list, sourceIndex, targetIndex)) {
+        const values = blocks.map(getGreetingTextarea).map((textarea) => textarea?.value ?? '');
+        const [moved] = values.splice(sourceIndex, 1);
+        values.splice(targetIndex, 0, moved);
 
-    blocks.forEach((block, index) => {
-        const textarea = getGreetingTextarea(block);
-        if (!textarea) return;
-        textarea.value = values[index];
-        emitInput(textarea);
-    });
+        blocks.forEach((block, index) => {
+            const textarea = getGreetingTextarea(block);
+            if (!textarea) return;
+            textarea.value = values[index];
+            emitInput(textarea);
+        });
+    }
 
     syncPositionFields(list);
     return { ok: true, moved: true, message: `Moved greeting ${sourceIndex + 1} to position ${requestedPosition}.` };
@@ -98,6 +136,7 @@ function applyRequestedPosition(input) {
 }
 
 function stopSummaryToggle(event) {
+    event.preventDefault();
     event.stopPropagation();
 }
 
@@ -166,8 +205,11 @@ export function initialize(stSettings) {
 }
 
 export function refresh() {
+    if (!settings) return;
+
     document.querySelectorAll(POPUP_SELECTOR).forEach((popup) => {
         if (settings.greetingModsEnabled) decorateGreetingPopup(popup);
         else undecorateGreetingPopup(popup);
     });
 }
+
