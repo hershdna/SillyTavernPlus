@@ -184,11 +184,15 @@ function createPositionControl(block) {
     moveButton.addEventListener('pointerdown', preventSummaryToggle);
     moveButton.addEventListener('click', preventSummaryToggle);
     input.addEventListener('keydown', (event) => {
+        // Keep SillyTavern's document-level hotkey handlers from swallowing
+        // numeric key presses while this position field is being edited.
+        event.stopPropagation();
         if (event.key !== 'Enter') return;
         event.preventDefault();
-        event.stopPropagation();
         applyRequestedPosition(input);
     });
+    input.addEventListener('keyup', (event) => event.stopPropagation());
+    input.addEventListener('input', (event) => event.stopPropagation());
     moveButton.addEventListener('click', () => applyRequestedPosition(input));
 
     control.append(label, input, moveButton);
