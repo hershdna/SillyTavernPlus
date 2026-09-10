@@ -1,6 +1,6 @@
 {
   "display_name": "SillyTavernPlus",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "author": "hershdna",
   "homePage": "https://github.com/hershdna/SillyTavernPlus",
   "loading_order": 9998,
@@ -8,4 +8,3 @@
   "css": "style.css",
   "auto_update": true
 }
-
