@@ -149,6 +149,10 @@ function applyRequestedPosition(input) {
 }
 
 function stopSummaryToggle(event) {
+    event.stopPropagation();
+}
+
+function preventSummaryToggle(event) {
     event.preventDefault();
     event.stopPropagation();
 }
@@ -175,10 +179,10 @@ function createPositionControl(block) {
     moveButton.className = 'menu_button menu_button_icon stplus-alt-position-apply';
     moveButton.innerHTML = '<i class="fa-solid fa-arrow-right"></i><span>Move</span>';
 
-    [input, moveButton].forEach((element) => {
-        element.addEventListener('pointerdown', stopSummaryToggle);
-        element.addEventListener('click', stopSummaryToggle);
-    });
+    input.addEventListener('pointerdown', stopSummaryToggle);
+    input.addEventListener('click', stopSummaryToggle);
+    moveButton.addEventListener('pointerdown', preventSummaryToggle);
+    moveButton.addEventListener('click', preventSummaryToggle);
     input.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') return;
         event.preventDefault();
