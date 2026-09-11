@@ -52,7 +52,7 @@
                 if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scan);
                 else window.setTimeout(scan, 0);
             };
-            const frontingMutationSelector = '#movingDivs, #top-settings-holder, #top-bar, [data-dragged], [role="dialog"], .ui-dialog, .popup';
+            const frontingMutationSelector = '#movingDivs, #top-settings-holder, #top-bar, [data-dragged], [role="dialog"], .ui-dialog, .ui-autocomplete, .popup';
             const isRelevantMutation = (mutation) => {
                 const target = mutation.target instanceof Element ? mutation.target : null;
                 if (target === document.body || target?.matches(frontingMutationSelector) || target?.closest(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`)) return true;
