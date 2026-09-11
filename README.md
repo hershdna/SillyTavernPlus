@@ -13,6 +13,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Bring any clicked MovingUI window to the front, including windows supplied by external extensions.
 - Open newly-created MovingUI windows on top automatically, including windows supplied by external extensions.
 - Keep the main chat text window out of click-to-front ordering so opening other windows cannot bury them behind it.
+- Keep transient controls such as Gallery folder autocomplete menus above their owning floating window.
 - Optionally include previous assistant thinking output in World Info scanning, with a configurable reasoning-turn depth.
 - Open a dedicated settings window from the top bar to enable or disable greeting, lorebook, and MovingUI modules independently. MovingUI resizing, frontmost behavior, open-on-top behavior, and unbounded resizing are enabled by default.
 - Floating window position and size persist between sessions.
