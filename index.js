@@ -52,14 +52,15 @@
                 if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scan);
                 else window.setTimeout(scan, 0);
             };
+            const frontingMutationSelector = '#movingDivs, #top-settings-holder, #top-bar, [data-dragged], [role="dialog"], .ui-dialog, .popup';
             const isRelevantMutation = (mutation) => {
                 const target = mutation.target instanceof Element ? mutation.target : null;
-                if (target === document.body || target?.matches('#movingDivs') || target?.closest('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar')) return true;
+                if (target === document.body || target?.matches(frontingMutationSelector) || target?.closest(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`)) return true;
                 return Array.from(mutation.addedNodes).some((node) => {
                     if (!(node instanceof Element)) return false;
-                    return node.matches('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, #movingDivs')
-                        || node.parentElement?.matches('#movingDivs')
-                        || Boolean(node.querySelector('.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, #movingDivs'));
+                    return node.matches(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`)
+                        || node.parentElement?.matches('#movingDivs, #top-settings-holder, #top-bar')
+                        || Boolean(node.querySelector(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`));
                 });
             };
 
@@ -67,7 +68,12 @@
             const observer = new MutationObserver((mutations) => {
                 if (mutations.some(isRelevantMutation)) scheduleScan();
             });
-            observer.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
+            observer.observe(document.body, {
+                attributes: true,
+                attributeFilter: ['class', 'style', 'hidden', 'aria-hidden', 'data-dragged'],
+                childList: true,
+                subtree: true,
+            });
         } catch (error) {
             console.error('[SillyTavernPlus] Failed to initialize:', error);
         }
