@@ -220,6 +220,24 @@ function createSettingsWindow() {
             callbacks?.onMovingUiBringToFrontChanged?.();
         },
     ));
+    body.append(createCheckbox(
+        'stplus-movingui-open-on-top-enabled',
+        'Open new MovingUI windows on top',
+        'Raise newly-created SillyTavern or third-party MovingUI windows above other floating windows.',
+        (enabled) => {
+            settings.movingUiOpenOnTopEnabled = enabled;
+            callbacks?.onMovingUiOpenOnTopChanged?.();
+        },
+    ));
+    body.append(createCheckbox(
+        'stplus-movingui-unbounded-resize-enabled',
+        'Remove MovingUI resize limits',
+        'Allow MovingUI windows to grow beyond the viewport; oversized windows may need to be dragged back into view.',
+        (enabled) => {
+            settings.movingUiUnboundedResizeEnabled = enabled;
+            callbacks?.onMovingUiUnboundedResizeChanged?.();
+        },
+    ));
 
     panel.append(header, body);
     document.body.appendChild(panel);
@@ -265,9 +283,13 @@ export function refresh() {
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
     const movingUiBringToFrontCheckbox = document.getElementById('stplus-movingui-bring-to-front-enabled');
+    const movingUiOpenOnTopCheckbox = document.getElementById('stplus-movingui-open-on-top-enabled');
+    const movingUiUnboundedResizeCheckbox = document.getElementById('stplus-movingui-unbounded-resize-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
     if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
     if (movingUiBringToFrontCheckbox) movingUiBringToFrontCheckbox.checked = settings.movingUiBringToFrontEnabled;
+    if (movingUiOpenOnTopCheckbox) movingUiOpenOnTopCheckbox.checked = settings.movingUiOpenOnTopEnabled;
+    if (movingUiUnboundedResizeCheckbox) movingUiUnboundedResizeCheckbox.checked = settings.movingUiUnboundedResizeEnabled;
 }
 
