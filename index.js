@@ -14,22 +14,25 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, settingsPanel, movingUiResize] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, settingsPanel, movingUiResize, movingUiFront] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
                 loadModule('settings-panel'),
                 loadModule('movingui-resize'),
+                loadModule('movingui-front'),
             ]);
             const settings = settingsStore.initializeSettings(context);
 
             greetingMods.initialize(settings);
             lorebookMods.initialize(context, settings);
             movingUiResize.initialize(context, settings);
+            movingUiFront.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
                 onLorebookModsChanged: () => lorebookMods.refresh(),
                 onMovingUiResizeChanged: () => movingUiResize.refresh(),
+                onMovingUiBringToFrontChanged: () => movingUiFront.refresh(),
             });
 
             let scanScheduled = false;
@@ -39,6 +42,7 @@
                 lorebookMods.refresh();
                 settingsPanel.refresh();
                 movingUiResize.refresh();
+                movingUiFront.refresh();
             };
             const scheduleScan = () => {
                 if (scanScheduled) return;
