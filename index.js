@@ -33,6 +33,8 @@
                 onLorebookModsChanged: () => lorebookMods.refresh(),
                 onMovingUiResizeChanged: () => movingUiResize.refresh(),
                 onMovingUiBringToFrontChanged: () => movingUiFront.refresh(),
+                onMovingUiOpenOnTopChanged: () => movingUiFront.refresh(),
+                onMovingUiUnboundedResizeChanged: () => movingUiResize.refresh(),
             });
 
             let scanScheduled = false;
