@@ -11,8 +11,10 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Resize the floating window from any corner.
 - Add four-corner resizing to every MovingUI panel, including dynamic windows from third-party extensions such as GalleryPlus.
 - Bring any clicked MovingUI window to the front, including windows supplied by external extensions.
+- Open newly-created MovingUI windows on top automatically, including windows supplied by external extensions.
+- Optionally remove MovingUI viewport and CSS resize limits.
 - Optionally include previous assistant thinking output in World Info scanning, with a configurable reasoning-turn depth.
-- Open a dedicated settings window from the top bar to enable or disable greeting, lorebook, MovingUI resizing, and MovingUI frontmost behavior independently. MovingUI resizing and frontmost behavior are enabled by default.
+- Open a dedicated settings window from the top bar to enable or disable greeting, lorebook, MovingUI resizing, and MovingUI frontmost behavior independently. MovingUI resizing, frontmost behavior, open-on-top behavior, and unbounded resizing are enabled by default.
 - Floating window position and size persist between sessions.
 
 ## Installation
