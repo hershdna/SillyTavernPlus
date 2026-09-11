@@ -30,6 +30,7 @@ const CORNERS = [
 let context = null;
 let settings = null;
 const managedPanels = new Map();
+const originalResizeConstraints = new Map();
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -51,6 +52,32 @@ function getCandidatePanels() {
         panels.add(panel);
     });
     return panels;
+}
+
+function applyResizeConstraints(panel) {
+    if (!originalResizeConstraints.has(panel)) {
+        originalResizeConstraints.set(panel, {
+            maxWidth: panel.style.maxWidth,
+            maxHeight: panel.style.maxHeight,
+        });
+    }
+    if (settings?.movingUiUnboundedResizeEnabled !== true) return;
+    panel.style.maxWidth = 'none';
+    panel.style.maxHeight = 'none';
+}
+
+function restoreResizeConstraints(panel) {
+    const original = originalResizeConstraints.get(panel);
+    if (!original) return;
+    if (panel.isConnected) {
+        panel.style.maxWidth = original.maxWidth;
+        panel.style.maxHeight = original.maxHeight;
+    }
+    originalResizeConstraints.delete(panel);
+}
+
+function restoreAllResizeConstraints() {
+    for (const panel of originalResizeConstraints.keys()) restoreResizeConstraints(panel);
 }
 
 function saveMovingUiState(panel) {
@@ -110,17 +137,26 @@ function addResizeHandles(panel) {
         let top = startTop;
         let width = startWidth;
         let height = startHeight;
+        const unbounded = settings?.movingUiUnboundedResizeEnabled === true;
 
         if (corner.includes('e')) {
-            width = Math.max(minWidth, Math.min(startWidth + deltaX, window.innerWidth - startLeft - 8));
+            width = unbounded
+                ? Math.max(minWidth, startWidth + deltaX)
+                : Math.max(minWidth, Math.min(startWidth + deltaX, window.innerWidth - startLeft - 8));
         } else if (corner.includes('w')) {
-            left = clamp(startLeft + deltaX, 8, right - minWidth);
+            left = unbounded
+                ? Math.min(startLeft + deltaX, right - minWidth)
+                : clamp(startLeft + deltaX, 8, right - minWidth);
             width = right - left;
         }
         if (corner.includes('s')) {
-            height = Math.max(minHeight, Math.min(startHeight + deltaY, window.innerHeight - startTop - 8));
+            height = unbounded
+                ? Math.max(minHeight, startHeight + deltaY)
+                : Math.max(minHeight, Math.min(startHeight + deltaY, window.innerHeight - startTop - 8));
         } else if (corner.includes('n')) {
-            top = clamp(startTop + deltaY, 8, bottom - minHeight);
+            top = unbounded
+                ? Math.min(startTop + deltaY, bottom - minHeight)
+                : clamp(startTop + deltaY, 8, bottom - minHeight);
             height = bottom - top;
         }
 
@@ -212,6 +248,7 @@ function removeAllHandles() {
         cleanup();
         managedPanels.delete(panel);
     }
+    restoreAllResizeConstraints();
 }
 
 export function initialize(stContext, stSettings) {
@@ -227,13 +264,16 @@ export function refresh() {
 
     const candidates = getCandidatePanels();
     for (const panel of candidates) {
+        applyResizeConstraints(panel);
         if (!managedPanels.has(panel)) managedPanels.set(panel, addResizeHandles(panel));
     }
     for (const [panel, cleanup] of managedPanels) {
         if (!candidates.has(panel) || !panel.isConnected) {
             cleanup();
+            restoreResizeConstraints(panel);
             managedPanels.delete(panel);
         }
     }
+    if (settings?.movingUiUnboundedResizeEnabled !== true) restoreAllResizeConstraints();
 }
 
