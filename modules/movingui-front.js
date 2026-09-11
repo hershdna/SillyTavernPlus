@@ -24,6 +24,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#rawPromptPopup',
     '.popup .popper-modal',
     '.ui-dialog',
+    '.ui-autocomplete',
     '[role="dialog"]',
     '.popup',
     '[data-dragged]',
