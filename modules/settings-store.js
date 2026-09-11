@@ -2,6 +2,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
     lorebookModsEnabled: true,
     movingUiResizeEnabled: true,
+    movingUiBringToFrontEnabled: true,
     reasoningScanEnabled: false,
     reasoningScanDepth: 1,
 });
@@ -24,6 +25,7 @@ export function initializeSettings(stContext) {
         greetingModsEnabled: saved.greetingModsEnabled !== false,
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,
         movingUiResizeEnabled: saved.movingUiResizeEnabled !== false,
+        movingUiBringToFrontEnabled: saved.movingUiBringToFrontEnabled !== false,
         reasoningScanEnabled: saved.reasoningScanEnabled === true,
         reasoningScanDepth: normalizeDepth(saved.reasoningScanDepth),
     };
