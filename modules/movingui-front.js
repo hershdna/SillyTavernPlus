@@ -22,11 +22,12 @@ const EXCLUDED_PANEL_SELECTOR = '.stplus-settings-window';
 let context = null;
 let settings = null;
 let listenersBound = false;
+let panelSnapshotInitialized = false;
+let knownPanels = new Set();
 const originalZIndexes = new Map();
 
-function isMovingUiActive() {
-    return settings?.movingUiBringToFrontEnabled !== false
-        && context?.powerUserSettings?.movingUI === true
+function isMovingUiEnvironmentActive() {
+    return context?.powerUserSettings?.movingUI === true
         && context?.isMobile?.() !== true
         && document.body?.classList.contains('movingUI');
 }
@@ -51,7 +52,7 @@ function getMovingUiPanels() {
 }
 
 function bringToFront(panel) {
-    if (!isMovingUiActive()) return;
+    if (!isMovingUiEnvironmentActive()) return;
 
     if (!originalZIndexes.has(panel)) originalZIndexes.set(panel, panel.style.zIndex);
 
@@ -65,6 +66,7 @@ function bringToFront(panel) {
 }
 
 function handlePointerDown(event) {
+    if (settings?.movingUiBringToFrontEnabled === false) return;
     const panel = getPanelFromEvent(event);
     if (panel) bringToFront(panel);
 }
@@ -99,11 +101,31 @@ export function initialize(stContext, stSettings) {
 }
 
 export function refresh() {
-    if (!isMovingUiActive()) {
+    const environmentActive = isMovingUiEnvironmentActive();
+    const clickToFrontEnabled = settings?.movingUiBringToFrontEnabled !== false;
+    const openOnTopEnabled = settings?.movingUiOpenOnTopEnabled !== false;
+    if (!environmentActive || (!clickToFrontEnabled && !openOnTopEnabled)) {
         unbindListeners();
         restoreZIndexes();
+        knownPanels.clear();
+        panelSnapshotInitialized = false;
         return;
     }
-    bindListeners();
+
+    if (clickToFrontEnabled) bindListeners();
+    else unbindListeners();
+
+    const currentPanels = new Set(getMovingUiPanels());
+    if (!panelSnapshotInitialized) {
+        knownPanels = currentPanels;
+        panelSnapshotInitialized = true;
+        return;
+    }
+    if (openOnTopEnabled) {
+        for (const panel of currentPanels) {
+            if (!knownPanels.has(panel)) bringToFront(panel);
+        }
+    }
+    knownPanels = currentPanels;
 }
 
