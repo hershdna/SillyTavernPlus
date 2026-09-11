@@ -297,6 +297,18 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     margin-top: 0;
 }
 
+.stplus-settings-section {
+    margin-top: 16px;
+}
+
+.stplus-settings-section-title {
+    margin: 0;
+    padding: 6px 0;
+    color: var(--SmartThemeQuoteColor, #9ecbff);
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+    font-size: 1.05em;
+}
+
 .stplus-settings-option {
     display: flex;
     align-items: flex-start;
@@ -367,4 +379,3 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
         min-height: 0 !important;
     }
 }
-
