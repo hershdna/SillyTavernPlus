@@ -48,6 +48,16 @@ function createCheckbox(id, labelText, description, onChange) {
     return row;
 }
 
+function createSettingsSection(titleText) {
+    const section = document.createElement('section');
+    section.className = 'stplus-settings-section';
+    const title = document.createElement('h4');
+    title.className = 'stplus-settings-section-title';
+    title.textContent = titleText;
+    section.appendChild(title);
+    return section;
+}
+
 function addResizeHandles(panel) {
     const corners = [
         ['nw', 'top left'],
@@ -184,7 +194,8 @@ function createSettingsWindow() {
     const intro = document.createElement('p');
     intro.textContent = 'Choose which SillyTavernPlus features are active.';
     body.append(intro);
-    body.append(createCheckbox(
+    const worldInfoSection = createSettingsSection('World Info / Lorebooks');
+    worldInfoSection.append(createCheckbox(
         'stplus-lorebook-mods-enabled',
         'Lorebook mods',
         'Floating Worlds/Lorebooks window and reasoning-based World Info scanning.',
@@ -193,7 +204,10 @@ function createSettingsWindow() {
             callbacks?.onLorebookModsChanged?.();
         },
     ));
-    body.append(createCheckbox(
+    body.append(worldInfoSection);
+
+    const charactersSection = createSettingsSection('Characters');
+    charactersSection.append(createCheckbox(
         'stplus-greeting-mods-enabled',
         'Greeting mods',
         'Alternate greeting reorder controls.',
@@ -202,7 +216,10 @@ function createSettingsWindow() {
             callbacks?.onGreetingModsChanged?.();
         },
     ));
-    body.append(createCheckbox(
+    body.append(charactersSection);
+
+    const movingUiSection = createSettingsSection('MovingUI');
+    movingUiSection.append(createCheckbox(
         'stplus-movingui-resize-enabled',
         'MovingUI corner resizing',
         'Add four-corner resize handles to SillyTavern and third-party MovingUI windows.',
@@ -211,7 +228,7 @@ function createSettingsWindow() {
             callbacks?.onMovingUiResizeChanged?.();
         },
     ));
-    body.append(createCheckbox(
+    movingUiSection.append(createCheckbox(
         'stplus-movingui-bring-to-front-enabled',
         'Bring MovingUI windows to front',
         'Raise the clicked SillyTavern or third-party MovingUI window above the other floating windows.',
@@ -220,7 +237,7 @@ function createSettingsWindow() {
             callbacks?.onMovingUiBringToFrontChanged?.();
         },
     ));
-    body.append(createCheckbox(
+    movingUiSection.append(createCheckbox(
         'stplus-movingui-open-on-top-enabled',
         'Open new MovingUI windows on top',
         'Raise newly-created SillyTavern or third-party MovingUI windows above other floating windows.',
@@ -229,7 +246,7 @@ function createSettingsWindow() {
             callbacks?.onMovingUiOpenOnTopChanged?.();
         },
     ));
-    body.append(createCheckbox(
+    movingUiSection.append(createCheckbox(
         'stplus-movingui-unbounded-resize-enabled',
         'Remove MovingUI resize limits',
         'Allow MovingUI windows to grow beyond the viewport; oversized windows may need to be dragged back into view.',
@@ -238,6 +255,7 @@ function createSettingsWindow() {
             callbacks?.onMovingUiUnboundedResizeChanged?.();
         },
     ));
+    body.append(movingUiSection);
 
     panel.append(header, body);
     document.body.appendChild(panel);
@@ -292,4 +310,3 @@ export function refresh() {
     if (movingUiOpenOnTopCheckbox) movingUiOpenOnTopCheckbox.checked = settings.movingUiOpenOnTopEnabled;
     if (movingUiUnboundedResizeCheckbox) movingUiUnboundedResizeCheckbox.checked = settings.movingUiUnboundedResizeEnabled;
 }
-
