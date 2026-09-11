@@ -3,6 +3,8 @@ const DEFAULT_SETTINGS = Object.freeze({
     lorebookModsEnabled: true,
     movingUiResizeEnabled: true,
     movingUiBringToFrontEnabled: true,
+    movingUiOpenOnTopEnabled: true,
+    movingUiUnboundedResizeEnabled: true,
     reasoningScanEnabled: false,
     reasoningScanDepth: 1,
 });
@@ -26,6 +28,8 @@ export function initializeSettings(stContext) {
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,
         movingUiResizeEnabled: saved.movingUiResizeEnabled !== false,
         movingUiBringToFrontEnabled: saved.movingUiBringToFrontEnabled !== false,
+        movingUiOpenOnTopEnabled: saved.movingUiOpenOnTopEnabled !== false,
+        movingUiUnboundedResizeEnabled: saved.movingUiUnboundedResizeEnabled !== false,
         reasoningScanEnabled: saved.reasoningScanEnabled === true,
         reasoningScanDepth: normalizeDepth(saved.reasoningScanDepth),
     };
