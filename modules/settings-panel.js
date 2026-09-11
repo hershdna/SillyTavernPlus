@@ -211,6 +211,15 @@ function createSettingsWindow() {
             callbacks?.onMovingUiResizeChanged?.();
         },
     ));
+    body.append(createCheckbox(
+        'stplus-movingui-bring-to-front-enabled',
+        'Bring MovingUI windows to front',
+        'Raise the clicked SillyTavern or third-party MovingUI window above the other floating windows.',
+        (enabled) => {
+            settings.movingUiBringToFrontEnabled = enabled;
+            callbacks?.onMovingUiBringToFrontChanged?.();
+        },
+    ));
 
     panel.append(header, body);
     document.body.appendChild(panel);
@@ -255,8 +264,10 @@ export function refresh() {
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
+    const movingUiBringToFrontCheckbox = document.getElementById('stplus-movingui-bring-to-front-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
     if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
+    if (movingUiBringToFrontCheckbox) movingUiBringToFrontCheckbox.checked = settings.movingUiBringToFrontEnabled;
 }
 
