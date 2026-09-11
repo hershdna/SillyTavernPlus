@@ -15,7 +15,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Keep the main chat text window out of click-to-front ordering so opening other windows cannot bury them behind it.
 - Keep transient controls such as Gallery folder autocomplete menus above their owning floating window.
 - Optionally include previous assistant thinking output in World Info scanning, with a configurable reasoning-turn depth.
-- Open a dedicated settings window from the top bar to enable or disable greeting, lorebook, and MovingUI modules independently. MovingUI resizing, frontmost behavior, open-on-top behavior, and unbounded resizing are enabled by default.
+- Open a dedicated settings window from the top bar to enable or disable modules independently, organized under World Info / Lorebooks, Characters, and MovingUI. MovingUI resizing, frontmost behavior, open-on-top behavior, and unbounded resizing are enabled by default.
 - Floating window position and size persist between sessions.
 
 ## Installation
@@ -25,4 +25,3 @@ Copy this repository into:
 `SillyTavern/public/scripts/extensions/third-party/SillyTavernPlus`
 
 Then enable it from SillyTavern's Extensions panel or restart SillyTavern.
-
