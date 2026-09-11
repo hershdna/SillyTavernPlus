@@ -13,7 +13,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#groupMemberListPopout',
     '#summaryExtensionPopout',
     '#gallery',
-    '#movingDivs > div',
+    '#movingDivs > *',
     '[data-dragged]',
 ].join(',');
 
@@ -74,15 +74,15 @@ function bindListeners() {
 
     // Capture phase lets a window move above its siblings before MovingUI or
     // an extension starts a drag. No default action or propagation is blocked.
-    window.addEventListener('pointerdown', handlePointerDown, true);
-    window.addEventListener('mousedown', handlePointerDown, true);
+    if ('PointerEvent' in window) window.addEventListener('pointerdown', handlePointerDown, true);
+    else window.addEventListener('mousedown', handlePointerDown, true);
     listenersBound = true;
 }
 
 function unbindListeners() {
     if (!listenersBound) return;
-    window.removeEventListener('pointerdown', handlePointerDown, true);
-    window.removeEventListener('mousedown', handlePointerDown, true);
+    if ('PointerEvent' in window) window.removeEventListener('pointerdown', handlePointerDown, true);
+    else window.removeEventListener('mousedown', handlePointerDown, true);
     listenersBound = false;
 }
 
