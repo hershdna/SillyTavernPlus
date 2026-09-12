@@ -40,7 +40,9 @@ function getChat() {
 }
 
 function getChatKey() {
-    return String(context?.getCurrentChatId?.() ?? context?.chatId ?? 'current-chat');
+    const currentChatId = context?.getCurrentChatId?.() ?? context?.chatId;
+    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') return null;
+    return String(currentChatId);
 }
 
 function getChatMetadata() {
@@ -72,7 +74,7 @@ function readStoredGraph() {
 }
 
 function writeStoredGraph() {
-    if (!graph) return;
+    if (!graph || !getChatKey()) return;
     const payload = clone(graph);
     if (typeof context?.updateChatMetadata === 'function') {
         context.updateChatMetadata({ [METADATA_KEY]: payload }, false);
@@ -82,6 +84,7 @@ function writeStoredGraph() {
 }
 
 function schedulePersist() {
+    writeStoredGraph();
     window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(async () => {
         writeStoredGraph();
@@ -192,6 +195,17 @@ function syncGraph(force = false) {
     // GENERATION_ENDED so streaming/reasoning updates cannot become nodes.
     if (generationActive) return;
     const chatKey = getChatKey();
+    if (!chatKey) {
+        window.clearTimeout(syncTimer);
+        window.clearTimeout(persistTimer);
+        graph = null;
+        loadedChatKey = null;
+        lastChatSignature = '';
+        selectedNodeId = null;
+        closeWindow();
+        document.getElementById(MODULE_BUTTON_ID)?.remove();
+        return;
+    }
     if (loadedChatKey !== chatKey) {
         graph = readStoredGraph();
         loadedChatKey = chatKey;
@@ -265,6 +279,7 @@ function getToolbarHost() {
 }
 
 function openWindow() {
+    if (!getChatKey()) return;
     if (!panel) createWindow();
     syncGraph(true);
     panel.classList.add('stplus-branching-window-open');
@@ -282,6 +297,7 @@ function selectNode(nodeId) {
 }
 
 async function jumpToSelected() {
+    if (!getChatKey()) return;
     const selected = getSelectedNode();
     const path = getPathToNode(selected?.id);
     const chat = getChat();
@@ -313,6 +329,7 @@ function flattenForExport(node) {
 }
 
 function exportSelectedBranch() {
+    if (!getChatKey()) return;
     const path = getExportPath();
     if (path.length === 0) {
         window.toastr?.warning?.('There are no chat messages to export yet.');
@@ -490,6 +507,24 @@ function bindEvents() {
         // will perform the immediate final sync and cancel this timer.
         if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
     };
+    const onChatChanged = () => {
+        // Never leave a previous chat's tree visible during or after a chat
+        // transition. The next refresh will rebuild from the newly active
+        // chat, if one exists.
+        window.clearTimeout(syncTimer);
+        window.clearTimeout(persistTimer);
+        closeWindow();
+        graph = null;
+        loadedChatKey = null;
+        lastChatSignature = '';
+        selectedNodeId = null;
+        if (getChatKey()) {
+            installButton();
+            scheduleSync(0);
+        } else {
+            document.getElementById(MODULE_BUTTON_ID)?.remove();
+        }
+    };
     const on = (name, handler) => {
         const eventName = eventTypes[name];
         if (!eventName) return;
@@ -497,7 +532,7 @@ function bindEvents() {
     };
     on('GENERATION_STARTED', onGenerationStarted);
     on('GENERATION_ENDED', onGenerationEnded);
-    on('CHAT_CHANGED', onSafeChatMutation);
+    on('CHAT_CHANGED', onChatChanged);
     on('MESSAGE_SENT', onSafeChatMutation);
     on('MESSAGE_SWIPED', onSwipe);
     on('MESSAGE_UPDATED', onSafeChatMutation);
@@ -517,6 +552,11 @@ export function initialize(stContext, stSettings) {
 
 export function refresh() {
     if (!settings?.branchingChatsEnabled) {
+        closeWindow();
+        document.getElementById(MODULE_BUTTON_ID)?.remove();
+        return;
+    }
+    if (!getChatKey()) {
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
