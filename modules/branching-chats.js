@@ -1,0 +1,467 @@
+const MODULE_BUTTON_ID = 'stplus-branching-chats-button';
+const WINDOW_ID = 'stplus-branching-chats-window';
+const METADATA_KEY = 'stplusBranchingChats';
+const SCHEMA_VERSION = 1;
+const SYNC_DELAY = 80;
+const PERSIST_DELAY = 350;
+
+let context = null;
+let settings = null;
+let panel = null;
+let graph = null;
+let loadedChatKey = null;
+let lastChatSignature = '';
+let selectedNodeId = null;
+let syncTimer = null;
+let persistTimer = null;
+let listenersBound = false;
+
+const clone = (value) => {
+    try {
+        return structuredClone(value);
+    } catch {
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch {
+            return value;
+        }
+    }
+};
+
+function newId() {
+    if (globalThis.crypto?.randomUUID) return `stplus-${crypto.randomUUID()}`;
+    return `stplus-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getChat() {
+    return Array.isArray(context?.chat) ? context.chat : [];
+}
+
+function getChatKey() {
+    return String(context?.getCurrentChatId?.() ?? context?.chatId ?? 'current-chat');
+}
+
+function getChatMetadata() {
+    return context?.chatMetadata ?? context?.chat_metadata ?? {};
+}
+
+function createGraph() {
+    return { schemaVersion: SCHEMA_VERSION, nodes: {}, activePath: [] };
+}
+
+function readStoredGraph() {
+    let stored = getChatMetadata()?.[METADATA_KEY];
+    if (typeof stored === 'string') {
+        try {
+            stored = JSON.parse(stored);
+        } catch {
+            stored = null;
+        }
+    }
+    if (!stored || typeof stored !== 'object') return createGraph();
+    const storedNodes = stored.nodes && typeof stored.nodes === 'object' ? stored.nodes : {};
+    return {
+        schemaVersion: SCHEMA_VERSION,
+        nodes: Object.fromEntries(Object.entries(storedNodes).filter(([, node]) => node && typeof node === 'object')),
+        activePath: Array.isArray(stored.activePath) ? stored.activePath.filter((id) => typeof id === 'string') : [],
+    };
+}
+
+function writeStoredGraph() {
+    if (!graph) return;
+    const payload = clone(graph);
+    if (typeof context?.updateChatMetadata === 'function') {
+        context.updateChatMetadata({ [METADATA_KEY]: payload }, false);
+    } else if (context?.chatMetadata && typeof context.chatMetadata === 'object') {
+        context.chatMetadata[METADATA_KEY] = payload;
+    }
+}
+
+function schedulePersist() {
+    window.clearTimeout(persistTimer);
+    persistTimer = window.setTimeout(async () => {
+        writeStoredGraph();
+        await context?.saveChat?.();
+    }, PERSIST_DELAY);
+}
+
+function getActiveSwipeIndex(message) {
+    if (!Array.isArray(message?.swipes) || message.swipes.length === 0) return 0;
+    const value = Number.parseInt(message.swipe_id, 10);
+    if (Number.isInteger(value) && value >= 0 && value < message.swipes.length) return value;
+    const current = String(message?.mes ?? '');
+    const matching = message.swipes.findIndex((swipe) => String(swipe) === current);
+    return matching >= 0 ? matching : 0;
+}
+
+function getVariantContents(message) {
+    if (Array.isArray(message?.swipes) && message.swipes.length > 0) {
+        return message.swipes.map((swipe) => String(swipe ?? ''));
+    }
+    return [String(message?.mes ?? '')];
+}
+
+function getNodeRole(message) {
+    if (message?.is_system === true || message?.role === 'system') return 'system';
+    if (message?.is_user === true || message?.role === 'user') return 'user';
+    return 'assistant';
+}
+
+function getNodeLabel(message, sourceIndex, swipeIndex, variantCount) {
+    const role = getNodeRole(message);
+    const name = String(message?.name ?? '').trim();
+    const speaker = name || role;
+    return variantCount > 1 ? `${speaker} ${sourceIndex + 1}.${swipeIndex + 1}` : `${speaker} ${sourceIndex + 1}`;
+}
+
+function getNodeKey(parentId, sourceIndex, swipeIndex, content) {
+    return `${parentId ?? 'root'}|${sourceIndex}|${swipeIndex}|${content}`;
+}
+
+function findNodeByKey(key) {
+    return Object.values(graph?.nodes ?? {}).find((node) => node.key === key) ?? null;
+}
+
+function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variantCount) {
+    const key = getNodeKey(parentId, sourceIndex, swipeIndex, content);
+    const existing = findNodeByKey(key);
+    if (existing) return existing;
+    const snapshot = clone(message) ?? {};
+    snapshot.mes = content;
+    if (Array.isArray(snapshot.swipes) && snapshot.swipes.length > 0) snapshot.swipe_id = swipeIndex;
+    const node = {
+        id: newId(),
+        key,
+        parentId: parentId ?? null,
+        sourceIndex,
+        swipeIndex,
+        variantCount,
+        role: getNodeRole(message),
+        name: String(message?.name ?? ''),
+        label: getNodeLabel(message, sourceIndex, swipeIndex, variantCount),
+        content,
+        message: snapshot,
+        createdAt: Date.now(),
+    };
+    graph.nodes[node.id] = node;
+    return node;
+}
+
+function getChatSignature(chat) {
+    return JSON.stringify(chat.map((message) => ({
+        mes: message?.mes,
+        swipeId: message?.swipe_id,
+        swipes: message?.swipes,
+        name: message?.name,
+        isUser: message?.is_user,
+    })));
+}
+
+function syncGraph(force = false) {
+    if (!settings?.branchingChatsEnabled) return;
+    const chatKey = getChatKey();
+    if (loadedChatKey !== chatKey) {
+        graph = readStoredGraph();
+        loadedChatKey = chatKey;
+        lastChatSignature = '';
+        selectedNodeId = null;
+    }
+    const chat = getChat();
+    const signature = getChatSignature(chat);
+    if (!force && signature === lastChatSignature) return;
+    lastChatSignature = signature;
+    if (!graph) graph = createGraph();
+
+    let parentId = null;
+    const activePath = [];
+    chat.forEach((message, sourceIndex) => {
+        const variants = getVariantContents(message);
+        const activeSwipeIndex = Math.min(getActiveSwipeIndex(message), variants.length - 1);
+        let activeNode = null;
+        variants.forEach((content, swipeIndex) => {
+            const node = ensureNode(parentId, message, sourceIndex, swipeIndex, content, variants.length);
+            if (swipeIndex === activeSwipeIndex) activeNode = node;
+        });
+        if (activeNode) {
+            activePath.push(activeNode.id);
+            parentId = activeNode.id;
+        }
+    });
+    graph.activePath = activePath;
+    if (!selectedNodeId || !graph.nodes[selectedNodeId]) selectedNodeId = activePath.at(-1) ?? null;
+    schedulePersist();
+    render();
+}
+
+function getPathToNode(nodeId) {
+    const path = [];
+    const seen = new Set();
+    let node = graph?.nodes?.[nodeId];
+    while (node && !seen.has(node.id)) {
+        path.unshift(node);
+        seen.add(node.id);
+        node = node.parentId ? graph.nodes[node.parentId] : null;
+    }
+    return path;
+}
+
+function getSelectedNode() {
+    return graph?.nodes?.[selectedNodeId] ?? null;
+}
+
+function getPreviewText(node) {
+    const content = String(node?.content ?? '').trim();
+    return content.length > 600 ? `${content.slice(0, 600)}…` : content;
+}
+
+function createButton(label, title, onClick, className = '') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `menu_button stplus-branching-button ${className}`.trim();
+    button.textContent = label;
+    button.title = title;
+    button.addEventListener('click', onClick);
+    return button;
+}
+
+function getToolbarHost() {
+    const candidates = ['#top-settings-holder', '#top-bar', '#extensionTopBar'];
+    return candidates.map((selector) => document.querySelector(selector))
+        .find((element) => element instanceof HTMLElement) ?? null;
+}
+
+function openWindow() {
+    if (!panel) createWindow();
+    syncGraph(true);
+    panel.classList.add('stplus-branching-window-open');
+    render();
+}
+
+function closeWindow() {
+    panel?.classList.remove('stplus-branching-window-open');
+}
+
+function selectNode(nodeId) {
+    if (!graph?.nodes?.[nodeId]) return;
+    selectedNodeId = nodeId;
+    render();
+}
+
+async function jumpToSelected() {
+    const selected = getSelectedNode();
+    const path = getPathToNode(selected?.id);
+    const chat = getChat();
+    if (!selected || path.length === 0 || !Array.isArray(chat)) return;
+
+    const replacement = path.map((node) => clone(node.message) ?? { mes: node.content });
+    chat.splice(0, chat.length, ...replacement);
+    selectedNodeId = selected.id;
+    lastChatSignature = '';
+    writeStoredGraph();
+    await context?.saveChat?.();
+    if (typeof context?.reloadCurrentChat === 'function') await context.reloadCurrentChat();
+    syncGraph(true);
+    window.toastr?.success?.(`Jumped to ${selected.label}`);
+}
+
+function getExportPath() {
+    const selected = getSelectedNode();
+    return selected ? getPathToNode(selected.id) : (graph?.activePath ?? []).map((id) => graph.nodes[id]).filter(Boolean);
+}
+
+function flattenForExport(node) {
+    const message = clone(node?.message) ?? {};
+    message.mes = String(node?.content ?? message.mes ?? '');
+    delete message.swipes;
+    delete message.swipe_id;
+    delete message.swipe_info;
+    return message;
+}
+
+function exportSelectedBranch() {
+    const path = getExportPath();
+    if (path.length === 0) {
+        window.toastr?.warning?.('There are no chat messages to export yet.');
+        return;
+    }
+    const metadata = clone(getChatMetadata()) ?? {};
+    delete metadata[METADATA_KEY];
+    const lines = [JSON.stringify({ chat_metadata: metadata }), ...path.map(flattenForExport).map((message) => JSON.stringify(message))];
+    const blob = new Blob([`${lines.join('\n')}\n`], { type: 'application/jsonl' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${getChatKey().replace(/[^a-z0-9_-]+/gi, '_')}-branch.jsonl`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    window.toastr?.success?.('Selected branch exported as a vanilla SillyTavern chat.');
+}
+
+function createNodeButton(node, position, query) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'stplus-branching-node';
+    button.dataset.nodeId = node.id;
+    button.style.left = `${position.x}px`;
+    button.style.top = `${position.y}px`;
+    button.classList.toggle('stplus-branching-node-selected', node.id === selectedNodeId);
+    const matches = !query || `${node.label} ${node.name} ${node.content}`.toLowerCase().includes(query);
+    button.classList.toggle('stplus-branching-node-dimmed', !matches);
+    button.title = `${node.label}\n${getPreviewText(node)}`;
+    button.textContent = node.role === 'user' ? 'U' : node.role === 'system' ? 'S' : 'A';
+    button.addEventListener('click', () => selectNode(node.id));
+    button.addEventListener('dblclick', jumpToSelected);
+    return button;
+}
+
+function render() {
+    if (!panel || !graph) return;
+    const nodeLayer = panel.querySelector('.stplus-branching-node-layer');
+    const edgeLayer = panel.querySelector('.stplus-branching-edge-layer');
+    const previewTitle = panel.querySelector('.stplus-branching-preview-title');
+    const previewText = panel.querySelector('.stplus-branching-preview-text');
+    const jumpButton = panel.querySelector('[data-action="jump"]');
+    const status = panel.querySelector('.stplus-branching-status');
+    if (!(nodeLayer instanceof HTMLElement) || !(edgeLayer instanceof SVGElement)) return;
+
+    nodeLayer.replaceChildren();
+    edgeLayer.replaceChildren();
+    const nodes = Object.values(graph.nodes).sort((a, b) => a.sourceIndex - b.sourceIndex || a.createdAt - b.createdAt);
+    const query = String(panel.querySelector('.stplus-branching-search')?.value ?? '').trim().toLowerCase();
+    const byDepth = new Map();
+    nodes.forEach((node) => {
+        if (!byDepth.has(node.sourceIndex)) byDepth.set(node.sourceIndex, []);
+        byDepth.get(node.sourceIndex).push(node);
+    });
+    const positions = new Map();
+    let canvasWidth = 720;
+    let canvasHeight = 300;
+    byDepth.forEach((depthNodes, depth) => {
+        depthNodes.forEach((node, row) => {
+            const position = { x: 54 + row * 112, y: 28 + depth * 92 };
+            positions.set(node.id, position);
+            canvasWidth = Math.max(canvasWidth, position.x + 96);
+            canvasHeight = Math.max(canvasHeight, position.y + 76);
+            nodeLayer.appendChild(createNodeButton(node, position, query));
+        });
+    });
+    edgeLayer.setAttribute('width', String(canvasWidth));
+    edgeLayer.setAttribute('height', String(canvasHeight));
+    nodeLayer.style.width = `${canvasWidth}px`;
+    nodeLayer.style.height = `${canvasHeight}px`;
+    nodes.forEach((node) => {
+        if (!node.parentId || !positions.has(node.parentId)) return;
+        const start = positions.get(node.parentId);
+        const end = positions.get(node.id);
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', String(start.x + 22));
+        line.setAttribute('y1', String(start.y + 22));
+        line.setAttribute('x2', String(end.x + 22));
+        line.setAttribute('y2', String(end.y + 22));
+        line.classList.add('stplus-branching-edge');
+        edgeLayer.appendChild(line);
+    });
+
+    const selected = getSelectedNode();
+    if (previewTitle) previewTitle.textContent = selected ? `${selected.label}${selected.variantCount > 1 ? ` · variant ${selected.swipeIndex + 1}/${selected.variantCount}` : ''}` : 'Select a message node';
+    if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
+    if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
+    if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'} · ${graph.activePath.length} active`;
+}
+
+function createWindow() {
+    panel = document.createElement('section');
+    panel.id = WINDOW_ID;
+    panel.className = 'stplus-branching-window';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'SillyTavernPlus chat branches');
+
+    const header = document.createElement('div');
+    header.className = 'stplus-branching-header';
+    const title = document.createElement('h3');
+    title.textContent = 'Chat Branches';
+    const status = document.createElement('small');
+    status.className = 'stplus-branching-status';
+    const close = createButton('×', 'Close chat branches', closeWindow, 'stplus-branching-close');
+    close.setAttribute('aria-label', 'Close chat branches');
+    header.append(title, status, close);
+
+    const controls = document.createElement('div');
+    controls.className = 'stplus-branching-controls';
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'stplus-branching-search';
+    search.placeholder = 'Search messages…';
+    search.title = 'Filter the branch tree by message text or speaker';
+    search.addEventListener('input', render);
+    const refreshButton = createButton('Refresh', 'Rebuild the tree from the current chat', () => syncGraph(true));
+    const jump = createButton('Jump to Here', 'Make the selected node the active chat path', jumpToSelected);
+    jump.dataset.action = 'jump';
+    const exportButton = createButton('Export Branch', 'Export the selected path as a vanilla SillyTavern JSONL chat', exportSelectedBranch);
+    controls.append(search, refreshButton, jump, exportButton);
+
+    const tree = document.createElement('div');
+    tree.className = 'stplus-branching-tree';
+    const edgeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    edgeLayer.classList.add('stplus-branching-edge-layer');
+    const nodeLayer = document.createElement('div');
+    nodeLayer.className = 'stplus-branching-node-layer';
+    tree.append(edgeLayer, nodeLayer);
+
+    const preview = document.createElement('div');
+    preview.className = 'stplus-branching-preview';
+    const previewTitle = document.createElement('strong');
+    previewTitle.className = 'stplus-branching-preview-title';
+    const previewText = document.createElement('p');
+    previewText.className = 'stplus-branching-preview-text';
+    preview.append(previewTitle, previewText);
+
+    panel.append(header, controls, tree, preview);
+    document.body.appendChild(panel);
+}
+
+function installButton() {
+    const host = getToolbarHost();
+    if (!(host instanceof HTMLElement)) return;
+    let button = document.getElementById(MODULE_BUTTON_ID);
+    if (!(button instanceof HTMLButtonElement)) {
+        button = createButton('Branches', 'Open SillyTavernPlus chat branches', openWindow, 'stplus-branching-toolbar-button');
+        button.id = MODULE_BUTTON_ID;
+        button.innerHTML = '<i class="fa-solid fa-code-branch" aria-hidden="true"></i><span>Branches</span>';
+    }
+    if (button.parentElement !== host) host.appendChild(button);
+}
+
+function bindEvents() {
+    if (listenersBound) return;
+    const eventTypes = context?.eventTypes ?? {};
+    const names = ['CHAT_CHANGED', 'MESSAGE_SENT', 'MESSAGE_RECEIVED', 'MESSAGE_SWIPED', 'MESSAGE_UPDATED', 'MESSAGE_EDITED', 'MESSAGE_DELETED'];
+    names.forEach((name) => {
+        const eventName = eventTypes[name];
+        if (!eventName) return;
+        context.eventSource?.on?.(eventName, () => {
+            window.clearTimeout(syncTimer);
+            syncTimer = window.setTimeout(() => syncGraph(true), SYNC_DELAY);
+        });
+    });
+    listenersBound = true;
+}
+
+export function initialize(stContext, stSettings) {
+    context = stContext;
+    settings = stSettings;
+    createWindow();
+    bindEvents();
+}
+
+export function refresh() {
+    if (!settings?.branchingChatsEnabled) {
+        closeWindow();
+        document.getElementById(MODULE_BUTTON_ID)?.remove();
+        return;
+    }
+    installButton();
+    syncGraph();
+}
+
+export { createGraph, getVariantContents, getActiveSwipeIndex };
