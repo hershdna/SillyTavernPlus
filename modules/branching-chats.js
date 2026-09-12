@@ -23,6 +23,7 @@ let pendingSelectionNodeId = null;
 let reloadTargetChatKey = null;
 let chatLoadPending = false;
 let loadedChatEventKey = null;
+let jumpInProgress = false;
 let persistRevision = 0;
 let persistQueue = Promise.resolve();
 
@@ -430,45 +431,52 @@ function selectNode(nodeId) {
 }
 
 async function jumpToSelected() {
-    if (!getChatKey()) return;
+    if (jumpInProgress || !getChatKey()) return;
     const selected = getSelectedNode();
     const path = getPathToNode(selected?.id);
     const chat = getChat();
     if (!selected || path.length === 0 || !Array.isArray(chat)) return;
 
-    const chatKeyBeforeReload = getChatKey();
-    const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true;
-    const replacement = path.map((node) => clone(node.message) ?? { mes: node.content });
-    chat.splice(0, chat.length, ...replacement);
-    selectedNodeId = selected.id;
-    pendingSelectionNodeId = selected.id;
-    lastChatSignature = '';
-    writeStoredGraph();
-    const liveContext = getLiveContext();
-    await liveContext?.saveMetadata?.();
-    await liveContext?.saveChat?.();
-    if (typeof liveContext?.reloadCurrentChat === 'function') {
-        reloadTargetChatKey = chatKeyBeforeReload;
-        reloadChatPending = true;
-        try {
-            await liveContext.reloadCurrentChat();
-        } finally {
-            reloadChatPending = false;
+    jumpInProgress = true;
+    const jumpButton = panel?.querySelector('[data-action="jump"]');
+    if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
+    try {
+        const chatKeyBeforeReload = getChatKey();
+        const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true;
+        const replacement = path.map((node) => clone(node.message) ?? { mes: node.content });
+        chat.splice(0, chat.length, ...replacement);
+        selectedNodeId = selected.id;
+        pendingSelectionNodeId = selected.id;
+        lastChatSignature = '';
+        writeStoredGraph();
+        const liveContext = getLiveContext();
+        await liveContext?.saveMetadata?.();
+        await liveContext?.saveChat?.();
+        if (typeof liveContext?.reloadCurrentChat === 'function') {
+            reloadTargetChatKey = chatKeyBeforeReload;
+            reloadChatPending = true;
+            try {
+                await liveContext.reloadCurrentChat();
+            } finally {
+                reloadChatPending = false;
+            }
         }
-    }
-    if (getChatKey() !== chatKeyBeforeReload) {
-        reloadTargetChatKey = null;
+        if (getChatKey() !== chatKeyBeforeReload) {
+            reloadTargetChatKey = null;
+            pendingSelectionNodeId = null;
+            return;
+        }
+        syncGraph(true);
+        if (pendingSelectionNodeId && graph?.nodes?.[pendingSelectionNodeId]) selectedNodeId = pendingSelectionNodeId;
         pendingSelectionNodeId = null;
-        return;
+        if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+        render();
+        window.toastr?.success?.('Jumped to ' + selected.label);
+    } finally {
+        jumpInProgress = false;
+        if (panel?.classList.contains('stplus-branching-window-open')) render();
     }
-    syncGraph(true);
-    if (pendingSelectionNodeId && graph?.nodes?.[pendingSelectionNodeId]) selectedNodeId = pendingSelectionNodeId;
-    pendingSelectionNodeId = null;
-    if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
-    render();
-    window.toastr?.success?.(`Jumped to ${selected.label}`);
 }
-
 function getExportPath() {
     const selected = getSelectedNode();
     return selected ? getPathToNode(selected.id) : (graph?.activePath ?? []).map((id) => graph.nodes[id]).filter(Boolean);
@@ -704,10 +712,14 @@ function bindEvents() {
         if (isSameChatReload) {
             // Keep the window/selection for a same-chat reload, but do not
             // read or write metadata until the replacement chat is loaded.
-            graph = null;
-            loadedChatKey = null;
+            // Keep the current graph usable during a same-chat reload.
+            // Only discard it when the earlier event order already cleared it.
+            if (!graph || loadedChatKey !== currentChatKey) {
+                graph = null;
+                loadedChatKey = null;
+            }
             lastChatSignature = '';
-            if (!chatLoadPending) scheduleSync(250);
+            if (!chatLoadPending) scheduleSync(0);
             // If this is the late CHAT_CHANGED emitted after the reload
             // promise resolved, consume the marker now. If it arrived
             // before resolution, reloadChatPending keeps it alive.
@@ -772,8 +784,12 @@ function bindEvents() {
             document.getElementById(MODULE_BUTTON_ID)?.remove();
             return;
         }
-        graph = null;
-        loadedChatKey = null;
+        const isSameChatReload = reloadChatPending
+            || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
+        if (!isSameChatReload) {
+            graph = null;
+            loadedChatKey = null;
+        }
         lastChatSignature = '';
         installButton();
         scheduleSync(0);
