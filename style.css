@@ -541,6 +541,15 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     opacity: 0.85;
 }
 
+.stplus-branching-compatibility {
+    display: block;
+    flex: 0 0 auto;
+    padding: 7px 12px 9px;
+    color: var(--SmartThemeBodyColor, #eee);
+    border-top: 1px solid var(--SmartThemeBorderColor, #666);
+    opacity: 0.65;
+}
+
 .stplus-branching-toolbar-button span {
     margin-left: 5px;
 }
