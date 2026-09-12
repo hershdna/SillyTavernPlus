@@ -22,6 +22,8 @@ let reloadChatPending = false;
 let pendingSelectionNodeId = null;
 let reloadTargetChatKey = null;
 let chatLoadPending = false;
+let persistRevision = 0;
+let persistQueue = Promise.resolve();
 
 function getLiveContext() {
     // SillyTavern can replace chat and chat_metadata objects while loading a
@@ -115,12 +117,23 @@ function writeStoredGraph() {
 
 function schedulePersist() {
     writeStoredGraph();
+    const chatKeyAtSchedule = getChatKey();
+    const revision = ++persistRevision;
     window.clearTimeout(persistTimer);
-    persistTimer = window.setTimeout(async () => {
-        writeStoredGraph();
-        const liveContext = getLiveContext();
-        await liveContext?.saveMetadata?.();
-        await liveContext?.saveChat?.();
+    persistTimer = window.setTimeout(() => {
+        // Serialize saves so an older request cannot finish after a newer
+        // request and restore an incomplete graph. Also refuse to save if
+        // the active chat changed while this revision was queued.
+        persistQueue = persistQueue.catch(() => {}).then(async () => {
+            if (revision !== persistRevision
+                || !chatKeyAtSchedule
+                || getChatKey() !== chatKeyAtSchedule
+                || !graph) return;
+            writeStoredGraph();
+            const liveContext = getLiveContext();
+            await liveContext?.saveMetadata?.();
+            await liveContext?.saveChat?.();
+        });
     }, PERSIST_DELAY);
 }
 
@@ -304,6 +317,7 @@ function syncGraph(force = false) {
     if (!chatKey) {
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
+        persistRevision += 1;
         graph = null;
         loadedChatKey = null;
         lastChatSignature = '';
@@ -677,6 +691,7 @@ function bindEvents() {
         // replacing its message and metadata objects on CHAT_LOADED.
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
+        persistRevision += 1;
         const currentChatKey = getChatKey();
         const isSameChatReload = reloadChatPending
             || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
@@ -717,6 +732,7 @@ function bindEvents() {
         chatLoadPending = Boolean(eventTypes.CHAT_LOADED);
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
+        persistRevision += 1;
         closeWindow();
         graph = null;
         loadedChatKey = null;
@@ -767,6 +783,7 @@ function bindEvents() {
         chatLoadPending = false;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
+        persistRevision += 1;
         closeWindow();
         graph = null;
         loadedChatKey = null;
