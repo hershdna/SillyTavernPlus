@@ -22,6 +22,7 @@ let reloadChatPending = false;
 let pendingSelectionNodeId = null;
 let reloadTargetChatKey = null;
 let chatLoadPending = false;
+let loadedChatEventKey = null;
 let persistRevision = 0;
 let persistQueue = Promise.resolve();
 
@@ -324,6 +325,7 @@ function syncGraph(force = false) {
         selectedNodeId = null;
         newChatPending = false;
         chatLoadPending = false;
+        loadedChatEventKey = null;
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
@@ -695,7 +697,10 @@ function bindEvents() {
         const currentChatKey = getChatKey();
         const isSameChatReload = reloadChatPending
             || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
-        chatLoadPending = Boolean(eventTypes.CHAT_LOADED);
+        // SillyTavern's current load path emits CHAT_LOADED before
+        // CHAT_CHANGED. Do not re-arm the load guard after metadata is ready.
+        const chatWasLoaded = currentChatKey !== null && loadedChatEventKey === currentChatKey;
+        chatLoadPending = Boolean(eventTypes.CHAT_LOADED) && !chatWasLoaded;
         if (isSameChatReload) {
             // Keep the window/selection for a same-chat reload, but do not
             // read or write metadata until the replacement chat is loaded.
@@ -721,6 +726,7 @@ function bindEvents() {
             if (!chatLoadPending) scheduleSync(250);
         } else {
             chatLoadPending = false;
+            loadedChatEventKey = null;
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
     };
@@ -729,7 +735,9 @@ function bindEvents() {
         // be available until CHAT_LOADED.
         newChatPending = true;
         reloadTargetChatKey = null;
-        chatLoadPending = Boolean(eventTypes.CHAT_LOADED);
+        const currentChatKey = getChatKey();
+        const chatWasLoaded = currentChatKey !== null && loadedChatEventKey === currentChatKey;
+        chatLoadPending = Boolean(eventTypes.CHAT_LOADED) && !chatWasLoaded;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
@@ -752,7 +760,9 @@ function bindEvents() {
         // old behavior where an early CHAT_CHANGED sync could overwrite it.
         chatLoadPending = false;
         window.clearTimeout(syncTimer);
-        if (!getChatKey()) {
+        const currentChatKey = getChatKey();
+        loadedChatEventKey = currentChatKey;
+        if (!currentChatKey) {
             graph = null;
             loadedChatKey = null;
             lastChatSignature = '';
@@ -781,6 +791,7 @@ function bindEvents() {
         newChatPending = false;
         reloadTargetChatKey = null;
         chatLoadPending = false;
+        loadedChatEventKey = null;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
