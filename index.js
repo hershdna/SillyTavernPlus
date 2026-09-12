@@ -14,10 +14,11 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, settingsPanel, movingUiResize, movingUiFront] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, branchingChats, settingsPanel, movingUiResize, movingUiFront] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
+                loadModule('branching-chats'),
                 loadModule('settings-panel'),
                 loadModule('movingui-resize'),
                 loadModule('movingui-front'),
@@ -26,10 +27,12 @@
 
             greetingMods.initialize(settings);
             lorebookMods.initialize(context, settings);
+            branchingChats.initialize(context, settings);
             movingUiResize.initialize(context, settings);
             movingUiFront.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
+                onBranchingChatsChanged: () => branchingChats.refresh(),
                 onLorebookModsChanged: () => lorebookMods.refresh(),
                 onMovingUiResizeChanged: () => movingUiResize.refresh(),
                 onMovingUiBringToFrontChanged: () => movingUiFront.refresh(),
@@ -42,6 +45,7 @@
                 scanScheduled = false;
                 greetingMods.refresh();
                 lorebookMods.refresh();
+                branchingChats.refresh();
                 settingsPanel.refresh();
                 movingUiResize.refresh();
                 movingUiFront.refresh();
@@ -52,7 +56,7 @@
                 if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scan);
                 else window.setTimeout(scan, 0);
             };
-            const frontingMutationSelector = '#movingDivs, #top-settings-holder, #top-bar, [data-dragged], [role="dialog"], .ui-dialog, .ui-autocomplete, .popup';
+            const frontingMutationSelector = '#movingDivs, #top-settings-holder, #top-bar, [data-dragged], [role="dialog"], .stplus-branching-window, .ui-dialog, .ui-autocomplete, .popup';
             const isRelevantMutation = (mutation) => {
                 const target = mutation.target instanceof Element ? mutation.target : null;
                 if (target === document.body || target?.matches(frontingMutationSelector) || target?.closest(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`)) return true;
@@ -81,4 +85,3 @@
 
     initialize();
 })();
-
