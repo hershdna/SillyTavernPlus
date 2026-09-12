@@ -14,13 +14,14 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, branchingChats, settingsPanel, movingUiResize, movingUiFront] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, branchingChats, settingsPanel, movingUiResize, movingUiDrag, movingUiFront] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
                 loadModule('branching-chats'),
                 loadModule('settings-panel'),
                 loadModule('movingui-resize'),
+                loadModule('movingui-drag'),
                 loadModule('movingui-front'),
             ]);
             const settings = settingsStore.initializeSettings(context);
@@ -29,12 +30,14 @@
             lorebookMods.initialize(context, settings);
             branchingChats.initialize(context, settings);
             movingUiResize.initialize(context, settings);
+            movingUiDrag.initialize(context, settings);
             movingUiFront.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
                 onBranchingChatsChanged: () => branchingChats.refresh(),
                 onLorebookModsChanged: () => lorebookMods.refresh(),
                 onMovingUiResizeChanged: () => movingUiResize.refresh(),
+                onMovingUiDragChanged: () => movingUiDrag.refresh(),
                 onMovingUiBringToFrontChanged: () => movingUiFront.refresh(),
                 onMovingUiOpenOnTopChanged: () => movingUiFront.refresh(),
                 onMovingUiUnboundedResizeChanged: () => movingUiResize.refresh(),
@@ -48,6 +51,7 @@
                 branchingChats.refresh();
                 settingsPanel.refresh();
                 movingUiResize.refresh();
+                movingUiDrag.refresh();
                 movingUiFront.refresh();
             };
             const scheduleScan = () => {
