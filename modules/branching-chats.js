@@ -1,6 +1,7 @@
 const MODULE_BUTTON_ID = 'stplus-branching-chats-button';
 const WINDOW_ID = 'stplus-branching-chats-window';
 const METADATA_KEY = 'stplusBranchingChats';
+const GRAPH_BACKUP_STORAGE_PREFIX = 'stplus-branching-backup:';
 const SCHEMA_VERSION = 3;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
@@ -73,6 +74,56 @@ function getChatIntegrity() {
     return typeof integrity === 'string' && integrity.trim() ? integrity : null;
 }
 
+function getGraphBackupStorageKey(chatId = getChatKey(), integrity = getChatIntegrity()) {
+    if (!chatId) return null;
+    return `${GRAPH_BACKUP_STORAGE_PREFIX}${encodeURIComponent(chatId)}:${encodeURIComponent(integrity ?? 'unknown')}`;
+}
+
+function readBackupGraph(currentChatId) {
+    const storageKey = getGraphBackupStorageKey(currentChatId);
+    if (!storageKey) return null;
+    try {
+        const raw = window.localStorage?.getItem(storageKey);
+        if (!raw) return null;
+        const stored = JSON.parse(raw);
+        if (!stored || typeof stored !== 'object') return null;
+        const currentIntegrity = getChatIntegrity();
+        if (stored.chatId && currentChatId && String(stored.chatId) !== String(currentChatId)) return null;
+        if (stored.chatIntegrity && currentIntegrity && stored.chatIntegrity !== currentIntegrity) return null;
+        const backup = {
+            schemaVersion: SCHEMA_VERSION,
+            chatId: typeof stored.chatId === 'string' ? stored.chatId : currentChatId,
+            chatIntegrity: typeof stored.chatIntegrity === 'string' ? stored.chatIntegrity : currentIntegrity,
+            nodes: stored.nodes && typeof stored.nodes === 'object'
+                ? Object.fromEntries(Object.entries(stored.nodes).filter(([, node]) => node && typeof node === 'object'))
+                : {},
+            activePath: Array.isArray(stored.activePath) ? stored.activePath.filter((id) => typeof id === 'string') : [],
+        };
+        normalizeGraph(backup);
+        pruneEmptyNodes(backup);
+        normalizeGraph(backup);
+        return backup;
+    } catch {
+        return null;
+    }
+}
+
+function mergeStoredGraphs(primary, backup) {
+    if (!primary || !backup) return primary;
+    const merged = clone(primary) ?? primary;
+    const existingKeys = new Set(Object.values(merged.nodes ?? {}).map((node) => node?.key).filter(Boolean));
+    for (const [id, node] of Object.entries(backup.nodes ?? {})) {
+        if (merged.nodes[id] || existingKeys.has(node?.key)) continue;
+        merged.nodes[id] = clone(node) ?? node;
+        if (node?.key) existingKeys.add(node.key);
+    }
+    if ((!Array.isArray(merged.activePath) || merged.activePath.length === 0) && Array.isArray(backup.activePath)) {
+        merged.activePath = [...backup.activePath];
+    }
+    normalizeGraph(merged);
+    return merged;
+}
+
 function createGraph(chatId = null) {
     return { schemaVersion: SCHEMA_VERSION, chatId, chatIntegrity: getChatIntegrity(), nodes: {}, activePath: [] };
 }
@@ -103,12 +154,22 @@ function readStoredGraph(currentChatId = getChatKey()) {
     normalizeGraph(targetGraph);
     pruneEmptyNodes(targetGraph);
     normalizeGraph(targetGraph);
-    return targetGraph;
+    // Metadata is authoritative, but retain a chat-scoped local mirror as a
+    // recovery source if a competing save temporarily wrote an older header.
+    return mergeStoredGraphs(targetGraph, readBackupGraph(currentChatId));
 }
 
 function writeStoredGraph() {
     if (!graph || !getChatKey()) return;
     const payload = clone(graph);
+    // Keep a browser-local recovery mirror keyed by chat ID + integrity before
+    // the asynchronous server save begins. This never crosses chats.
+    try {
+        const storageKey = getGraphBackupStorageKey();
+        if (storageKey) window.localStorage?.setItem(storageKey, JSON.stringify(payload));
+    } catch {
+        // Private browsing/storage quotas must not prevent normal chat saves.
+    }
     const liveContext = getLiveContext();
     if (typeof liveContext?.updateChatMetadata === 'function') {
         liveContext.updateChatMetadata({ [METADATA_KEY]: payload }, false);
@@ -453,6 +514,11 @@ async function jumpToSelected() {
         const chatKeyBeforeReload = getChatKey();
         const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true;
         const replacement = path.map((node) => clone(node.message) ?? { mes: node.content });
+        // Alternate greetings are native first-message swipes in SillyTavern.
+        // Preserve that structure even when jumping to a continuation below
+        // the greeting, so subsequent replies remain attached to the swipe.
+        const greetingMessage = createGreetingSwipeMessage(path[0], chat[0]);
+        if (greetingMessage) replacement[0] = greetingMessage;
         chat.splice(0, chat.length, ...replacement);
         selectedNodeId = selected.id;
         pendingSelectionNodeId = selected.id;
@@ -492,6 +558,35 @@ async function jumpToSelected() {
         if (panel?.classList.contains('stplus-branching-window-open')) render();
     }
 }
+function createGreetingSwipeMessage(node, currentFirstMessage = null) {
+    if (!node
+        || node.sourceIndex !== 0
+        || node.parentId !== null
+        || node.role !== 'assistant'
+        || !Array.isArray(node.message?.swipes)
+        || node.message.swipes.length === 0) {
+        return null;
+    }
+    const source = clone(node.message) ?? {};
+    const swipes = source.swipes.map((swipe) => String(swipe ?? ''));
+    const selectedSwipeIndex = Math.min(Math.max(0, Number(node.swipeIndex) || 0), swipes.length - 1);
+    const message = clone(currentFirstMessage) ?? source;
+    message.swipes = swipes;
+    message.swipe_id = selectedSwipeIndex;
+    message.mes = swipes[selectedSwipeIndex] ?? String(node.content ?? '');
+    if (!Array.isArray(message.swipe_info)) message.swipe_info = [];
+    while (message.swipe_info.length < swipes.length) {
+        message.swipe_info.push({
+            send_date: message.send_date,
+            gen_started: void 0,
+            gen_finished: void 0,
+            extra: {},
+        });
+    }
+    message.swipe_info = message.swipe_info.slice(0, swipes.length);
+    return message;
+}
+
 function getExportPath() {
     const selected = getSelectedNode();
     return selected ? getPathToNode(selected.id) : (graph?.activePath ?? []).map((id) => graph.nodes[id]).filter(Boolean);
