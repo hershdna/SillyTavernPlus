@@ -218,6 +218,16 @@ function createSettingsWindow() {
     ));
     body.append(charactersSection);
 
+    charactersSection.append(createCheckbox(
+        'stplus-branching-chats-enabled',
+        'Chat branching',
+        'Keep alternate chat paths in one conversation with a navigable tree and vanilla JSONL export.',
+        (enabled) => {
+            settings.branchingChatsEnabled = enabled;
+            callbacks?.onBranchingChatsChanged?.();
+        },
+    ));
+
     const movingUiSection = createSettingsSection('MovingUI');
     movingUiSection.append(createCheckbox(
         'stplus-movingui-resize-enabled',
@@ -299,12 +309,14 @@ export function refresh() {
     installSettingsButton();
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
+    const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
     const movingUiBringToFrontCheckbox = document.getElementById('stplus-movingui-bring-to-front-enabled');
     const movingUiOpenOnTopCheckbox = document.getElementById('stplus-movingui-open-on-top-enabled');
     const movingUiUnboundedResizeCheckbox = document.getElementById('stplus-movingui-unbounded-resize-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
+    if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
     if (movingUiBringToFrontCheckbox) movingUiBringToFrontCheckbox.checked = settings.movingUiBringToFrontEnabled;
     if (movingUiOpenOnTopCheckbox) movingUiOpenOnTopCheckbox.checked = settings.movingUiOpenOnTopEnabled;
