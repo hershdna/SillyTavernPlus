@@ -20,6 +20,14 @@ let generationActive = false;
 let newChatPending = false;
 let reloadChatPending = false;
 let pendingSelectionNodeId = null;
+let reloadTargetChatKey = null;
+
+function getLiveContext() {
+    // SillyTavern can replace chat and chat_metadata objects while loading a
+    // chat. The context returned during extension startup may still reference
+    // the old objects, so use a fresh context for stateful operations.
+    return globalThis.SillyTavern?.getContext?.() ?? context;
+}
 
 const clone = (value) => {
     try {
@@ -39,17 +47,20 @@ function newId() {
 }
 
 function getChat() {
-    return Array.isArray(context?.chat) ? context.chat : [];
+    const liveContext = getLiveContext();
+    return Array.isArray(liveContext?.chat) ? liveContext.chat : [];
 }
 
 function getChatKey() {
-    const currentChatId = context?.getCurrentChatId?.() ?? context?.chatId;
+    const liveContext = getLiveContext();
+    const currentChatId = liveContext?.getCurrentChatId?.() ?? liveContext?.chatId;
     if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') return null;
     return String(currentChatId);
 }
 
 function getChatMetadata() {
-    return context?.chatMetadata ?? context?.chat_metadata ?? {};
+    const liveContext = getLiveContext();
+    return liveContext?.chatMetadata ?? liveContext?.chat_metadata ?? {};
 }
 
 function getChatIntegrity() {
@@ -93,10 +104,11 @@ function readStoredGraph(currentChatId = getChatKey()) {
 function writeStoredGraph() {
     if (!graph || !getChatKey()) return;
     const payload = clone(graph);
-    if (typeof context?.updateChatMetadata === 'function') {
-        context.updateChatMetadata({ [METADATA_KEY]: payload }, false);
-    } else if (context?.chatMetadata && typeof context.chatMetadata === 'object') {
-        context.chatMetadata[METADATA_KEY] = payload;
+    const liveContext = getLiveContext();
+    if (typeof liveContext?.updateChatMetadata === 'function') {
+        liveContext.updateChatMetadata({ [METADATA_KEY]: payload }, false);
+    } else if (liveContext?.chatMetadata && typeof liveContext.chatMetadata === 'object') {
+        liveContext.chatMetadata[METADATA_KEY] = payload;
     }
 }
 
@@ -105,8 +117,9 @@ function schedulePersist() {
     window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(async () => {
         writeStoredGraph();
-        await context?.saveMetadata?.();
-        await context?.saveChat?.();
+        const liveContext = getLiveContext();
+        await liveContext?.saveMetadata?.();
+        await liveContext?.saveChat?.();
     }, PERSIST_DELAY);
 }
 
@@ -382,23 +395,32 @@ async function jumpToSelected() {
     pendingSelectionNodeId = selected.id;
     lastChatSignature = '';
     writeStoredGraph();
-    await context?.saveMetadata?.();
-    await context?.saveChat?.();
-    if (typeof context?.reloadCurrentChat === 'function') {
+    const liveContext = getLiveContext();
+    await liveContext?.saveMetadata?.();
+    await liveContext?.saveChat?.();
+    if (typeof liveContext?.reloadCurrentChat === 'function') {
+        reloadTargetChatKey = chatKeyBeforeReload;
         reloadChatPending = true;
         try {
-            await context.reloadCurrentChat();
+            await liveContext.reloadCurrentChat();
         } finally {
             reloadChatPending = false;
         }
     }
     if (getChatKey() !== chatKeyBeforeReload) {
+        reloadTargetChatKey = null;
         pendingSelectionNodeId = null;
         return;
     }
     syncGraph(true);
     if (pendingSelectionNodeId && graph?.nodes?.[pendingSelectionNodeId]) selectedNodeId = pendingSelectionNodeId;
     pendingSelectionNodeId = null;
+    // CHAT_CHANGED can be emitted after reloadCurrentChat() resolves. Keep a
+    // same-chat marker long enough for that late event to be recognized as a
+    // reload rather than a real navigation away from the current chat.
+    window.setTimeout(() => {
+        if (reloadTargetChatKey === chatKeyBeforeReload) reloadTargetChatKey = null;
+    }, 500);
     if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
     render();
     window.toastr?.success?.(`Jumped to ${selected.label}`);
@@ -629,7 +651,10 @@ function bindEvents() {
         // chat, if one exists.
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
-        if (reloadChatPending) {
+        const currentChatKey = getChatKey();
+        const isSameChatReload = reloadChatPending
+            || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
+        if (isSameChatReload) {
             // Reloading the current chat replaces SillyTavern's live arrays
             // and metadata without changing chat identity. Re-read the
             // persisted graph, but keep the navigator available for another
@@ -641,6 +666,7 @@ function bindEvents() {
             return;
         }
         closeWindow();
+        reloadTargetChatKey = null;
         graph = null;
         loadedChatKey = null;
         lastChatSignature = '';
@@ -658,6 +684,7 @@ function bindEvents() {
         // metadata object while SillyTavern finishes the transition. Mark it
         // as fresh so the first sync cannot adopt the previous graph.
         newChatPending = true;
+        reloadTargetChatKey = null;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         closeWindow();
@@ -684,6 +711,7 @@ function bindEvents() {
         const currentChatId = getChatKey();
         if (deletedChatId && currentChatId && String(deletedChatId) !== currentChatId) return;
         newChatPending = false;
+        reloadTargetChatKey = null;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         closeWindow();
