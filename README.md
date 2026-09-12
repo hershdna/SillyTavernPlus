@@ -8,6 +8,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Keep swipe/reroll variants and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, search, and vanilla JSONL branch export.
 - Scope branch data and controls to the currently open chat; changing or closing a chat closes the branch window and clears its in-memory graph.
 - Reset branch state on SillyTavern chat creation/deletion events and guard stored metadata with the active chat identity.
+- Persist branch metadata through SillyTavern's dedicated metadata save path so jumps survive reloads and reopening the chat.
 - Remain compatible with vanilla chats by using SillyTavern's native `swipes`/`swipe_id` fields, storing extra data only in chat metadata, and exporting a selected path as an ordinary JSONL chat.
 - Open SillyTavernPlus module settings from a dedicated top-toolbar icon (this icon does not launch Worlds/Lorebooks).
 - Open the floating Worlds/Lorebooks editor through SillyTavern's native World Info icon.
