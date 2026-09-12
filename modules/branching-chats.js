@@ -1,8 +1,9 @@
 const MODULE_BUTTON_ID = 'stplus-branching-chats-button';
 const WINDOW_ID = 'stplus-branching-chats-window';
 const METADATA_KEY = 'stplusBranchingChats';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const SYNC_DELAY = 80;
+const SWIPE_SYNC_DELAY = 500;
 const PERSIST_DELAY = 350;
 
 let context = null;
@@ -15,6 +16,7 @@ let selectedNodeId = null;
 let syncTimer = null;
 let persistTimer = null;
 let listenersBound = false;
+let generationActive = false;
 
 const clone = (value) => {
     try {
@@ -60,11 +62,13 @@ function readStoredGraph() {
     }
     if (!stored || typeof stored !== 'object') return createGraph();
     const storedNodes = stored.nodes && typeof stored.nodes === 'object' ? stored.nodes : {};
-    return {
+    const targetGraph = {
         schemaVersion: SCHEMA_VERSION,
         nodes: Object.fromEntries(Object.entries(storedNodes).filter(([, node]) => node && typeof node === 'object')),
         activePath: Array.isArray(stored.activePath) ? stored.activePath.filter((id) => typeof id === 'string') : [],
     };
+    pruneEmptyNodes(targetGraph);
+    return targetGraph;
 }
 
 function writeStoredGraph() {
@@ -118,6 +122,31 @@ function getNodeKey(parentId, sourceIndex, swipeIndex, content) {
     return `${parentId ?? 'root'}|${sourceIndex}|${swipeIndex}|${content}`;
 }
 
+function hasMeaningfulContent(content) {
+    return String(content ?? '').trim().length > 0;
+}
+
+// Earlier versions observed MESSAGE_RECEIVED and DOM mutations while a
+// response was streaming. That produced a new node for every partial/empty
+// assistant placeholder. Remove those legacy nodes and reconnect any child
+// nodes to their real parent before rebuilding the active path.
+function pruneEmptyNodes(targetGraph) {
+    const emptyIds = new Set(Object.values(targetGraph?.nodes ?? {})
+        .filter((node) => !hasMeaningfulContent(node?.content))
+        .map((node) => node.id));
+    if (emptyIds.size === 0) return false;
+
+    for (const node of Object.values(targetGraph.nodes)) {
+        if (!emptyIds.has(node.parentId)) continue;
+        const emptyParent = targetGraph.nodes[node.parentId];
+        node.parentId = emptyParent?.parentId ?? null;
+        node.key = getNodeKey(node.parentId, node.sourceIndex, node.swipeIndex, node.content);
+    }
+    emptyIds.forEach((id) => delete targetGraph.nodes[id]);
+    targetGraph.activePath = (targetGraph.activePath ?? []).filter((id) => !emptyIds.has(id));
+    return true;
+}
+
 function findNodeByKey(key) {
     return Object.values(graph?.nodes ?? {}).find((node) => node.key === key) ?? null;
 }
@@ -159,6 +188,9 @@ function getChatSignature(chat) {
 
 function syncGraph(force = false) {
     if (!settings?.branchingChatsEnabled) return;
+    // The chat array is intentionally mutable during generation. Wait for
+    // GENERATION_ENDED so streaming/reasoning updates cannot become nodes.
+    if (generationActive) return;
     const chatKey = getChatKey();
     if (loadedChatKey !== chatKey) {
         graph = readStoredGraph();
@@ -171,6 +203,7 @@ function syncGraph(force = false) {
     if (!force && signature === lastChatSignature) return;
     lastChatSignature = signature;
     if (!graph) graph = createGraph();
+    pruneEmptyNodes(graph);
 
     let parentId = null;
     const activePath = [];
@@ -179,6 +212,7 @@ function syncGraph(force = false) {
         const activeSwipeIndex = Math.min(getActiveSwipeIndex(message), variants.length - 1);
         let activeNode = null;
         variants.forEach((content, swipeIndex) => {
+            if (!hasMeaningfulContent(content)) return;
             const node = ensureNode(parentId, message, sourceIndex, swipeIndex, content, variants.length);
             if (swipeIndex === activeSwipeIndex) activeNode = node;
         });
@@ -435,15 +469,42 @@ function installButton() {
 function bindEvents() {
     if (listenersBound) return;
     const eventTypes = context?.eventTypes ?? {};
-    const names = ['CHAT_CHANGED', 'MESSAGE_SENT', 'MESSAGE_RECEIVED', 'MESSAGE_SWIPED', 'MESSAGE_UPDATED', 'MESSAGE_EDITED', 'MESSAGE_DELETED'];
-    names.forEach((name) => {
+    const scheduleSync = (delay = SYNC_DELAY) => {
+        window.clearTimeout(syncTimer);
+        syncTimer = window.setTimeout(() => syncGraph(true), delay);
+    };
+    const onGenerationStarted = () => {
+        generationActive = true;
+        window.clearTimeout(syncTimer);
+    };
+    const onGenerationEnded = () => {
+        generationActive = false;
+        scheduleSync(0);
+    };
+    const onSafeChatMutation = () => {
+        if (!generationActive) scheduleSync(0);
+    };
+    const onSwipe = () => {
+        // Swiping emits before the replacement response is finished. Give
+        // GENERATION_STARTED time to mark the stream active; GENERATION_ENDED
+        // will perform the immediate final sync and cancel this timer.
+        if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
+    };
+    const on = (name, handler) => {
         const eventName = eventTypes[name];
         if (!eventName) return;
-        context.eventSource?.on?.(eventName, () => {
-            window.clearTimeout(syncTimer);
-            syncTimer = window.setTimeout(() => syncGraph(true), SYNC_DELAY);
-        });
-    });
+        context.eventSource?.on?.(eventName, handler);
+    };
+    on('GENERATION_STARTED', onGenerationStarted);
+    on('GENERATION_ENDED', onGenerationEnded);
+    on('CHAT_CHANGED', onSafeChatMutation);
+    on('MESSAGE_SENT', onSafeChatMutation);
+    on('MESSAGE_SWIPED', onSwipe);
+    on('MESSAGE_UPDATED', onSafeChatMutation);
+    on('MESSAGE_EDITED', onSafeChatMutation);
+    on('MESSAGE_DELETED', onSafeChatMutation);
+    // MESSAGE_RECEIVED is deliberately not used: SillyTavern can emit it
+    // while a streamed response is still being assembled.
     listenersBound = true;
 }
 
