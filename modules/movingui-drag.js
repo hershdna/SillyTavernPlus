@@ -1,0 +1,202 @@
+const DRAG_HANDLE_CLASS = 'stplus-movingui-drag-handle';
+const READY_ATTRIBUTE = 'data-stplus-movingui-drag-ready';
+const MOVINGUI_PANEL_SELECTOR = [
+    '.stplus-settings-window',
+    '.stplus-branching-window',
+    '#WorldInfo.stplus-floating-worlds',
+].join(',');
+
+let context = null;
+let settings = null;
+const managedPanels = new Map();
+
+function isMovingUiActive() {
+    return settings?.movingUiDragEnabled !== false
+        && context?.powerUserSettings?.movingUI === true
+        && context?.isMobile?.() !== true
+        && document.body?.classList.contains('movingUI');
+}
+
+function getContainingBlockPosition(panel, left, top) {
+    const position = getComputedStyle(panel).position;
+    const offsetParent = panel.offsetParent;
+    if (position === 'fixed' || !(offsetParent instanceof HTMLElement)) return { left, top };
+
+    const parentRect = offsetParent.getBoundingClientRect();
+    return {
+        left: left - parentRect.left - offsetParent.clientLeft + offsetParent.scrollLeft,
+        top: top - parentRect.top - offsetParent.clientTop + offsetParent.scrollTop,
+    };
+}
+
+export function setPanelViewportPosition(panel, left, top) {
+    const position = getContainingBlockPosition(panel, left, top);
+    panel.style.left = `${Math.round(position.left)}px`;
+    panel.style.top = `${Math.round(position.top)}px`;
+    panel.style.right = 'unset';
+    panel.style.bottom = 'unset';
+}
+
+// Convert centered/right/bottom-positioned panels to the pixel coordinates
+// represented by their current viewport rectangle before a drag or resize.
+// This prevents translateX(-50%) and right/bottom rules from shifting a panel
+// on the first pointer movement.
+export function normalizePanelPosition(panel) {
+    const rect = panel.getBoundingClientRect();
+    panel.style.transform = 'none';
+    setPanelViewportPosition(panel, rect.left, rect.top);
+    return panel.getBoundingClientRect();
+}
+
+function saveMovingUiState(panel) {
+    const movingUIState = context?.powerUserSettings?.movingUIState;
+    if (!panel.id || !movingUIState || typeof movingUIState !== 'object') return;
+
+    const rect = panel.getBoundingClientRect();
+    movingUIState[panel.id] = {
+        ...(movingUIState[panel.id] ?? {}),
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        right: 'unset',
+        bottom: 'unset',
+        margin: 'unset',
+    };
+    panel.dataset.dragged = 'true';
+    context.saveSettingsDebounced?.();
+}
+
+function getHeader(panel) {
+    return panel.querySelector('.stplus-settings-window-header, .stplus-branching-header, .stplus-worlds-title-row') ?? panel;
+}
+
+function addDragHandle(panel) {
+    if (panel.hasAttribute(READY_ATTRIBUTE)) return;
+    panel.setAttribute(READY_ATTRIBUTE, '1');
+
+    const header = getHeader(panel);
+    if (!(header instanceof HTMLElement)) return;
+    // World Info already has a native #WorldInfoheader. Do not create a
+    // duplicate ID on its ST+ title row; the custom handle only needs the
+    // native drag-grabber class there.
+    if (!header.id && !panel.matches('#WorldInfo.stplus-floating-worlds')) header.id = `${panel.id}header`;
+    header.classList.add('stplus-movingui-header');
+
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = `drag-grabber ${DRAG_HANDLE_CLASS}`;
+    handle.dataset.stplusOwned = '1';
+    handle.title = 'Move this window';
+    handle.setAttribute('aria-label', `Move ${panel.getAttribute('aria-label') || 'window'}`);
+    handle.innerHTML = '<i class="fa-solid fa-up-down-left-right" aria-hidden="true"></i>';
+    header.appendChild(handle);
+
+    let dragState = null;
+    const stopEvent = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+    };
+    const startDragging = (event) => {
+        if (!isMovingUiActive() || (event.button !== undefined && event.button !== 0)) return;
+        if (dragState) {
+            stopEvent(event);
+            return;
+        }
+        const rect = normalizePanelPosition(panel);
+        dragState = {
+            pointerId: event.pointerId ?? null,
+            startX: event.clientX,
+            startY: event.clientY,
+            startLeft: rect.left,
+            startTop: rect.top,
+        };
+        if (event.pointerId !== undefined) handle.setPointerCapture?.(event.pointerId);
+        stopEvent(event);
+    };
+    const matchesPointer = (event) => dragState
+        && (dragState.pointerId === null ? event.pointerId === undefined : dragState.pointerId === event.pointerId);
+    const move = (event) => {
+        if (!matchesPointer(event)) return;
+        setPanelViewportPosition(panel,
+            dragState.startLeft + event.clientX - dragState.startX,
+            dragState.startTop + event.clientY - dragState.startY);
+        stopEvent(event);
+    };
+    const stopDragging = (event) => {
+        if (!matchesPointer(event)) return;
+        dragState = null;
+        if (event.pointerId !== undefined && handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        saveMovingUiState(panel);
+        stopEvent(event);
+    };
+
+    handle.addEventListener('pointerdown', startDragging);
+    handle.addEventListener('mousedown', startDragging);
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('mousemove', move);
+    handle.addEventListener('pointerup', stopDragging);
+    handle.addEventListener('mouseup', stopDragging);
+    handle.addEventListener('pointercancel', stopDragging);
+    handle.addEventListener('lostpointercapture', stopDragging);
+
+    const moveWithMouse = (event) => {
+        if (dragState?.pointerId === null) move(event);
+    };
+    const stopMouse = (event) => {
+        if (dragState?.pointerId === null) stopDragging(event);
+    };
+    const moveWithPointer = (event) => {
+        if (dragState?.pointerId !== null && dragState?.pointerId !== undefined) move(event);
+    };
+    const stopPointer = (event) => {
+        if (dragState?.pointerId !== null && dragState?.pointerId !== undefined) stopDragging(event);
+    };
+    document.addEventListener('mousemove', moveWithMouse);
+    document.addEventListener('mouseup', stopMouse);
+    document.addEventListener('pointermove', moveWithPointer);
+    document.addEventListener('pointerup', stopPointer);
+    document.addEventListener('pointercancel', stopPointer);
+
+    return () => {
+        dragState = null;
+        document.removeEventListener('mousemove', moveWithMouse);
+        document.removeEventListener('mouseup', stopMouse);
+        document.removeEventListener('pointermove', moveWithPointer);
+        document.removeEventListener('pointerup', stopPointer);
+        document.removeEventListener('pointercancel', stopPointer);
+        handle.remove();
+        header.classList.remove('stplus-movingui-header');
+        panel.removeAttribute(READY_ATTRIBUTE);
+    };
+}
+
+function removeAllHandles() {
+    for (const [panel, cleanup] of managedPanels) {
+        cleanup();
+        managedPanels.delete(panel);
+    }
+}
+
+export function initialize(stContext, stSettings) {
+    context = stContext;
+    settings = stSettings;
+}
+
+export function refresh() {
+    if (!isMovingUiActive()) {
+        removeAllHandles();
+        return;
+    }
+
+    const candidates = new Set(document.querySelectorAll(MOVINGUI_PANEL_SELECTOR));
+    for (const panel of candidates) {
+        if (!(panel instanceof HTMLElement) || !panel.id || !panel.isConnected) continue;
+        if (!managedPanels.has(panel)) managedPanels.set(panel, addDragHandle(panel));
+    }
+    for (const [panel, cleanup] of managedPanels) {
+        if (!candidates.has(panel) || !panel.isConnected) {
+            cleanup?.();
+            managedPanels.delete(panel);
+        }
+    }
+}
