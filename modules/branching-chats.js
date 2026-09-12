@@ -415,12 +415,6 @@ async function jumpToSelected() {
     syncGraph(true);
     if (pendingSelectionNodeId && graph?.nodes?.[pendingSelectionNodeId]) selectedNodeId = pendingSelectionNodeId;
     pendingSelectionNodeId = null;
-    // CHAT_CHANGED can be emitted after reloadCurrentChat() resolves. Keep a
-    // same-chat marker long enough for that late event to be recognized as a
-    // reload rather than a real navigation away from the current chat.
-    window.setTimeout(() => {
-        if (reloadTargetChatKey === chatKeyBeforeReload) reloadTargetChatKey = null;
-    }, 500);
     if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
     render();
     window.toastr?.success?.(`Jumped to ${selected.label}`);
@@ -663,6 +657,11 @@ function bindEvents() {
             loadedChatKey = null;
             lastChatSignature = '';
             scheduleSync(0);
+            // If this is the late CHAT_CHANGED emitted after the reload
+            // promise resolved, consume the marker now. If the event arrived
+            // before resolution, reloadChatPending keeps the marker alive for
+            // a possible later event.
+            if (!reloadChatPending) reloadTargetChatKey = null;
             return;
         }
         closeWindow();
