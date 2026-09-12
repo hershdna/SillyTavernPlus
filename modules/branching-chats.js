@@ -265,6 +265,36 @@ function getChatSignature(chat) {
     })));
 }
 
+
+function mergeGeneratedSiblingIntoSwipe(message, parentId, sourceIndex) {
+    // When a user jumps back to a parent and generates a fresh assistant
+    // reply, SillyTavern creates a new linear message. If the same parent
+    // already has assistant replies in this graph, fold the fresh reply into
+    // that turn's native swipe array so it remains vanilla-compatible.
+    if (getNodeRole(message) !== 'assistant' || !hasMeaningfulContent(message?.mes)) return false;
+    const siblings = Object.values(graph?.nodes ?? {})
+        .filter((node) => node.parentId === (parentId ?? null)
+            && node.sourceIndex === sourceIndex
+            && node.role === 'assistant')
+        .sort((a, b) => a.swipeIndex - b.swipeIndex || a.createdAt - b.createdAt);
+    if (siblings.length === 0) return false;
+
+    const variants = [];
+    const addVariant = (content) => {
+        const value = String(content ?? '');
+        if (hasMeaningfulContent(value) && !variants.includes(value)) variants.push(value);
+    };
+    siblings.forEach((node) => addVariant(node.content));
+    if (Array.isArray(message?.swipes)) message.swipes.forEach(addVariant);
+    addVariant(message.mes);
+    if (variants.length < 2) return false;
+
+    const activeContent = String(message.mes ?? '');
+    message.swipes = variants;
+    message.swipe_id = Math.max(0, variants.lastIndexOf(activeContent));
+    return true;
+}
+
 function syncGraph(force = false) {
     if (!settings?.branchingChatsEnabled) return;
     // The chat array is intentionally mutable during generation. Wait for
@@ -304,6 +334,7 @@ function syncGraph(force = false) {
     let parentId = null;
     const activePath = [];
     chat.forEach((message, sourceIndex) => {
+        mergeGeneratedSiblingIntoSwipe(message, parentId, sourceIndex);
         const variants = getVariantContents(message);
         const requestedSwipeIndex = Math.min(getActiveSwipeIndex(message), variants.length - 1);
         const activeSwipeIndex = hasMeaningfulContent(variants[requestedSwipeIndex])
