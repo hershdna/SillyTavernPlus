@@ -5,7 +5,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 ## Features
 
 - Reorder alternate greetings with numeric position controls.
-- Keep swipe/reroll variants and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, search, and vanilla JSONL branch export.
+- Keep swipe/reroll variants and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, an explicit same-chat “Branch from Here” action, search, and vanilla JSONL branch export.
 - Scope branch data and controls to the currently open chat; changing or closing a chat closes the branch window and clears its in-memory graph.
 - Remain compatible with vanilla chats by using SillyTavern's native `swipes`/`swipe_id` fields, storing extra data only in chat metadata, and exporting a selected path as an ordinary JSONL chat.
 - Open SillyTavernPlus module settings from a dedicated top-toolbar icon (this icon does not launch Worlds/Lorebooks).
@@ -20,6 +20,12 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Optionally include previous assistant thinking output in World Info scanning, with a configurable reasoning-turn depth.
 - Open a dedicated settings window from the top bar to enable or disable modules independently, organized under World Info / Lorebooks, Characters, and MovingUI. MovingUI resizing, reposition handles, frontmost behavior, open-on-top behavior, and unbounded resizing are enabled by default.
 - Floating window position and size persist between sessions.
+
+## Chat branches
+
+Open **Branches** while a chat is active. Select any node and choose **Branch from Here**, then continue the conversation. The existing chat path is preserved in `stplusBranchingChats` metadata and the new response becomes another path in the same chat file. This does not create a new entry in SillyTavern’s chat browser.
+
+SillyTavern’s native **Branch** message action remains unchanged and continues to create a separate vanilla chat. To turn an ST+ path into a normal chat file, select it and choose **Export Branch**, then import the generated JSONL through SillyTavern’s chat controls.
 
 ## Installation
 
