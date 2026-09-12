@@ -137,11 +137,15 @@ function readStoredGraph(currentChatId = getChatKey()) {
             stored = null;
         }
     }
-    if (!stored || typeof stored !== 'object') return createGraph(currentChatId);
+    if (!stored || typeof stored !== 'object') {
+        return mergeStoredGraphs(createGraph(currentChatId), readBackupGraph(currentChatId));
+    }
     const currentIntegrity = getChatIntegrity();
     if (typeof stored.chatId === 'string' && currentChatId && stored.chatId !== currentChatId) {
         const sameRenamedChat = stored.chatIntegrity && currentIntegrity && stored.chatIntegrity === currentIntegrity;
-        if (!sameRenamedChat) return createGraph(currentChatId);
+        if (!sameRenamedChat) {
+            return mergeStoredGraphs(createGraph(currentChatId), readBackupGraph(currentChatId));
+        }
     }
     const storedNodes = stored.nodes && typeof stored.nodes === 'object' ? stored.nodes : {};
     const targetGraph = {
