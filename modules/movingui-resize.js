@@ -16,6 +16,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#summaryExtensionPopout',
     '#gallery',
     '#movingDivs > div',
+    '.stplus-branching-window',
     '[data-dragged]',
 ].join(',');
 
@@ -276,4 +277,3 @@ export function refresh() {
     }
     if (settings?.movingUiUnboundedResizeEnabled !== true) restoreAllResizeConstraints();
 }
-
