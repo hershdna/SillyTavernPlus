@@ -352,6 +352,9 @@ function getChatSignature(chat) {
 
 
 function mergeGeneratedSiblingIntoSwipe(message, parentId, sourceIndex) {
+    // Alternate greetings are already native swipes on the first message.
+    // They must not be mistaken for generated same-parent replies.
+    if (parentId === null && sourceIndex === 0) return false;
     // When a user jumps back to a parent and generates a fresh assistant
     // reply, SillyTavern creates a new linear message. If the same parent
     // already has assistant replies in this graph, fold the fresh reply into
