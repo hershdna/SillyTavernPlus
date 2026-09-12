@@ -137,7 +137,7 @@
 }
 
 #WorldInfo.stplus-floating-worlds .stplus-worlds-title-row > h3 {
-    padding-right: 42px;
+    padding-right: 76px;
 }
 
 .stplus-worlds-close {
@@ -262,6 +262,36 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     cursor: nwse-resize;
 }
 
+/* MovingUI-compatible top-right reposition handle for ST+ windows. */
+.stplus-movingui-header {
+    position: relative;
+}
+
+.stplus-movingui-drag-handle {
+    position: absolute;
+    top: 5px;
+    right: 42px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: inherit;
+    cursor: move;
+    opacity: 0.55;
+}
+
+.stplus-movingui-drag-handle:hover,
+.stplus-movingui-drag-handle:focus-visible {
+    opacity: 1;
+}
+
+body:not(.movingUI) .stplus-movingui-drag-handle {
+    display: none !important;
+}
+
 .stplus-settings-window.stplus-settings-window-open {
     display: block;
 }
@@ -281,6 +311,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 
 .stplus-settings-window-header h3 {
     margin: 0;
+    padding-right: 76px;
 }
 
 .stplus-settings-window-close {
@@ -388,6 +419,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 }
 
 .stplus-branching-header {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -399,6 +431,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 
 .stplus-branching-header h3 {
     margin: 0;
+    padding-right: 76px;
 }
 
 .stplus-branching-status {
