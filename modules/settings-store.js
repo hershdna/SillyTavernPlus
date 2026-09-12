@@ -1,5 +1,6 @@
 const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
+    branchingChatsEnabled: true,
     lorebookModsEnabled: true,
     movingUiResizeEnabled: true,
     movingUiBringToFrontEnabled: true,
@@ -25,6 +26,7 @@ export function initializeSettings(stContext) {
         ...DEFAULT_SETTINGS,
         ...saved,
         greetingModsEnabled: saved.greetingModsEnabled !== false,
+        branchingChatsEnabled: saved.branchingChatsEnabled !== false,
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,
         movingUiResizeEnabled: saved.movingUiResizeEnabled !== false,
         movingUiBringToFrontEnabled: saved.movingUiBringToFrontEnabled !== false,
@@ -46,4 +48,3 @@ export function getSettings() {
 }
 
 export { normalizeDepth };
-
