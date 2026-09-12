@@ -133,7 +133,8 @@ function schedulePersist() {
                 || !graph) return;
             writeStoredGraph();
             const liveContext = getLiveContext();
-            await liveContext?.saveMetadata?.();
+            // SillyTavern's metadata save is a full chat save. One serialized
+            // save prevents an older snapshot from overwriting this graph.
             await liveContext?.saveChat?.();
         });
     }, PERSIST_DELAY);
@@ -448,13 +449,19 @@ async function jumpToSelected() {
         selectedNodeId = selected.id;
         pendingSelectionNodeId = selected.id;
         lastChatSignature = '';
-        writeStoredGraph();
         const liveContext = getLiveContext();
-        await liveContext?.saveMetadata?.();
-        await liveContext?.saveChat?.();
-        if (typeof liveContext?.reloadCurrentChat === 'function') {
+        const willReload = typeof liveContext?.reloadCurrentChat === 'function';
+        // Mark the reload before saving so lifecycle handlers retain this
+        // graph even if SillyTavern emits an event during the save.
+        if (willReload) {
             reloadTargetChatKey = chatKeyBeforeReload;
             reloadChatPending = true;
+        }
+        writeStoredGraph();
+        // saveChat also persists chat_metadata; saveMetadata is an alias for
+        // the same full-chat operation, so never call both.
+        await liveContext?.saveChat?.();
+        if (willReload) {
             try {
                 await liveContext.reloadCurrentChat();
             } finally {
