@@ -1,3 +1,5 @@
+import { normalizePanelPosition, setPanelViewportPosition } from './movingui-drag.js';
+
 const RESIZE_HANDLE_CLASS = 'stplus-movingui-resize-handle';
 const READY_ATTRIBUTE = 'data-stplus-movingui-resize-ready';
 
@@ -161,10 +163,7 @@ function addResizeHandles(panel) {
             height = bottom - top;
         }
 
-        panel.style.left = `${Math.round(left)}px`;
-        panel.style.top = `${Math.round(top)}px`;
-        panel.style.right = 'unset';
-        panel.style.bottom = 'unset';
+        setPanelViewportPosition(panel, left, top);
         panel.style.width = `${Math.round(width)}px`;
         panel.style.height = `${Math.round(height)}px`;
         stopEvent(event);
@@ -183,7 +182,7 @@ function addResizeHandles(panel) {
                 stopEvent(event);
                 return;
             }
-            const rect = panel.getBoundingClientRect();
+            const rect = normalizePanelPosition(panel);
             const styles = getComputedStyle(panel);
             resizeState = {
                 corner,
