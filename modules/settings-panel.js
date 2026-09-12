@@ -239,6 +239,15 @@ function createSettingsWindow() {
         },
     ));
     movingUiSection.append(createCheckbox(
+        'stplus-movingui-drag-enabled',
+        'MovingUI reposition handles',
+        'Show a top-right drag handle on SillyTavernPlus floating windows.',
+        (enabled) => {
+            settings.movingUiDragEnabled = enabled;
+            callbacks?.onMovingUiDragChanged?.();
+        },
+    ));
+    movingUiSection.append(createCheckbox(
         'stplus-movingui-bring-to-front-enabled',
         'Bring MovingUI windows to front',
         'Raise the clicked SillyTavern or third-party MovingUI window above the other floating windows.',
@@ -311,6 +320,7 @@ export function refresh() {
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
+    const movingUiDragCheckbox = document.getElementById('stplus-movingui-drag-enabled');
     const movingUiBringToFrontCheckbox = document.getElementById('stplus-movingui-bring-to-front-enabled');
     const movingUiOpenOnTopCheckbox = document.getElementById('stplus-movingui-open-on-top-enabled');
     const movingUiUnboundedResizeCheckbox = document.getElementById('stplus-movingui-unbounded-resize-enabled');
@@ -318,6 +328,7 @@ export function refresh() {
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
+    if (movingUiDragCheckbox) movingUiDragCheckbox.checked = settings.movingUiDragEnabled;
     if (movingUiBringToFrontCheckbox) movingUiBringToFrontCheckbox.checked = settings.movingUiBringToFrontEnabled;
     if (movingUiOpenOnTopCheckbox) movingUiOpenOnTopCheckbox.checked = settings.movingUiOpenOnTopEnabled;
     if (movingUiUnboundedResizeCheckbox) movingUiUnboundedResizeCheckbox.checked = settings.movingUiUnboundedResizeEnabled;
