@@ -21,6 +21,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#extensionsMenu',
     '#character_popup',
     '#select_chat_popup',
+    '.stplus-branching-window',
     '#rawPromptPopup',
     '.popup .popper-modal',
     '.ui-dialog',
@@ -202,4 +203,3 @@ export function refresh() {
     }
     panelSnapshotInitialized = true;
 }
-
