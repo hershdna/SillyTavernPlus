@@ -314,6 +314,13 @@ async function jumpToSelected() {
     window.toastr?.success?.(`Jumped to ${selected.label}`);
 }
 
+async function branchFromSelected() {
+    const selected = getSelectedNode();
+    if (!selected) return;
+    await jumpToSelected();
+    window.toastr?.success?.(`New same-chat branch ready from ${selected.label}. Continue the conversation to create its next path.`);
+}
+
 function getExportPath() {
     const selected = getSelectedNode();
     return selected ? getPathToNode(selected.id) : (graph?.activePath ?? []).map((id) => graph.nodes[id]).filter(Boolean);
@@ -372,6 +379,7 @@ function render() {
     const previewTitle = panel.querySelector('.stplus-branching-preview-title');
     const previewText = panel.querySelector('.stplus-branching-preview-text');
     const jumpButton = panel.querySelector('[data-action="jump"]');
+    const branchButton = panel.querySelector('[data-action="branch"]');
     const status = panel.querySelector('.stplus-branching-status');
     if (!(nodeLayer instanceof HTMLElement) || !(edgeLayer instanceof SVGElement)) return;
 
@@ -417,6 +425,7 @@ function render() {
     if (previewTitle) previewTitle.textContent = selected ? `${selected.label}${selected.variantCount > 1 ? ` · variant ${selected.swipeIndex + 1}/${selected.variantCount}` : ''}` : 'Select a message node';
     if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
+    if (branchButton instanceof HTMLButtonElement) branchButton.disabled = !selected;
     if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'} · ${graph.activePath.length} active`;
 }
 
@@ -448,8 +457,10 @@ function createWindow() {
     const refreshButton = createButton('Refresh', 'Rebuild the tree from the current chat', () => syncGraph(true));
     const jump = createButton('Jump to Here', 'Make the selected node the active chat path', jumpToSelected);
     jump.dataset.action = 'jump';
+    const branch = createButton('Branch from Here', 'Make the selected node the active path, then continue to create a sibling branch in this chat', branchFromSelected);
+    branch.dataset.action = 'branch';
     const exportButton = createButton('Export Branch', 'Export the selected path as a vanilla SillyTavern JSONL chat', exportSelectedBranch);
-    controls.append(search, refreshButton, jump, exportButton);
+    controls.append(search, refreshButton, jump, branch, exportButton);
 
     const tree = document.createElement('div');
     tree.className = 'stplus-branching-tree';
@@ -467,7 +478,11 @@ function createWindow() {
     previewText.className = 'stplus-branching-preview-text';
     preview.append(previewTitle, previewText);
 
-    panel.append(header, controls, tree, preview);
+    const compatibility = document.createElement('small');
+    compatibility.className = 'stplus-branching-compatibility';
+    compatibility.textContent = 'Same-chat branches are stored in this chat’s metadata. Native SillyTavern Branch still creates a separate chat; use Export Branch for a vanilla-compatible copy.';
+
+    panel.append(header, controls, tree, preview, compatibility);
     document.body.appendChild(panel);
 }
 
