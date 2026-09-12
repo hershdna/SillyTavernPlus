@@ -117,6 +117,14 @@ function writeStoredGraph() {
     }
 }
 
+async function saveCurrentChat(liveContext = getLiveContext()) {
+    // Current SillyTavern exposes saveChat; older builds may only expose
+    // saveMetadata. Both persist the complete chat, so choose one API only.
+    if (typeof liveContext?.saveChat === 'function') return liveContext.saveChat();
+    if (typeof liveContext?.saveMetadata === 'function') return liveContext.saveMetadata();
+    return undefined;
+}
+
 function schedulePersist() {
     writeStoredGraph();
     const chatKeyAtSchedule = getChatKey();
@@ -135,7 +143,7 @@ function schedulePersist() {
             const liveContext = getLiveContext();
             // SillyTavern's metadata save is a full chat save. One serialized
             // save prevents an older snapshot from overwriting this graph.
-            await liveContext?.saveChat?.();
+            await saveCurrentChat(liveContext);
         });
     }, PERSIST_DELAY);
 }
@@ -458,9 +466,9 @@ async function jumpToSelected() {
             reloadChatPending = true;
         }
         writeStoredGraph();
-        // saveChat also persists chat_metadata; saveMetadata is an alias for
-        // the same full-chat operation, so never call both.
-        await liveContext?.saveChat?.();
+        // The selected path and chat_metadata are persisted together. The
+        // helper chooses one compatible SillyTavern save API, never both.
+        await saveCurrentChat(liveContext);
         if (willReload) {
             try {
                 await liveContext.reloadCurrentChat();
