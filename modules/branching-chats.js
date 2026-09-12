@@ -21,6 +21,7 @@ let newChatPending = false;
 let reloadChatPending = false;
 let pendingSelectionNodeId = null;
 let reloadTargetChatKey = null;
+let chatLoadPending = false;
 
 function getLiveContext() {
     // SillyTavern can replace chat and chat_metadata objects while loading a
@@ -268,7 +269,7 @@ function syncGraph(force = false) {
     if (!settings?.branchingChatsEnabled) return;
     // The chat array is intentionally mutable during generation. Wait for
     // GENERATION_ENDED so streaming/reasoning updates cannot become nodes.
-    if (generationActive) return;
+    if (generationActive || chatLoadPending) return;
     const chatKey = getChatKey();
     if (!chatKey) {
         window.clearTimeout(syncTimer);
@@ -278,6 +279,7 @@ function syncGraph(force = false) {
         lastChatSignature = '';
         selectedNodeId = null;
         newChatPending = false;
+        chatLoadPending = false;
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
@@ -640,27 +642,24 @@ function bindEvents() {
         if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
     };
     const onChatChanged = () => {
-        // Never leave a previous chat's tree visible during or after a chat
-        // transition. The next refresh will rebuild from the newly active
-        // chat, if one exists.
+        // CHAT_CHANGED identifies the new chat, but SillyTavern finishes
+        // replacing its message and metadata objects on CHAT_LOADED.
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         const currentChatKey = getChatKey();
         const isSameChatReload = reloadChatPending
             || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
+        chatLoadPending = Boolean(eventTypes.CHAT_LOADED);
         if (isSameChatReload) {
-            // Reloading the current chat replaces SillyTavern's live arrays
-            // and metadata without changing chat identity. Re-read the
-            // persisted graph, but keep the navigator available for another
-            // jump.
+            // Keep the window/selection for a same-chat reload, but do not
+            // read or write metadata until the replacement chat is loaded.
             graph = null;
             loadedChatKey = null;
             lastChatSignature = '';
-            scheduleSync(0);
+            if (!chatLoadPending) scheduleSync(250);
             // If this is the late CHAT_CHANGED emitted after the reload
-            // promise resolved, consume the marker now. If the event arrived
-            // before resolution, reloadChatPending keeps the marker alive for
-            // a possible later event.
+            // promise resolved, consume the marker now. If it arrived
+            // before resolution, reloadChatPending keeps it alive.
             if (!reloadChatPending) reloadTargetChatKey = null;
             return;
         }
@@ -671,19 +670,20 @@ function bindEvents() {
         lastChatSignature = '';
         selectedNodeId = null;
         pendingSelectionNodeId = null;
-        if (getChatKey()) {
+        if (currentChatKey) {
             installButton();
-            scheduleSync(0);
+            if (!chatLoadPending) scheduleSync(250);
         } else {
+            chatLoadPending = false;
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
     };
     const onChatCreated = () => {
-        // A newly-created chat can briefly expose the previous chat's
-        // metadata object while SillyTavern finishes the transition. Mark it
-        // as fresh so the first sync cannot adopt the previous graph.
+        // A new chat must start with a new graph, and its metadata may not
+        // be available until CHAT_LOADED.
         newChatPending = true;
         reloadTargetChatKey = null;
+        chatLoadPending = Boolean(eventTypes.CHAT_LOADED);
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         closeWindow();
@@ -694,10 +694,32 @@ function bindEvents() {
         pendingSelectionNodeId = null;
         if (getChatKey()) {
             installButton();
-            scheduleSync(0);
+            if (!chatLoadPending) scheduleSync(250);
         } else {
+            chatLoadPending = false;
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
+    };
+    const onChatLoaded = () => {
+        // This is the safe point to read persisted chat metadata. Avoid the
+        // old behavior where an early CHAT_CHANGED sync could overwrite it.
+        chatLoadPending = false;
+        window.clearTimeout(syncTimer);
+        if (!getChatKey()) {
+            graph = null;
+            loadedChatKey = null;
+            lastChatSignature = '';
+            selectedNodeId = null;
+            newChatPending = false;
+            closeWindow();
+            document.getElementById(MODULE_BUTTON_ID)?.remove();
+            return;
+        }
+        graph = null;
+        loadedChatKey = null;
+        lastChatSignature = '';
+        installButton();
+        scheduleSync(0);
     };
     const onChatDeleted = (deletedChat) => {
         // Deleting an unrelated chat from the chat browser must not discard
@@ -711,6 +733,7 @@ function bindEvents() {
         if (deletedChatId && currentChatId && String(deletedChatId) !== currentChatId) return;
         newChatPending = false;
         reloadTargetChatKey = null;
+        chatLoadPending = false;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         closeWindow();
@@ -730,6 +753,7 @@ function bindEvents() {
     on('GENERATION_ENDED', onGenerationEnded);
     on('CHAT_CHANGED', onChatChanged);
     on('CHAT_CREATED', onChatCreated);
+    on('CHAT_LOADED', onChatLoaded);
     on('CHAT_DELETED', onChatDeleted);
     on('MESSAGE_SENT', onSafeChatMutation);
     on('MESSAGE_SWIPED', onSwipe);
@@ -755,6 +779,7 @@ export function refresh() {
         return;
     }
     if (!getChatKey()) {
+        chatLoadPending = false;
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
