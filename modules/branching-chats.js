@@ -17,6 +17,7 @@ let syncTimer = null;
 let persistTimer = null;
 let listenersBound = false;
 let generationActive = false;
+let newChatPending = false;
 
 const clone = (value) => {
     try {
@@ -49,11 +50,16 @@ function getChatMetadata() {
     return context?.chatMetadata ?? context?.chat_metadata ?? {};
 }
 
-function createGraph() {
-    return { schemaVersion: SCHEMA_VERSION, nodes: {}, activePath: [] };
+function getChatIntegrity() {
+    const integrity = getChatMetadata()?.integrity;
+    return typeof integrity === 'string' && integrity.trim() ? integrity : null;
 }
 
-function readStoredGraph() {
+function createGraph(chatId = null) {
+    return { schemaVersion: SCHEMA_VERSION, chatId, chatIntegrity: getChatIntegrity(), nodes: {}, activePath: [] };
+}
+
+function readStoredGraph(currentChatId = getChatKey()) {
     let stored = getChatMetadata()?.[METADATA_KEY];
     if (typeof stored === 'string') {
         try {
@@ -62,10 +68,17 @@ function readStoredGraph() {
             stored = null;
         }
     }
-    if (!stored || typeof stored !== 'object') return createGraph();
+    if (!stored || typeof stored !== 'object') return createGraph(currentChatId);
+    const currentIntegrity = getChatIntegrity();
+    if (typeof stored.chatId === 'string' && currentChatId && stored.chatId !== currentChatId) {
+        const sameRenamedChat = stored.chatIntegrity && currentIntegrity && stored.chatIntegrity === currentIntegrity;
+        if (!sameRenamedChat) return createGraph(currentChatId);
+    }
     const storedNodes = stored.nodes && typeof stored.nodes === 'object' ? stored.nodes : {};
     const targetGraph = {
         schemaVersion: SCHEMA_VERSION,
+        chatId: typeof stored.chatId === 'string' ? stored.chatId : null,
+        chatIntegrity: typeof stored.chatIntegrity === 'string' ? stored.chatIntegrity : null,
         nodes: Object.fromEntries(Object.entries(storedNodes).filter(([, node]) => node && typeof node === 'object')),
         activePath: Array.isArray(stored.activePath) ? stored.activePath.filter((id) => typeof id === 'string') : [],
     };
@@ -248,21 +261,25 @@ function syncGraph(force = false) {
         loadedChatKey = null;
         lastChatSignature = '';
         selectedNodeId = null;
+        newChatPending = false;
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
     }
-    if (loadedChatKey !== chatKey) {
-        graph = readStoredGraph();
+    if (newChatPending || loadedChatKey !== chatKey) {
+        graph = newChatPending ? createGraph(chatKey) : readStoredGraph(chatKey);
         loadedChatKey = chatKey;
         lastChatSignature = '';
         selectedNodeId = null;
+        newChatPending = false;
     }
     const chat = getChat();
     const signature = getChatSignature(chat);
     if (!force && signature === lastChatSignature) return;
     lastChatSignature = signature;
-    if (!graph) graph = createGraph();
+    if (!graph) graph = createGraph(chatKey);
+    graph.chatId = chatKey;
+    graph.chatIntegrity = getChatIntegrity();
     pruneEmptyNodes(graph);
     normalizeGraph(graph);
 
@@ -602,6 +619,45 @@ function bindEvents() {
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
     };
+    const onChatCreated = () => {
+        // A newly-created chat can briefly expose the previous chat's
+        // metadata object while SillyTavern finishes the transition. Mark it
+        // as fresh so the first sync cannot adopt the previous graph.
+        newChatPending = true;
+        window.clearTimeout(syncTimer);
+        window.clearTimeout(persistTimer);
+        closeWindow();
+        graph = null;
+        loadedChatKey = null;
+        lastChatSignature = '';
+        selectedNodeId = null;
+        if (getChatKey()) {
+            installButton();
+            scheduleSync(0);
+        } else {
+            document.getElementById(MODULE_BUTTON_ID)?.remove();
+        }
+    };
+    const onChatDeleted = (deletedChat) => {
+        // Deleting an unrelated chat from the chat browser must not discard
+        // the tree for the chat that is still open. ST versions differ in
+        // whether this event carries a string ID or an object, so only treat
+        // it as unrelated when an explicit ID is available.
+        const deletedChatId = typeof deletedChat === 'string'
+            ? deletedChat
+            : deletedChat?.chatId ?? deletedChat?.chat_id ?? deletedChat?.id;
+        const currentChatId = getChatKey();
+        if (deletedChatId && currentChatId && String(deletedChatId) !== currentChatId) return;
+        newChatPending = false;
+        window.clearTimeout(syncTimer);
+        window.clearTimeout(persistTimer);
+        closeWindow();
+        graph = null;
+        loadedChatKey = null;
+        lastChatSignature = '';
+        selectedNodeId = null;
+        document.getElementById(MODULE_BUTTON_ID)?.remove();
+    };
     const on = (name, handler) => {
         const eventName = eventTypes[name];
         if (!eventName) return;
@@ -610,6 +666,8 @@ function bindEvents() {
     on('GENERATION_STARTED', onGenerationStarted);
     on('GENERATION_ENDED', onGenerationEnded);
     on('CHAT_CHANGED', onChatChanged);
+    on('CHAT_CREATED', onChatCreated);
+    on('CHAT_DELETED', onChatDeleted);
     on('MESSAGE_SENT', onSafeChatMutation);
     on('MESSAGE_SWIPED', onSwipe);
     on('MESSAGE_UPDATED', onSafeChatMutation);
