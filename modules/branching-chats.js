@@ -25,6 +25,7 @@ let pendingSelectionNodeId = null;
 let reloadTargetChatKey = null;
 let chatLoadPending = false;
 let loadedChatEventKey = null;
+let reopenAfterChatLoad = false;
 let jumpInProgress = false;
 let persistRevision = 0;
 let persistQueue = Promise.resolve();
@@ -972,36 +973,38 @@ function bindEvents() {
         // will perform the immediate final sync and cancel this timer.
         if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
     };
-    const onChatChanged = () => {
-        // CHAT_CHANGED identifies the new chat, but SillyTavern finishes
-        // replacing its message and metadata objects on CHAT_LOADED.
+    const onChatChanged = (chatId) => {
+        // CHAT_LOADED is emitted after SillyTavern has replaced chat and
+        // metadata, then CHAT_CHANGED follows. Do not clear the graph again
+        // in that second event or the viewport can remain on the old tree.
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
-        const currentChatKey = getChatKey();
-        const isSameChatReload = reloadChatPending
-            || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
-        // SillyTavern's current load path emits CHAT_LOADED before
-        // CHAT_CHANGED. Do not re-arm the load guard after metadata is ready.
+        const currentChatKey = typeof chatId === 'string' || typeof chatId === 'number'
+            ? String(chatId)
+            : getChatKey();
+        const wasOpen = panel?.classList.contains('stplus-branching-window-open') === true;
+        if (currentChatKey) reopenAfterChatLoad = reopenAfterChatLoad || wasOpen;
+        else reopenAfterChatLoad = false;
+
         const chatWasLoaded = currentChatKey !== null && loadedChatEventKey === currentChatKey;
-        chatLoadPending = Boolean(eventTypes.CHAT_LOADED) && !chatWasLoaded;
-        if (isSameChatReload) {
-            // Keep the window/selection for a same-chat reload, but do not
-            // read or write metadata until the replacement chat is loaded.
-            // Keep the current graph usable during a same-chat reload.
-            // Only discard it when the earlier event order already cleared it.
+        chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED) && !chatWasLoaded;
+        if (chatWasLoaded) {
+            // The loaded-chat handler already selected the new graph. Keep
+            // the panel open state and refresh the viewport in this event too
+            // because ST emits CHAT_CHANGED immediately afterward.
             if (!graph || loadedChatKey !== currentChatKey) {
                 graph = null;
                 loadedChatKey = null;
+                lastChatSignature = '';
             }
-            lastChatSignature = '';
-            if (!chatLoadPending) scheduleSync(0);
-            // If this is the late CHAT_CHANGED emitted after the reload
-            // promise resolved, consume the marker now. If it arrived
-            // before resolution, reloadChatPending keeps it alive.
-            if (!reloadChatPending) reloadTargetChatKey = null;
+            if (getChatKey() === currentChatKey) syncGraph(true);
+            if (reopenAfterChatLoad) panel?.classList.add('stplus-branching-window-open');
+            render();
+            reopenAfterChatLoad = false;
             return;
         }
+
         closeWindow();
         reloadTargetChatKey = null;
         graph = null;
@@ -1018,17 +1021,31 @@ function bindEvents() {
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
     };
+
     const onChatCreated = () => {
-        // A new chat must start with a new graph, and its metadata may not
-        // be available until CHAT_LOADED.
-        newChatPending = true;
-        reloadTargetChatKey = null;
+        // A fresh chat can emit CHAT_CREATED after CHAT_LOADED and
+        // CHAT_CHANGED. In that order the graph is already the new chat's
+        // graph; clearing it here would restore the stale-viewport bug.
         const currentChatKey = getChatKey();
         const chatWasLoaded = currentChatKey !== null && loadedChatEventKey === currentChatKey;
-        chatLoadPending = Boolean(eventTypes.CHAT_LOADED) && !chatWasLoaded;
+        if (chatWasLoaded) {
+            newChatPending = false;
+            chatLoadPending = false;
+            installButton();
+            syncGraph(true);
+            if (reopenAfterChatLoad) panel?.classList.add('stplus-branching-window-open');
+            render();
+            reopenAfterChatLoad = false;
+            return;
+        }
+
+        newChatPending = true;
+        reloadTargetChatKey = null;
+        chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED);
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
+        reopenAfterChatLoad = panel?.classList.contains('stplus-branching-window-open') === true;
         closeWindow();
         graph = null;
         loadedChatKey = null;
@@ -1043,9 +1060,13 @@ function bindEvents() {
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
     };
+
     const onChatLoaded = () => {
-        // This is the safe point to read persisted chat metadata. Avoid the
-        // old behavior where an early CHAT_CHANGED sync could overwrite it.
+        // CHAT_LOADED is the authoritative point: chat and chat_metadata have
+        // been replaced and SillyTavern has finished loading the file.
+        const keepWindowOpen = reopenAfterChatLoad
+            || panel?.classList.contains('stplus-branching-window-open') === true;
+        reopenAfterChatLoad = keepWindowOpen;
         chatLoadPending = false;
         window.clearTimeout(syncTimer);
         const currentChatKey = getChatKey();
@@ -1056,6 +1077,7 @@ function bindEvents() {
             lastChatSignature = '';
             selectedNodeId = null;
             newChatPending = false;
+            reopenAfterChatLoad = false;
             closeWindow();
             document.getElementById(MODULE_BUTTON_ID)?.remove();
             return;
@@ -1068,8 +1090,13 @@ function bindEvents() {
         }
         lastChatSignature = '';
         installButton();
-        scheduleSync(0);
+        // Build the new graph now, while the chat file and metadata are
+        // authoritative. This runs even if the branch window is hidden.
+        syncGraph(true);
+        if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+        render();
     };
+
     const onChatDeleted = (deletedChat) => {
         // Deleting an unrelated chat from the chat browser must not discard
         // the tree for the chat that is still open. ST versions differ in
