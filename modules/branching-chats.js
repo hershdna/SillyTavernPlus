@@ -98,10 +98,8 @@ function startChatDomWatcher() {
         const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true
             || reopenAfterChatLoad;
         const settledNewChat = currentChatIdentity !== loadedChatKey;
-        if (chatLoadPending && !settledNewChat) {
-            schedule();
-            return;
-        }
+        // Do not let the advisory load flag suppress reconciliation. The
+        // current chat state is the source of truth once #chat has settled.
         chatLoadPending = false;
         if (settledNewChat) {
             window.clearTimeout(syncTimer);
@@ -642,7 +640,10 @@ function syncGraph(force = false) {
     if (!settings?.branchingChatsEnabled) return;
     // The chat array is intentionally mutable during generation. Wait for
     // GENERATION_ENDED so streaming/reasoning updates cannot become nodes.
-    if (generationActive || chatLoadPending) return;
+    // Chat-load state must never block this function: some ST paths do not
+    // deliver CHAT_LOADED to third-party listeners, and that would leave the
+    // next chat permanently blank. The generation guard is sufficient.
+    if (generationActive) return;
     const chatKey = getChatKey();
     const chatIdentity = getChatIdentity();
     if (!chatKey) {
