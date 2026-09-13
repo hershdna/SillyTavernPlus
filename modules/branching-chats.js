@@ -571,10 +571,14 @@ function closeWindow() {
 function selectNode(nodeId) {
     if (!graph?.nodes?.[nodeId]) return;
     selectedNodeId = nodeId;
-    render();
+    // Keep the clicked DOM node alive. Rebuilding the whole graph here made
+    // MovingUI/fronting observers detach the button before the browser could
+    // complete the click/double-click sequence.
+    updateSelectionPresentation();
 }
 
-async function jumpToSelected() {
+async function jumpToSelected(nodeId = selectedNodeId) {
+    if (nodeId && graph?.nodes?.[nodeId]) selectedNodeId = nodeId;
     if (jumpInProgress || !getChatKey()) return;
     const selected = getSelectedNode();
     const path = getPathToNode(selected?.id);
@@ -703,6 +707,57 @@ function getCurrentNodeId() {
     return graph?.activePath?.at(-1) ?? null;
 }
 
+function updateSelectionPresentation() {
+    if (!panel || !graph) return;
+    const currentNodeId = getCurrentNodeId();
+    panel.querySelectorAll('.stplus-branching-node').forEach((button) => {
+        const nodeId = button.dataset.nodeId;
+        const node = graph.nodes[nodeId];
+        if (!node) return;
+        const isSelected = nodeId === selectedNodeId;
+        const isActive = nodeId === currentNodeId;
+        button.classList.toggle('stplus-branching-node-selected', isSelected);
+        button.classList.toggle('stplus-branching-node-active', isActive);
+        button.title = (isActive ? 'Current chat message\n' : '') + (isSelected ? 'Selected for preview/jump\n' : '') + node.label + '\n' + getPreviewText(node);
+        button.setAttribute('aria-label', node.label + (isActive ? ' (current chat message)' : '') + (isSelected ? ' (selected)' : ''));
+    });
+    const selected = getSelectedNode();
+    const previewTitle = panel.querySelector('.stplus-branching-preview-title');
+    const previewText = panel.querySelector('.stplus-branching-preview-text');
+    const jumpButton = panel.querySelector('[data-action="jump"]');
+    if (previewTitle) previewTitle.textContent = selected ? selected.label + (selected.variantCount > 1 ? ' · variant ' + (selected.swipeIndex + 1) + '/' + selected.variantCount : '') : 'Select a message node';
+    if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
+    if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
+}
+
+function getNodeIdFromEvent(event) {
+    const target = event.target instanceof Element ? event.target.closest('.stplus-branching-node') : null;
+    return target instanceof HTMLButtonElement && panel?.querySelector('.stplus-branching-node-layer')?.contains(target)
+        ? target.dataset.nodeId
+        : null;
+}
+
+function handleNodeLayerPointerDown(event) {
+    if (event.button === 0) event.stopPropagation();
+}
+
+function handleNodeLayerClick(event) {
+    const nodeId = getNodeIdFromEvent(event);
+    if (!nodeId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectNode(nodeId);
+}
+
+function handleNodeLayerDoubleClick(event) {
+    const nodeId = getNodeIdFromEvent(event);
+    if (!nodeId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectNode(nodeId);
+    void jumpToSelected(nodeId);
+}
+
 function createNodeButton(node, position, query) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -721,8 +776,6 @@ function createNodeButton(node, position, query) {
     button.title = `${isActive ? 'Current chat message\\n' : ''}${isSelected ? 'Selected for preview/jump\\n' : ''}${node.label}\\n${getPreviewText(node)}`;
     button.setAttribute('aria-label', `${node.label}${isActive ? ' (current chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
     button.textContent = node.role === 'user' ? 'U' : node.role === 'system' ? 'S' : 'A';
-    button.addEventListener('click', () => selectNode(node.id));
-    button.addEventListener('dblclick', jumpToSelected);
     return button;
 }
 
@@ -841,6 +894,11 @@ function createWindow() {
     edgeLayer.classList.add('stplus-branching-edge-layer');
     const nodeLayer = document.createElement('div');
     nodeLayer.className = 'stplus-branching-node-layer';
+    // Delegate node events from the persistent layer. Individual node
+    // buttons are replaced when the graph is rebuilt, but this layer is not.
+    nodeLayer.addEventListener('pointerdown', handleNodeLayerPointerDown);
+    nodeLayer.addEventListener('click', handleNodeLayerClick);
+    nodeLayer.addEventListener('dblclick', handleNodeLayerDoubleClick);
     tree.append(edgeLayer, nodeLayer);
 
     const preview = document.createElement('div');
