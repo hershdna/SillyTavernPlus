@@ -7,6 +7,7 @@ const SCHEMA_VERSION = 3;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
 const PERSIST_DELAY = 350;
+const CHAT_STATE_POLL_INTERVAL = 100;
 
 let context = null;
 let settings = null;
@@ -32,7 +33,7 @@ let persistRevision = 0;
 let persistQueue = Promise.resolve();
 let chatStateWatcher = null;
 let observedChatIdentity = null;
-let observedChatIdentityTicks = 0;
+let observedChatState = '';
 let chatDomWatcher = null;
 let chatDomSyncTimer = null;
 const objectIdentityTokens = new WeakMap();
@@ -138,43 +139,43 @@ function startChatDomWatcher() {
 }
 function startChatStateWatcher() {
     if (chatStateWatcher) return;
-    // Some chat-browser paths replace the chat object without reliably
-    // emitting every lifecycle event to third-party extensions. Keep a
-    // lightweight identity/signature watcher as a safety net.
+    // Some chat-browser paths replace the chat and/or metadata without
+    // reliably emitting every lifecycle event to third-party extensions.
+    // Observe the live state itself. The full message signature is included
+    // because a few ST paths can reuse the first message object while loading
+    // another file; the old identity-only watcher missed that transition.
     const check = () => {
         if (!settings?.branchingChatsEnabled) return;
+        // Never consume the observed state while a response is streaming.
+        // Otherwise the final state would look unchanged when generation
+        // ends and the graph would miss the completed response.
+        if (isGenerationInProgress()) return;
+        const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
-        if (currentChatIdentity !== observedChatIdentity) {
-            observedChatIdentity = currentChatIdentity;
-            observedChatIdentityTicks = 0;
-            return;
-        }
-        observedChatIdentityTicks += 1;
-        // One settled interval is enough here. CHAT_LOADED is authoritative,
-        // while this watcher covers chat-browser paths that skip third-party
-        // lifecycle events; waiting several intervals leaves a stale panel
-        // visible long enough to make the new chat unusable.
-        if (observedChatIdentityTicks < 1) return;
+        const currentChatSignature = currentChatIdentity ? getChatSignature(getChat()) : '';
+        const currentChatState = JSON.stringify([currentChatKey, currentChatIdentity, currentChatSignature]);
+        if (currentChatState === observedChatState) return;
+        observedChatState = currentChatState;
         if (!currentChatIdentity) {
-            if (graph || loadedChatKey || panel?.classList.contains('stplus-branching-window-open')) {
-                window.clearTimeout(syncTimer);
-                window.clearTimeout(persistTimer);
-                persistRevision += 1;
-                chatLoadPending = false;
-                graph = null;
-                loadedChatKey = null;
-                lastChatSignature = '';
-                loadedChatEventKey = null;
-                loadedChatRawKey = null;
-                selectedNodeId = null;
-                reopenAfterChatLoad = false;
-                closeWindow();
-                document.getElementById(MODULE_BUTTON_ID)?.remove();
-            }
+            window.clearTimeout(syncTimer);
+            window.clearTimeout(persistTimer);
+            persistRevision += 1;
+            chatLoadPending = false;
+            graph = null;
+            loadedChatKey = null;
+            lastChatSignature = '';
+            loadedChatEventKey = null;
+            loadedChatRawKey = null;
+            selectedNodeId = null;
+            pendingSelectionNodeId = null;
+            reopenAfterChatLoad = false;
+            closeWindow();
+            document.getElementById(MODULE_BUTTON_ID)?.remove();
             return;
         }
-        if (generationActive) return;
-        if (currentChatIdentity !== loadedChatKey) {
+        // A changed load identity or raw chat key means a different chat was
+        // loaded, even if the lifecycle event was absent or arrived early.
+        if (currentChatIdentity !== loadedChatKey || currentChatKey !== loadedChatRawKey) {
             const keepWindowOpen = reopenAfterChatLoad
                 || panel?.classList.contains('stplus-branching-window-open') === true;
             chatLoadPending = false;
@@ -185,16 +186,18 @@ function startChatStateWatcher() {
             selectedNodeId = null;
             pendingSelectionNodeId = null;
             loadedChatEventKey = currentChatIdentity;
-            loadedChatRawKey = getChatKey();
+            loadedChatRawKey = currentChatKey;
             syncGraph(true);
             if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
             reopenAfterChatLoad = false;
             render();
             return;
         }
-        if (!chatLoadPending) syncGraph(false);
+        // The chat can be replaced without a load event while retaining the
+        // same identity. Force a viewport rebuild for that settled state.
+        syncGraph(true);
     };
-    chatStateWatcher = window.setInterval(check, 300);
+    chatStateWatcher = window.setInterval(check, CHAT_STATE_POLL_INTERVAL);
 }
 
 function getLiveContext() {
@@ -1378,3 +1381,4 @@ export function refresh() {
 }
 
 export { createGraph, getVariantContents, getActiveSwipeIndex };
+
