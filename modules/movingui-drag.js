@@ -41,6 +41,14 @@ const SAVED_MOVINGUI_STYLE_PROPERTIES = [
     'height',
     'margin',
 ];
+const DIMENSIONAL_MOVINGUI_STYLE_PROPERTIES = new Set([
+    'top',
+    'left',
+    'right',
+    'bottom',
+    'width',
+    'height',
+]);
 
 let context = null;
 let settings = null;
@@ -69,7 +77,18 @@ export function applySavedMovingUiState(panel) {
     let applied = false;
     for (const property of SAVED_MOVINGUI_STYLE_PROPERTIES) {
         if (!Object.hasOwn(savedState, property) || savedState[property] === undefined || savedState[property] === null) continue;
-        panel.style[property] = String(savedState[property]);
+        const rawValue = savedState[property];
+        if (DIMENSIONAL_MOVINGUI_STYLE_PROPERTIES.has(property)) {
+            const numericValue = Number(rawValue);
+            // Presets saved by SillyTavern contain both numbers and numeric
+            // strings. CSSStyleDeclaration rejects a bare "35", so make the
+            // unit explicit. Ignore legacy NaN coordinates rather than
+            // allowing them to poison an otherwise valid preset.
+            if (!Number.isFinite(numericValue)) continue;
+            panel.style[property] = `${numericValue}px`;
+        } else {
+            panel.style[property] = String(rawValue);
+        }
         applied = true;
     }
     return applied;
