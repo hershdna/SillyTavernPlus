@@ -39,6 +39,7 @@ function startChatStateWatcher() {
     // emitting every lifecycle event to third-party extensions. Keep a
     // lightweight identity/signature watcher as a safety net.
     const check = () => {
+        if (!settings?.branchingChatsEnabled) return;
         const currentChatIdentity = getChatIdentity();
         if (currentChatIdentity !== observedChatIdentity) {
             observedChatIdentity = currentChatIdentity;
