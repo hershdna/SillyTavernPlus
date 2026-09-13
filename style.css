@@ -360,6 +360,10 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     display: block;
 }
 
+.stplus-visible-editing .mes_block {
+    position: relative;
+}
+
 .stplus-visible-editing .mes_block > .ch_name {
     position: relative;
 }

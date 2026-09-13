@@ -98,9 +98,13 @@ function getActionHost(messageElement) {
     // Keep the edit controls in the message header. The footer of a message
     // is occupied by SillyTavern's swipe controls, so appending controls to
     // .mes_block can put the cancel button on top of the swipe arrow/counter.
-    return messageElement.querySelector('.mes_block > .ch_name')
-        ?? messageElement.querySelector('.ch_name')
-        ?? messageElement.querySelector('.mes_block');
+    const headers = [
+        ...messageElement.querySelectorAll('.mes_block > .ch_name, .ch_name'),
+    ];
+    return headers.find((header) => {
+        const styles = getComputedStyle(header);
+        return styles.display !== 'none' && styles.visibility !== 'hidden';
+    }) ?? messageElement.querySelector('.mes_block') ?? messageElement;
 }
 
 function syncMessageSwipe(message, text) {
