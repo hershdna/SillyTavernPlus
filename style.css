@@ -380,9 +380,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 
 .stplus-visible-edit-editor {
     user-select: text;
-    /* plaintext-only editing hosts can inherit pre-wrap behavior from the
-       browser editing UA stylesheet. ST renders this HTML with normal
-       whitespace, so keep the edit geometry identical to the read view. */
+    /* Match the normal rendered message surface exactly. */
     white-space: normal !important;
 }
 

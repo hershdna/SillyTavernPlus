@@ -36,6 +36,7 @@ function restoreAttributes(edit) {
 function removeEditUi(edit, restoreContent) {
     if (!edit) return;
     const { messageElement, messageText, actions, originalHTML } = edit;
+    edit.editorListeners?.forEach(([eventName, handler]) => messageText.removeEventListener(eventName, handler));
     if (messageText.isConnected) {
         if (restoreContent) messageText.innerHTML = originalHTML;
         restoreAttributes(edit);
@@ -43,6 +44,40 @@ function removeEditUi(edit, restoreContent) {
     }
     messageElement?.classList.remove(EDITING_CLASS);
     actions?.remove();
+}
+
+function insertPlainText(editor, text) {
+    const selection = window.getSelection?.();
+    if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return;
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(text.replace(/\r\n?/g, '\n'));
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+function bindEditorGuards(edit) {
+    const editor = edit.messageText;
+    const editorListeners = [];
+    const onBeforeInput = (event) => {
+        if (event.inputType?.startsWith('format') || event.inputType === 'insertHTML') event.preventDefault();
+    };
+    const onKeyDown = (event) => {
+        if ((event.ctrlKey || event.metaKey) && ['b', 'i', 'u'].includes(event.key.toLowerCase())) event.preventDefault();
+    };
+    const onPaste = (event) => {
+        event.preventDefault();
+        insertPlainText(editor, event.clipboardData?.getData('text/plain') ?? '');
+    };
+    const onDrop = (event) => event.preventDefault();
+    [['beforeinput', onBeforeInput], ['keydown', onKeyDown], ['paste', onPaste], ['drop', onDrop]].forEach(([eventName, handler]) => {
+        editor.addEventListener(eventName, handler);
+        editorListeners.push([eventName, handler]);
+    });
+    edit.editorListeners = editorListeners;
 }
 
 function cancelEdit() {
@@ -144,9 +179,9 @@ async function confirmEdit() {
         return;
     }
 
-    // plaintext-only keeps the existing rendered elements (em, strong, color
-    // tags, comments, and so on) in place while preventing the user from
-    // changing formatting through the browser editing surface.
+    // The regular contenteditable surface keeps SillyTavern's normal
+    // whitespace/layout behavior. Input guards prevent formatting commands
+    // and HTML paste from changing the rendered elements around the text.
     const text = edit.messageText.innerHTML;
     message.mes = text;
     syncMessageSwipe(message, text);
@@ -178,6 +213,7 @@ function beginEdit(messageElement, messageText, event) {
         originalRole: messageText.getAttribute('role'),
         originalAriaLabel: messageText.getAttribute('aria-label'),
         actions: null,
+        editorListeners: [],
     };
     const confirm = createAction('fa-solid fa-check', 'Confirm', confirmEdit);
     const cancel = createAction('fa-solid fa-xmark', 'Cancel', cancelEdit);
@@ -188,12 +224,13 @@ function beginEdit(messageElement, messageText, event) {
 
     messageElement.classList.add(EDITING_CLASS);
     messageText.classList.add('stplus-visible-edit-editor');
-    messageText.setAttribute('contenteditable', 'plaintext-only');
+    messageText.setAttribute('contenteditable', 'true');
     messageText.setAttribute('spellcheck', 'false');
     messageText.setAttribute('role', 'textbox');
     messageText.setAttribute('aria-label', `Edit message ${messageId + 1}`);
     getActionHost(messageElement)?.appendChild(actions);
     activeEdit = edit;
+    bindEditorGuards(edit);
 
     event.preventDefault();
     event.stopPropagation();
