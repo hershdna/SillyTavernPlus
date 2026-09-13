@@ -275,6 +275,21 @@ function getContextChatKey(liveContext = getLiveContext()) {
     if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
         currentChatId = liveContext?.chatId;
     }
+    // Some SillyTavern builds expose the live selected character/group on the
+    // context but return an empty value from getCurrentChatId() briefly while
+    // a profile-backed chat is being applied. Resolve the same filename from
+    // those documented context collections before using integrity.
+    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
+        const characterId = liveContext?.characterId;
+        const character = characterId !== undefined && characterId !== null
+            ? liveContext?.characters?.[characterId]
+            : null;
+        const groupId = liveContext?.groupId;
+        const group = groupId !== undefined && groupId !== null
+            ? liveContext?.groups?.find?.((item) => String(item?.id) === String(groupId))
+            : null;
+        currentChatId = group?.chat_id ?? character?.chat;
+    }
     // Older SillyTavern context versions do not expose chatId at all. Since
     // Loaded chats have a stable metadata integrity token. Use it as a
     // chat-scoped fallback even before the filename accessor catches up. This
@@ -290,6 +305,15 @@ function getContextChatKey(liveContext = getLiveContext()) {
         }
     }
     return normalizeChatKey(currentChatId);
+}
+
+function getVisibleChatKey() {
+    // The selected-chat field is maintained by SillyTavern's chat browser and
+    // remains available on builds where the public context accessor is late
+    // to update. Only use it when it contains a real filename; an empty field
+    // is also used for the neutral/unsaved-chat state.
+    const selectedChat = document.querySelector('#selected_chat_pole');
+    return normalizeChatKey(selectedChat?.value ?? selectedChat?.getAttribute('value'));
 }
 
 function noteLifecycleChatKey(chatKey) {
@@ -310,7 +334,7 @@ function noteLifecycleChatKey(chatKey) {
 
 function getChatKey() {
     const liveContext = getLiveContext();
-    const contextChatKey = getContextChatKey(liveContext);
+    const contextChatKey = getContextChatKey(liveContext) ?? getVisibleChatKey();
     if (pendingLifecycleChatKey) {
         if (contextChatKey === pendingLifecycleChatKey) {
             pendingLifecycleChatKey = null;
@@ -327,9 +351,12 @@ function getChatKey() {
         lifecycleChatKey = contextChatKey;
         return contextChatKey;
     }
-    // The lifecycle key is intentionally only a short-lived transition
-    // override. Never keep it as a permanent fallback: after a real close,
-    // returning the previous filename would resurrect the previous tree.
+    // Keep the event-provided filename as a stable fallback while an active
+    // chat is still present. This covers builds where the context accessor
+    // remains empty after chat load, while the active-chat checks prevent a
+    // closed chat from resurrecting the previous tree.
+    const hasActiveChatData = getChat().length > 0 || Boolean(getChatIntegrity());
+    if (lifecycleChatKey && hasActiveChatData) return lifecycleChatKey;
     return null;
 }
 
