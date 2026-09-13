@@ -360,6 +360,14 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     display: block;
 }
 
+.stplus-visible-editing .mes_block > .ch_name {
+    position: relative;
+}
+
+.stplus-visible-editing .mes_block > .ch_name > .mes_buttons {
+    visibility: hidden;
+}
+
 .stplus-visible-editing .mes_text {
     cursor: text;
     outline: 1px solid var(--SmartThemeQuoteColor, #5fa9d8);
@@ -368,21 +376,29 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 
 .stplus-visible-edit-editor {
     user-select: text;
+    /* plaintext-only editing hosts can inherit pre-wrap behavior from the
+       browser editing UA stylesheet. ST renders this HTML with normal
+       whitespace, so keep the edit geometry identical to the read view. */
+    white-space: normal !important;
 }
 
 .stplus-visible-edit-actions {
     display: inline-flex;
     align-items: center;
+    position: absolute;
+    top: 0;
+    right: 0;
     flex: 0 0 auto;
     gap: 4px;
-    margin: 0 0 0 4px;
+    margin: 0;
     vertical-align: middle;
+    z-index: 2;
 }
 
 .stplus-visible-edit-action {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
     padding: 0;
     line-height: 1;
     margin: 0;
