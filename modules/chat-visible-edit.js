@@ -363,6 +363,7 @@ function beginEdit(messageElement, messageText, event) {
     if (!isEnabled()) return;
     const messageId = getMessageId(messageElement);
     if (messageId === null || !getChat()[messageId]) return;
+    const message = getChat()[messageId];
     if (activeEdit) {
         if (activeEdit.messageElement === messageElement) return;
         cancelEdit();
