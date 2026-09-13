@@ -1369,6 +1369,8 @@ function createWindow() {
 
     const preview = document.createElement('div');
     preview.className = 'stplus-branching-preview';
+    const previewHeader = document.createElement('div');
+    previewHeader.className = 'stplus-branching-preview-header';
     const previewTitle = document.createElement('strong');
     previewTitle.className = 'stplus-branching-preview-title';
     const previewText = document.createElement('p');
@@ -1376,7 +1378,8 @@ function createWindow() {
     const previewActions = document.createElement('div');
     previewActions.className = 'stplus-branching-preview-actions';
     previewActions.appendChild(jump);
-    preview.append(previewTitle, previewText, previewActions);
+    previewHeader.append(previewTitle, previewActions);
+    preview.append(previewHeader, previewText);
     panel.append(header, controls, tree, preview);
     document.body.appendChild(panel);
 }

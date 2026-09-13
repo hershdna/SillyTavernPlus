@@ -559,7 +559,7 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
 .stplus-branching-preview-actions {
     display: flex;
     justify-content: flex-end;
-    margin-top: 10px;
+    flex: 0 0 auto;
 }
 
 .stplus-branching-preview-jump {
@@ -567,9 +567,17 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     white-space: nowrap;
 }
 
-.stplus-branching-preview-title {
-    display: block;
+.stplus-branching-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 5px;
+}
+
+.stplus-branching-preview-title {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .stplus-branching-preview-text {
