@@ -529,6 +529,15 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     opacity: 0.2;
 }
 
+.stplus-branching-legend {
+    display: block;
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    color: var(--SmartThemeBodyColor, #eee);
+    opacity: 0.72;
+    border-top: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
 .stplus-branching-preview {
     flex: 0 0 auto;
     max-height: 180px;
