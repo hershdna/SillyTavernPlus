@@ -543,8 +543,10 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     box-shadow: 0 0 0 3px var(--SmartThemeEmColor, #5fa9d8), 0 0 0 5px rgb(243 156 18 / 20%);
 }
 
-.stplus-branching-node-dimmed {
-    opacity: 0.2;
+.stplus-branching-node-search-match:not(.stplus-branching-node-active) {
+    background: #315f7e;
+    border-color: #8ac7ed;
+    color: #fff;
 }
 
 .stplus-branching-preview {

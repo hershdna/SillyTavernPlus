@@ -1239,7 +1239,7 @@ function createNodeButton(node, position, query) {
     button.classList.toggle('stplus-branching-node-selected', isSelected);
     button.classList.toggle('stplus-branching-node-active', isActive);
     const matches = !query || `${node.label} ${node.name} ${node.content}`.toLowerCase().includes(query);
-    button.classList.toggle('stplus-branching-node-dimmed', !matches);
+    button.classList.toggle('stplus-branching-node-search-match', Boolean(query && matches));
     button.title = `${isActive ? 'Current chat message\\n' : ''}${isSelected ? 'Selected for preview/jump\\n' : ''}${node.label}\\n${getPreviewText(node)}`;
     button.setAttribute('aria-label', `${node.label}${isActive ? ' (current chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
     button.textContent = node.role === 'user' ? 'U' : node.role === 'system' ? 'S' : 'A';
