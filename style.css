@@ -470,8 +470,22 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     position: relative;
     flex: 1 1 auto;
     min-height: 160px;
-    overflow: auto;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
     background: radial-gradient(circle at 50% 0, rgb(255 255 255 / 5%), transparent 65%);
+}
+
+.stplus-branching-tree-panning {
+    cursor: grabbing;
+}
+
+.stplus-branching-tree-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
 }
 
 .stplus-branching-edge-layer,
@@ -489,6 +503,7 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     stroke: var(--SmartThemeQuoteColor, #5fa9d8);
     stroke-width: 1.5;
     opacity: 0.55;
+    vector-effect: non-scaling-stroke;
 }
 
 .stplus-branching-node {
@@ -545,6 +560,11 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     display: flex;
     justify-content: flex-end;
     margin-top: 10px;
+}
+
+.stplus-branching-preview-jump {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .stplus-branching-preview-title {

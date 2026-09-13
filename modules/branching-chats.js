@@ -8,6 +8,9 @@ const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
 const PERSIST_DELAY = 350;
 const CHAT_STATE_POLL_INTERVAL = 100;
+const MIN_TREE_ZOOM = 0.35;
+const MAX_TREE_ZOOM = 3;
+const TREE_NODE_RADIUS = 22;
 let context = null;
 let settings = null;
 let panel = null;
@@ -42,6 +45,11 @@ let chatDomSyncTimer = null;
 let lifecycleChatKey = null;
 let pendingLifecycleChatKey = null;
 let pendingLifecycleChatKeyUntil = 0;
+let treeZoom = 1;
+let treePanX = 0;
+let treePanY = 0;
+let treeViewInitialized = false;
+let treePanState = null;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
 
@@ -67,6 +75,89 @@ function clearTreeViewport() {
     if (previewText) previewText.textContent = 'Click a node to preview its message.';
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
     if (status) status.textContent = 'Waiting for the current chat';
+}
+
+function applyTreeViewTransform() {
+    const canvas = panel?.querySelector('.stplus-branching-tree-canvas');
+    if (!(canvas instanceof HTMLElement)) return;
+    canvas.style.transform = `translate3d(${treePanX}px, ${treePanY}px, 0) scale(${treeZoom})`;
+}
+
+function resetTreeView() {
+    treeZoom = 1;
+    treePanX = 0;
+    treePanY = 0;
+    treeViewInitialized = false;
+    treePanState = null;
+    panel?.querySelector('.stplus-branching-tree')?.classList.remove('stplus-branching-tree-panning');
+}
+
+function centerTreeView() {
+    const tree = panel?.querySelector('.stplus-branching-tree');
+    const canvas = panel?.querySelector('.stplus-branching-tree-canvas');
+    if (!(tree instanceof HTMLElement) || !(canvas instanceof HTMLElement)) return;
+    if (!tree.clientWidth || !tree.clientHeight || !canvas.offsetWidth || !canvas.offsetHeight) return;
+    treePanX = (tree.clientWidth - canvas.offsetWidth * treeZoom) / 2;
+    treePanY = (tree.clientHeight - canvas.offsetHeight * treeZoom) / 2;
+    treeViewInitialized = true;
+    applyTreeViewTransform();
+}
+
+function getTreePointerPosition(event, tree) {
+    const rect = tree.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+function handleTreeWheel(event) {
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    const tree = event.currentTarget;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointer = getTreePointerPosition(event, tree);
+    const nextZoom = Math.min(MAX_TREE_ZOOM, Math.max(MIN_TREE_ZOOM, treeZoom * Math.exp(-event.deltaY * 0.0015)));
+    if (nextZoom === treeZoom) return;
+    const worldX = (pointer.x - treePanX) / treeZoom;
+    const worldY = (pointer.y - treePanY) / treeZoom;
+    treePanX = pointer.x - worldX * nextZoom;
+    treePanY = pointer.y - worldY * nextZoom;
+    treeZoom = nextZoom;
+    treeViewInitialized = true;
+    applyTreeViewTransform();
+}
+
+function handleTreePointerDown(event) {
+    if (event.button !== 0 || event.target instanceof Element && event.target.closest('.stplus-branching-node')) return;
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    const tree = event.currentTarget;
+    treePanState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        panX: treePanX,
+        panY: treePanY,
+    };
+    tree.setPointerCapture?.(event.pointerId);
+    tree.classList.add('stplus-branching-tree-panning');
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function handleTreePointerMove(event) {
+    if (!treePanState || event.pointerId !== treePanState.pointerId) return;
+    treePanX = treePanState.panX + event.clientX - treePanState.startX;
+    treePanY = treePanState.panY + event.clientY - treePanState.startY;
+    treeViewInitialized = true;
+    applyTreeViewTransform();
+    event.preventDefault();
+}
+
+function finishTreePan(event) {
+    if (!treePanState || event.pointerId !== treePanState.pointerId) return;
+    if (event.currentTarget instanceof HTMLElement) {
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        event.currentTarget.classList.remove('stplus-branching-tree-panning');
+    }
+    treePanState = null;
 }
 
 function isGenerationInProgress() {
@@ -900,6 +991,7 @@ function getToolbarHost() {
 function openWindow() {
     if (!getChatKey()) return;
     if (!panel) createWindow();
+    resetTreeView();
     syncGraph(true);
     panel.classList.add('stplus-branching-window-open');
     render();
@@ -907,6 +999,7 @@ function openWindow() {
 
 function closeWindow() {
     panel?.classList.remove('stplus-branching-window-open');
+    resetTreeView();
     // The graph is rebuilt on the next open/load. Clear rendered nodes now so
     // an out-of-order lifecycle event can never leave the previous chat visible.
     clearTreeViewport();
@@ -1142,11 +1235,12 @@ function render() {
     if (!panel || !graph) return;
     const nodeLayer = panel.querySelector('.stplus-branching-node-layer');
     const edgeLayer = panel.querySelector('.stplus-branching-edge-layer');
+    const treeCanvas = panel.querySelector('.stplus-branching-tree-canvas');
     const previewTitle = panel.querySelector('.stplus-branching-preview-title');
     const previewText = panel.querySelector('.stplus-branching-preview-text');
     const jumpButton = panel.querySelector('[data-action="jump"]');
     const status = panel.querySelector('.stplus-branching-status');
-    if (!(nodeLayer instanceof HTMLElement) || !(edgeLayer instanceof SVGElement)) return;
+    if (!(nodeLayer instanceof HTMLElement) || !(edgeLayer instanceof SVGElement) || !(treeCanvas instanceof HTMLElement)) return;
 
     nodeLayer.replaceChildren();
     edgeLayer.replaceChildren();
@@ -1200,10 +1294,11 @@ function render() {
         const start = positions.get(node.parentId);
         const end = positions.get(node.id);
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', String(start.x + 22));
+        line.setAttribute('x1', String(start.x + TREE_NODE_RADIUS));
         line.setAttribute('y1', String(start.y));
-        line.setAttribute('x2', String(end.x + 22));
+        line.setAttribute('x2', String(end.x + TREE_NODE_RADIUS));
         line.setAttribute('y2', String(end.y));
+        line.setAttribute('vector-effect', 'non-scaling-stroke');
         line.classList.add('stplus-branching-edge');
         edgeLayer.appendChild(line);
     });
@@ -1213,6 +1308,10 @@ function render() {
     if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
     if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'}`;
+    treeCanvas.style.width = `${canvasWidth}px`;
+    treeCanvas.style.height = `${canvasHeight}px`;
+    if (!treeViewInitialized) centerTreeView();
+    else applyTreeViewTransform();
 }
 
 function createWindow() {
@@ -1248,6 +1347,13 @@ function createWindow() {
 
     const tree = document.createElement('div');
     tree.className = 'stplus-branching-tree';
+    tree.addEventListener('wheel', handleTreeWheel, { passive: false });
+    tree.addEventListener('pointerdown', handleTreePointerDown);
+    tree.addEventListener('pointermove', handleTreePointerMove);
+    tree.addEventListener('pointerup', finishTreePan);
+    tree.addEventListener('pointercancel', finishTreePan);
+    const treeCanvas = document.createElement('div');
+    treeCanvas.className = 'stplus-branching-tree-canvas';
     const edgeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     edgeLayer.classList.add('stplus-branching-edge-layer');
     const nodeLayer = document.createElement('div');
@@ -1258,7 +1364,8 @@ function createWindow() {
     nodeLayer.addEventListener('pointerup', handleNodeLayerPointerUp);
     nodeLayer.addEventListener('click', handleNodeLayerClick);
     nodeLayer.addEventListener('dblclick', handleNodeLayerDoubleClick);
-    tree.append(edgeLayer, nodeLayer);
+    treeCanvas.append(edgeLayer, nodeLayer);
+    tree.append(treeCanvas);
 
     const preview = document.createElement('div');
     preview.className = 'stplus-branching-preview';
