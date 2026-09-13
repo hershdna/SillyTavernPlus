@@ -88,6 +88,9 @@
             };
 
             scan();
+            // Perform the branch module's initial install/sync once. Later
+            // generic UI scans intentionally leave its selection state alone.
+            branchingChats.refresh();
             const observer = new MutationObserver((mutations) => {
                 if (mutations.some(isRelevantMutation)) scheduleScan();
             });
