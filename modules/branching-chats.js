@@ -27,7 +27,7 @@ function debugChatLifecycle(phase, extra = {}) {
     const serialized = JSON.stringify(state);
     if (serialized === lastDebugState) return;
     lastDebugState = serialized;
-    console.warn('[SillyTavernPlus][chat-debug]', state);
+    console.warn('[SillyTavernPlus][chat-debug] ' + serialized);
 }
 
 let context = null;
