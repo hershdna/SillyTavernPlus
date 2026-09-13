@@ -48,33 +48,72 @@ function getObjectIdentityToken(value) {
     return String(token);
 }
 
+function clearTreeViewport() {
+    if (!panel) return;
+    panel.querySelector('.stplus-branching-node-layer')?.replaceChildren();
+    panel.querySelector('.stplus-branching-edge-layer')?.replaceChildren();
+    const previewTitle = panel.querySelector('.stplus-branching-preview-title');
+    const previewText = panel.querySelector('.stplus-branching-preview-text');
+    const jumpButton = panel.querySelector('[data-action="jump"]');
+    const status = panel.querySelector('.stplus-branching-status');
+    if (previewTitle) previewTitle.textContent = 'Select a message node';
+    if (previewText) previewText.textContent = 'Click a node to preview its message.';
+    if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
+    if (status) status.textContent = 'Waiting for the current chat';
+}
+
+function isGenerationInProgress() {
+    return generationActive || document.body?.dataset.generating === 'true';
+}
+
 function startChatDomWatcher() {
     if (chatDomWatcher || typeof MutationObserver !== 'function') return;
+    const schedule = () => {
+        window.clearTimeout(chatDomSyncTimer);
+        chatDomSyncTimer = window.setTimeout(reconcile, 180);
+    };
     const reconcile = () => {
-        if (!settings?.branchingChatsEnabled || generationActive || chatLoadPending) return;
+        if (!settings?.branchingChatsEnabled) return;
+        if (isGenerationInProgress() || chatLoadPending) {
+            schedule();
+            return;
+        }
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
-        if (!currentChatKey || !currentChatIdentity || currentChatIdentity === loadedChatKey) return;
-        const keepWindowOpen = reopenAfterChatLoad
-            || panel?.classList.contains('stplus-branching-window-open') === true;
-        window.clearTimeout(syncTimer);
-        window.clearTimeout(persistTimer);
-        persistRevision += 1;
-        graph = null;
-        loadedChatKey = null;
-        lastChatSignature = '';
-        selectedNodeId = null;
-        pendingSelectionNodeId = null;
-        loadedChatEventKey = currentChatIdentity;
-        loadedChatRawKey = currentChatKey;
+        if (!currentChatKey || !currentChatIdentity) {
+            graph = null;
+            loadedChatKey = null;
+            lastChatSignature = '';
+            selectedNodeId = null;
+            pendingSelectionNodeId = null;
+            clearTreeViewport();
+            closeWindow();
+            document.getElementById(MODULE_BUTTON_ID)?.remove();
+            return;
+        }
+        const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true
+            || reopenAfterChatLoad;
+        if (currentChatIdentity !== loadedChatKey) {
+            window.clearTimeout(syncTimer);
+            window.clearTimeout(persistTimer);
+            persistRevision += 1;
+            graph = null;
+            loadedChatKey = null;
+            lastChatSignature = '';
+            selectedNodeId = null;
+            pendingSelectionNodeId = null;
+            loadedChatEventKey = currentChatIdentity;
+            loadedChatRawKey = currentChatKey;
+            clearTreeViewport();
+        }
+        installButton();
+        // Chat switching and chat rendering both mutate #chat. Rebuild after
+        // the DOM has settled so this path also works when a ST lifecycle
+        // event is not delivered to an extension listener.
         syncGraph(true);
         if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
         reopenAfterChatLoad = false;
         render();
-    };
-    const schedule = () => {
-        window.clearTimeout(chatDomSyncTimer);
-        chatDomSyncTimer = window.setTimeout(reconcile, 120);
     };
     chatDomWatcher = new MutationObserver((mutations) => {
         const relevant = mutations.some((mutation) => {
@@ -89,7 +128,6 @@ function startChatDomWatcher() {
     });
     chatDomWatcher.observe(document.body, { childList: true, subtree: true, characterData: true });
 }
-
 function startChatStateWatcher() {
     if (chatStateWatcher) return;
     // Some chat-browser paths replace the chat object without reliably
@@ -704,8 +742,9 @@ function openWindow() {
 
 function closeWindow() {
     panel?.classList.remove('stplus-branching-window-open');
-    // Keep hidden state synchronized so reopening never shows stale styling.
-    render();
+    // The graph is rebuilt on the next open/load. Clear rendered nodes now so
+    // an out-of-order lifecycle event can never leave the previous chat visible.
+    clearTreeViewport();
 }
 
 function selectNode(nodeId) {
