@@ -74,8 +74,47 @@ function maskSourceMarkup(source) {
     return masked.join('');
 }
 
+/**
+ * SillyTavern's formatter can change the visible spelling of a source
+ * character. For example, a source `...` is rendered as the single-character
+ * ellipsis `…`. Keep a reversible, offset-aware normalized view so edits can
+ * still be applied to the original Markdown/HTML source.
+ */
+function normalizeMappingText(text) {
+    const normalizedUnits = [];
+    const normalizedToOriginal = [0];
+    const originalToNormalized = new Array(text.length + 1);
+    let originalOffset = 0;
+    let normalizedOffset = 0;
+
+    for (const character of text) {
+        const originalStart = originalOffset;
+        const originalEnd = originalOffset + character.length;
+        const replacement = character === '…' ? '...' : character === '\u00a0' ? ' ' : character;
+        const replacementUnits = replacement.split('');
+
+        for (let offset = originalStart; offset < originalEnd; offset++) {
+            originalToNormalized[offset] = normalizedOffset;
+        }
+        originalToNormalized[originalEnd] = normalizedOffset + replacementUnits.length;
+
+        replacementUnits.forEach((unit, index) => {
+            normalizedUnits.push(unit);
+            normalizedToOriginal.push(index === replacementUnits.length - 1 ? originalEnd : originalStart);
+        });
+        originalOffset = originalEnd;
+        normalizedOffset += replacementUnits.length;
+    }
+
+    return {
+        text: normalizedUnits.join(''),
+        normalizedToOriginal,
+        originalToNormalized,
+    };
+}
+
 function buildRenderedSourceMap(source, root) {
-    const sourceView = maskSourceMarkup(source);
+    const sourceView = normalizeMappingText(maskSourceMarkup(source));
     const segments = [];
     const nodes = getEditableTextNodes(root);
     let renderedOffset = 0;
@@ -83,17 +122,27 @@ function buildRenderedSourceMap(source, root) {
 
     for (const node of nodes) {
         const text = node.nodeValue;
-        const sourceStart = sourceView.indexOf(text, sourceCursor);
-        const mapped = sourceStart !== -1;
+        const renderedText = normalizeMappingText(text);
+        const normalizedStart = sourceView.text.indexOf(renderedText.text, sourceCursor);
+        const mapped = normalizedStart !== -1;
+        const sourceStart = mapped ? sourceView.normalizedToOriginal[normalizedStart] : null;
+        const sourceEnd = mapped
+            ? sourceView.normalizedToOriginal[normalizedStart + renderedText.text.length]
+            : null;
+        const sourceOffsets = mapped
+            ? Array.from({ length: text.length + 1 }, (_, offset) =>
+                sourceView.normalizedToOriginal[normalizedStart + renderedText.originalToNormalized[offset]])
+            : null;
         const segment = {
             renderedStart: renderedOffset,
             renderedEnd: renderedOffset + text.length,
-            sourceStart: mapped ? sourceStart : null,
-            sourceEnd: mapped ? sourceStart + text.length : null,
+            sourceStart,
+            sourceEnd,
+            sourceOffsets,
         };
         segments.push(segment);
         renderedOffset += text.length;
-        if (mapped) sourceCursor = segment.sourceEnd;
+        if (mapped) sourceCursor = normalizedStart + renderedText.text.length;
     }
 
     return {
@@ -107,6 +156,7 @@ function getSourceBoundary(sourceMap, renderedOffset, preferEnd = false) {
     for (const segment of sourceMap.segments) {
         if (renderedOffset < segment.renderedStart || renderedOffset > segment.renderedEnd) continue;
         const offset = renderedOffset - segment.renderedStart;
+        if (segment.sourceOffsets) return segment.sourceOffsets[offset];
         return segment.sourceStart + offset;
     }
 
@@ -150,8 +200,12 @@ function applyVisibleTextEdit(edit, currentRenderedText) {
     const ranges = edit.sourceMap.segments
         .filter((segment) => segment.renderedStart < hunk.renderedEnd && segment.renderedEnd > hunk.renderedStart)
         .map((segment) => ({
-            start: segment.sourceStart + Math.max(hunk.renderedStart, segment.renderedStart) - segment.renderedStart,
-            end: segment.sourceStart + Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart,
+            start: segment.sourceOffsets
+                ? segment.sourceOffsets[Math.max(hunk.renderedStart, segment.renderedStart) - segment.renderedStart]
+                : segment.sourceStart + Math.max(hunk.renderedStart, segment.renderedStart) - segment.renderedStart,
+            end: segment.sourceOffsets
+                ? segment.sourceOffsets[Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart]
+                : segment.sourceStart + Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart,
         }));
     const insertedText = escapeInsertedText(hunk.insertedText);
 
