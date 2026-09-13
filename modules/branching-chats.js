@@ -191,15 +191,13 @@ function getChatIdentity() {
     const chatKey = getChatKey();
     if (!chatKey) return null;
     // Chat IDs can be reused or remain unchanged while SillyTavern loads a
-    // different file. Include the integrity value and the object identities
-    // of the loaded metadata/first message as in-memory load tokens. The
-    // first message token stays stable while replies are appended, but changes
-    // when another chat file is loaded—even when its greeting text is equal.
-    const liveContext = getLiveContext();
-    const metadata = liveContext?.chatMetadata ?? liveContext?.chat_metadata ?? null;
+    // different file. Include the integrity value and the object identity
+    // of the first loaded message as an in-memory load token. That token stays
+    // stable while replies are appended, but changes when another chat file
+    // is loaded—even when its greeting text is equal. Do not use metadata
+    // object identity: updateChatMetadata replaces that object on every save.
     const firstMessage = getChat()[0] ?? null;
     return chatKey + '::' + (getChatIntegrity() ?? 'unknown')
-        + '::meta-' + getObjectIdentityToken(metadata)
         + '::first-' + getObjectIdentityToken(firstMessage);
 }
 
