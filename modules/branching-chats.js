@@ -36,6 +36,13 @@ let observedChatIdentity = null;
 let observedChatState = '';
 let chatDomWatcher = null;
 let chatDomSyncTimer = null;
+// CHAT_CHANGED/CHAT_LOADED are the authoritative lifecycle signals. Keep
+// the filename they report separately from the context snapshot because
+// Connection Manager profile application can briefly leave getContext()
+// one step behind the chat loader.
+let lifecycleChatKey = null;
+let pendingLifecycleChatKey = null;
+let pendingLifecycleChatKeyUntil = 0;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
 
@@ -236,8 +243,26 @@ function getChat() {
     return Array.isArray(liveContext?.chat) ? liveContext.chat : [];
 }
 
-function getChatKey() {
-    const liveContext = getLiveContext();
+function normalizeChatKey(value) {
+    if (value === undefined || value === null) return null;
+    const normalized = String(value).trim();
+    return normalized || null;
+}
+
+function getLifecycleChatKey(detail) {
+    // CHAT_LOADED is emitted as { detail: { id: characterIndex,
+    // character: characters[characterIndex] } }. The character.chat field is
+    // the chat filename; detail.id is only a character index and must never
+    // be used as a chat ID.
+    const loadedDetail = detail?.detail ?? detail;
+    return normalizeChatKey(
+        loadedDetail?.character?.chat
+        ?? loadedDetail?.chatId
+        ?? loadedDetail?.chat_id,
+    );
+}
+
+function getContextChatKey(liveContext = getLiveContext()) {
     // getCurrentChatId() is the documented live accessor. Do not prefer a
     // context property first: some ST versions expose `chatId` as a snapshot
     // while the accessor has already moved to the newly opened chat.
@@ -251,19 +276,61 @@ function getChatKey() {
         currentChatId = liveContext?.chatId;
     }
     // Older SillyTavern context versions do not expose chatId at all. Since
-    // loaded chats have a stable metadata integrity token, use it as a
-    // chat-scoped fallback when there is actual chat data. This keeps later
-    // chat opens addressable without ever using the character ID (which would
-    // incorrectly merge multiple chats for one character).
+    // Loaded chats have a stable metadata integrity token. Use it as a
+    // chat-scoped fallback even before the filename accessor catches up. This
+    // keeps later chat opens addressable without ever using the character ID
+    // (which would incorrectly merge multiple chats for one character).
     if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
         const integrity = liveContext?.chatMetadata?.integrity ?? liveContext?.chat_metadata?.integrity;
-        if (Array.isArray(liveContext?.chat) && liveContext.chat.length > 0
-            && typeof integrity === 'string' && integrity.trim()) {
+        // Integrity is created by SillyTavern before CHAT_LOADED and is
+        // scoped to the chat file. Do not require chat.length here: a new
+        // chat can be between metadata assignment and its first render.
+        if (typeof integrity === 'string' && integrity.trim()) {
             currentChatId = `integrity:${integrity}`;
         }
     }
-    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') return null;
-    return String(currentChatId);
+    return normalizeChatKey(currentChatId);
+}
+
+function noteLifecycleChatKey(chatKey) {
+    const normalized = normalizeChatKey(chatKey);
+    if (!normalized) {
+        lifecycleChatKey = null;
+        pendingLifecycleChatKey = null;
+        pendingLifecycleChatKeyUntil = 0;
+        return;
+    }
+    lifecycleChatKey = normalized;
+    // Keep an event-provided filename authoritative briefly while
+    // getContext() catches up. After that window, the live accessor wins so
+    // eventless chat-browser implementations can still be detected.
+    pendingLifecycleChatKey = normalized;
+    pendingLifecycleChatKeyUntil = Date.now() + 1500;
+}
+
+function getChatKey() {
+    const liveContext = getLiveContext();
+    const contextChatKey = getContextChatKey(liveContext);
+    if (pendingLifecycleChatKey) {
+        if (contextChatKey === pendingLifecycleChatKey) {
+            pendingLifecycleChatKey = null;
+            pendingLifecycleChatKeyUntil = 0;
+            lifecycleChatKey = contextChatKey;
+        } else if (Date.now() < pendingLifecycleChatKeyUntil) {
+            return pendingLifecycleChatKey;
+        } else {
+            pendingLifecycleChatKey = null;
+            pendingLifecycleChatKeyUntil = 0;
+        }
+    }
+    if (contextChatKey) {
+        lifecycleChatKey = contextChatKey;
+        return contextChatKey;
+    }
+    // The lifecycle key is intentionally only a short-lived transition
+    // override. Never keep it as a permanent fallback: after a real close,
+    // returning the previous filename would resurrect the previous tree.
+    return null;
 }
 
 function getChatIdentity() {
@@ -1235,9 +1302,8 @@ function bindEvents() {
         window.clearTimeout(persistTimer);
         persistRevision += 1;
         observedChatState = '';
-        const eventChatKey = typeof chatId === 'string' || typeof chatId === 'number'
-            ? String(chatId)
-            : getChatKey();
+        const eventChatKey = normalizeChatKey(chatId);
+        noteLifecycleChatKey(eventChatKey);
         const currentChatKey = getChatKey();
         const wasOpen = panel?.classList.contains('stplus-branching-window-open') === true;
         if (currentChatKey) reopenAfterChatLoad = reopenAfterChatLoad || wasOpen;
@@ -1287,7 +1353,12 @@ function bindEvents() {
             chatLoadPending = false;
             loadedChatEventKey = null;
             loadedChatRawKey = null;
-            document.getElementById(MODULE_BUTTON_ID)?.remove();
+            // The event can arrive during the neutral/loading part of a
+            // profile-backed chat switch. Leave the module alive and let the
+            // state/DOM watchers install it once metadata or the chat ID is
+            // available. A genuinely closed chat is handled by those same
+            // watchers once both signals are empty.
+            scheduleSync(250);
         }
     };
 
@@ -1337,7 +1408,7 @@ function bindEvents() {
         }
     };
 
-    const onChatLoaded = () => {
+    const onChatLoaded = (detail) => {
         // CHAT_LOADED is the authoritative point: chat and chat_metadata have
         // been replaced and SillyTavern has finished loading the file.
         const keepWindowOpen = reopenAfterChatLoad
@@ -1346,6 +1417,8 @@ function bindEvents() {
         chatLoadPending = false;
         observedChatState = '';
         window.clearTimeout(syncTimer);
+        const eventChatKey = getLifecycleChatKey(detail);
+        noteLifecycleChatKey(eventChatKey);
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
         loadedChatEventKey = currentChatIdentity;
@@ -1401,6 +1474,7 @@ function bindEvents() {
         lastChatSignature = '';
         selectedNodeId = null;
         pendingSelectionNodeId = null;
+        noteLifecycleChatKey(null);
         document.getElementById(MODULE_BUTTON_ID)?.remove();
     };
     const on = (name, handler) => {
@@ -1417,6 +1491,17 @@ function bindEvents() {
     on('CHAT_CREATED', onChatCreated);
     on('CHAT_LOADED', onChatLoaded);
     on('CHAT_DELETED', onChatDeleted);
+    // Connection Manager applies a profile asynchronously. In that window
+    // it can replace API-related context objects without emitting a chat
+    // event, so give the chat lifecycle a fresh reconciliation opportunity.
+    const onContextReady = () => {
+        observedChatState = '';
+        window.clearTimeout(syncTimer);
+        scheduleSync(0);
+    };
+    on('CONNECTION_PROFILE_LOADED', onContextReady);
+    on('APP_READY', onContextReady);
+    on('MAIN_API_CHANGED', onContextReady);
     on('MESSAGE_SENT', onSafeChatMutation);
     on('MESSAGE_SWIPED', onSwipe);
     on('MESSAGE_UPDATED', onSafeChatMutation);
