@@ -48,7 +48,9 @@
                 scanScheduled = false;
                 greetingMods.refresh();
                 lorebookMods.refresh();
-                branchingChats.refresh();
+                // Branching chats owns its own chat lifecycle and graph
+                // synchronization. Do not refresh it for unrelated UI
+                // mutations such as MovingUI z-index changes.
                 settingsPanel.refresh();
                 movingUiResize.refresh();
                 movingUiDrag.refresh();
