@@ -11,6 +11,27 @@ const LATE_LOADED_PANEL_SELECTOR = [
     '[data-dragged]',
 ].join(',');
 
+// SillyTavern can apply the saved preset before its native panels finish
+// their own layout pass. The resize manager already discovers those panels;
+// include the same set here so the saved geometry can be reapplied once the
+// DOM has settled, without giving native panels an ST+ drag handle.
+const SAVED_STATE_PANEL_SELECTOR = [
+    '#sheld',
+    '#left-nav-panel',
+    '#right-nav-panel',
+    '#WorldInfo',
+    '#floatingPrompt',
+    '#logprobsViewer',
+    '#cfgConfig',
+    '#expression-holder',
+    '#groupMemberListPopout',
+    '#summaryExtensionPopout',
+    '#gallery',
+    '#movingDivs > div',
+    MOVINGUI_PANEL_SELECTOR,
+    '[data-dragged]',
+].join(',');
+
 const SAVED_MOVINGUI_STYLE_PROPERTIES = [
     'top',
     'left',
@@ -40,7 +61,7 @@ export function applySavedMovingUiState(panel) {
     if (!isMovingUiActive()
         || !(panel instanceof HTMLElement)
         || !panel.id
-        || !panel.matches(LATE_LOADED_PANEL_SELECTOR)) return false;
+        || !panel.matches(SAVED_STATE_PANEL_SELECTOR)) return false;
 
     const savedState = context?.powerUserSettings?.movingUIState?.[panel.id];
     if (!savedState || typeof savedState !== 'object') return false;
