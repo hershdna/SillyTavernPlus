@@ -50,6 +50,7 @@ let treePanX = 0;
 let treePanY = 0;
 let treeViewInitialized = false;
 let centerActiveNodePending = false;
+let centerActiveNodeFrame = 0;
 let treePanState = null;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
@@ -118,6 +119,20 @@ function centerActiveNodeView(positions) {
     treeViewInitialized = true;
     applyTreeViewTransform();
     return true;
+}
+
+function scheduleActiveNodeCenter() {
+    centerActiveNodePending = true;
+    if (centerActiveNodeFrame) return;
+    const attempt = () => {
+        centerActiveNodeFrame = 0;
+        if (!panel?.classList.contains('stplus-branching-window-open') || !graph) return;
+        render({ centerActiveNode: true });
+        if (centerActiveNodePending) {
+            centerActiveNodeFrame = window.requestAnimationFrame(attempt);
+        }
+    };
+    centerActiveNodeFrame = window.requestAnimationFrame(attempt);
 }
 
 function getTreePointerPosition(event, tree) {
@@ -234,7 +249,10 @@ function startChatDomWatcher() {
         // the DOM has settled so this path also works when a ST lifecycle
         // event is not delivered to an extension listener.
         syncGraph(true);
-        if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+        if (keepWindowOpen) {
+            panel?.classList.add('stplus-branching-window-open');
+            scheduleActiveNodeCenter();
+        }
         reopenAfterChatLoad = false;
         render();
     };
@@ -302,7 +320,10 @@ function startChatStateWatcher() {
             loadedChatEventKey = currentChatIdentity;
             loadedChatRawKey = currentChatKey;
             syncGraph(true);
-            if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+            if (keepWindowOpen) {
+                panel?.classList.add('stplus-branching-window-open');
+                scheduleActiveNodeCenter();
+            }
             reopenAfterChatLoad = false;
             render();
             return;
@@ -1012,6 +1033,7 @@ function openWindow() {
     resetTreeView();
     syncGraph(true);
     panel.classList.add('stplus-branching-window-open');
+    scheduleActiveNodeCenter();
     render();
 }
 
@@ -1086,7 +1108,10 @@ async function jumpToSelected(nodeId = selectedNodeId) {
         syncGraph(true);
         if (pendingSelectionNodeId && graph?.nodes?.[pendingSelectionNodeId]) selectedNodeId = pendingSelectionNodeId;
         pendingSelectionNodeId = null;
-        if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+        if (keepWindowOpen) {
+            panel?.classList.add('stplus-branching-window-open');
+            scheduleActiveNodeCenter();
+        }
         render();
         window.toastr?.success?.('Jumped to ' + selected.label);
     } finally {
@@ -1486,7 +1511,10 @@ function bindEvents() {
                 lastChatSignature = '';
             }
             if (getChatKey() === eventChatKey) syncGraph(true);
-            if (reopenAfterChatLoad) panel?.classList.add('stplus-branching-window-open');
+            if (reopenAfterChatLoad) {
+                panel?.classList.add('stplus-branching-window-open');
+                scheduleActiveNodeCenter();
+            }
             render();
             reopenAfterChatLoad = false;
             return;
@@ -1539,7 +1567,10 @@ function bindEvents() {
             chatLoadPending = false;
             installButton();
             syncGraph(true);
-            if (reopenAfterChatLoad) panel?.classList.add('stplus-branching-window-open');
+            if (reopenAfterChatLoad) {
+                panel?.classList.add('stplus-branching-window-open');
+                scheduleActiveNodeCenter();
+            }
             render();
             reopenAfterChatLoad = false;
             return;
@@ -1607,7 +1638,10 @@ function bindEvents() {
         // Build the new graph now, while the chat file and metadata are
         // authoritative. This runs even if the branch window is hidden.
         syncGraph(true);
-        if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+        if (keepWindowOpen) {
+            panel?.classList.add('stplus-branching-window-open');
+            scheduleActiveNodeCenter();
+        }
         render();
     };
 
