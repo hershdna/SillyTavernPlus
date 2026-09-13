@@ -360,6 +360,31 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     display: block;
 }
 
+.stplus-visible-editing .mes_text {
+    cursor: text;
+    outline: 1px solid var(--SmartThemeQuoteColor, #5fa9d8);
+    outline-offset: 3px;
+}
+
+.stplus-visible-edit-editor {
+    user-select: text;
+}
+
+.stplus-visible-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 5px;
+}
+
+.stplus-visible-edit-action {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    line-height: 1;
+}
+
 .stplus-wi-reasoning-setting {
     flex: 0 0 100%;
     width: 100%;

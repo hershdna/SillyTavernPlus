@@ -230,6 +230,16 @@ function createSettingsWindow() {
     ));
     body.append(chatSection);
 
+    chatSection.append(createCheckbox(
+        'stplus-formatted-message-edit-enabled',
+        'Formatted message editing',
+        'Double-click a rendered message to edit only its visible text while preserving its formatting.',
+        (enabled) => {
+            settings.formattedMessageEditEnabled = enabled;
+            callbacks?.onFormattedMessageEditChanged?.();
+        },
+    ));
+
     const movingUiSection = createSettingsSection('MovingUI');
     movingUiSection.append(createCheckbox(
         'stplus-movingui-resize-enabled',
@@ -321,6 +331,7 @@ export function refresh() {
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
+    const formattedMessageEditCheckbox = document.getElementById('stplus-formatted-message-edit-enabled');
     const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
     const movingUiDragCheckbox = document.getElementById('stplus-movingui-drag-enabled');
     const movingUiBringToFrontCheckbox = document.getElementById('stplus-movingui-bring-to-front-enabled');
@@ -329,6 +340,7 @@ export function refresh() {
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
+    if (formattedMessageEditCheckbox) formattedMessageEditCheckbox.checked = settings.formattedMessageEditEnabled;
     if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
     if (movingUiDragCheckbox) movingUiDragCheckbox.checked = settings.movingUiDragEnabled;
     if (movingUiBringToFrontCheckbox) movingUiBringToFrontCheckbox.checked = settings.movingUiBringToFrontEnabled;

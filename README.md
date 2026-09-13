@@ -5,6 +5,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 ## Features
 
 - Reorder alternate greetings with numeric position controls.
+- Double-click a rendered chat message to edit its visible text in place while preserving its existing formatting, with vanilla-style confirm and cancel controls.
 - Keep swipe/reroll alternatives and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, search, and vanilla JSONL branch export.
 - Scope branch data and controls to the currently open chat; changing or closing a chat closes the branch window and clears its in-memory graph.
 - Reset branch state on SillyTavern chat creation/deletion events and guard stored metadata with the active chat identity.
@@ -20,7 +21,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Keep the main chat text window out of click-to-front ordering so opening other windows cannot bury them behind it.
 - Keep transient controls such as Gallery folder autocomplete menus above their owning floating window.
 - Optionally include previous assistant thinking output in World Info scanning, with a configurable reasoning-turn depth.
-- Open a dedicated settings window from the top bar to enable or disable modules independently, organized under World Info / Lorebooks, Characters, and MovingUI. MovingUI resizing, reposition handles, frontmost behavior, open-on-top behavior, and unbounded resizing are enabled by default.
+- Open a dedicated settings window from the top bar to enable or disable modules independently, organized under World Info / Lorebooks, Characters, Chat, and MovingUI. MovingUI resizing, reposition handles, frontmost behavior, open-on-top behavior, unbounded resizing, and formatted message editing are enabled by default.
 - Floating window position and size persist between sessions.
 
 ## Chat branches

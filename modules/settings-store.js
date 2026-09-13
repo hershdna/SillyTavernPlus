@@ -1,6 +1,7 @@
 const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
     branchingChatsEnabled: true,
+    formattedMessageEditEnabled: true,
     lorebookModsEnabled: true,
     movingUiResizeEnabled: true,
     movingUiDragEnabled: true,
@@ -28,6 +29,7 @@ export function initializeSettings(stContext) {
         ...saved,
         greetingModsEnabled: saved.greetingModsEnabled !== false,
         branchingChatsEnabled: saved.branchingChatsEnabled !== false,
+        formattedMessageEditEnabled: saved.formattedMessageEditEnabled !== false,
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,
         movingUiResizeEnabled: saved.movingUiResizeEnabled !== false,
         movingUiDragEnabled: saved.movingUiDragEnabled !== false,
