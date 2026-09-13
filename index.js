@@ -1,16 +1,22 @@
 (() => {
     'use strict';
 
-    // SillyTavern loads extension entrypoints as ES modules, where
-    // document.currentScript is null. Resolve sibling modules from this file.
-    const extensionRoot = new URL('./', import.meta.url);
-    // SillyTavern can re-run an extension entrypoint without a full page
-    // navigation. A bare dynamic-import URL would then resolve the old
-    // module from the browser's ESM cache, making lifecycle fixes appear to
-    // have no effect. Keep the key stable for this release and change it
-    // whenever manifest.json is bumped.
-    const MODULE_CACHE_VERSION = '0.5.38';
-    const loadModule = (name) => import(new URL(`modules/${name}.js?v=${MODULE_CACHE_VERSION}`, extensionRoot));
+        // The manifest entrypoint is loaded as a classic script. Capture its
+    // source URL while document.currentScript is still available, then use
+    // that URL to resolve sibling modules. import.meta is invalid syntax in
+    // a classic script and would prevent the entire extension from loading.
+    const extensionScript = document.currentScript
+        || Array.from(document.scripts).find((script) => script.src.includes('SillyTavernPlus') && script.src.includes('/index.js'));
+    const extensionRoot = extensionScript?.src
+        ? new URL('./', extensionScript.src)
+        : new URL('./', window.location.href);
+    // Use a changing query parameter so reloaded extensions receive the
+    // current module source instead of a stale ESM cache entry.
+    const MODULE_CACHE_VERSION = '0.5.39';
+    const loadModule = (name) => {
+        const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
+        return import(moduleUrl);
+    };
 
     async function initialize() {
         const context = window.SillyTavern?.getContext?.();
