@@ -2,6 +2,7 @@ const MODULE_BUTTON_ID = 'stplus-branching-chats-button';
 const WINDOW_ID = 'stplus-branching-chats-window';
 const METADATA_KEY = 'stplusBranchingChats';
 const GRAPH_BACKUP_STORAGE_PREFIX = 'stplus-branching-backup:';
+const NODE_ID_FIELD = 'stplusBranchingNodeId';
 const SCHEMA_VERSION = 3;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
@@ -314,21 +315,76 @@ function normalizeGraph(targetGraph) {
     targetGraph.schemaVersion = SCHEMA_VERSION;
 }
 
+function getMessageNodeId(message, swipeIndex) {
+    const swipeInfoId = message?.swipe_info?.[swipeIndex]?.extra?.[NODE_ID_FIELD];
+    if (typeof swipeInfoId === 'string' && swipeInfoId.trim()) return swipeInfoId;
+    const directId = message?.extra?.[NODE_ID_FIELD];
+    return typeof directId === 'string' && directId.trim() ? directId : null;
+}
+
+function setMessageNodeId(message, swipeIndex, nodeId) {
+    if (!message || typeof message !== 'object' || !nodeId) return;
+    if (Array.isArray(message.swipes) && message.swipes.length > 0) {
+        if (!Array.isArray(message.swipe_info)) {
+            message.swipe_info = message.swipes.map(() => ({
+                send_date: message.send_date,
+                gen_started: void 0,
+                gen_finished: void 0,
+                extra: {},
+            }));
+        }
+        if (!message.swipe_info[swipeIndex] || typeof message.swipe_info[swipeIndex] !== 'object') {
+            message.swipe_info[swipeIndex] = { send_date: message.send_date, extra: {} };
+        }
+        if (!message.swipe_info[swipeIndex].extra || typeof message.swipe_info[swipeIndex].extra !== 'object') {
+            message.swipe_info[swipeIndex].extra = {};
+        }
+        message.swipe_info[swipeIndex].extra[NODE_ID_FIELD] = nodeId;
+        return;
+    }
+    if (!message.extra || typeof message.extra !== 'object') message.extra = {};
+    message.extra[NODE_ID_FIELD] = nodeId;
+}
+
 function findNodeByKey(key) {
     return Object.values(graph?.nodes ?? {}).find((node) => node.key === key) ?? null;
 }
 
 function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variantCount) {
     const key = getNodeKey(parentId, sourceIndex, swipeIndex, content);
+    const persistedId = getMessageNodeId(message, swipeIndex);
+    const persistedNode = persistedId ? graph?.nodes?.[persistedId] : null;
+    const normalizedParentId = parentId ?? null;
+    if (persistedNode
+        && persistedNode.parentId === normalizedParentId
+        && persistedNode.sourceIndex === sourceIndex
+        && persistedNode.swipeIndex === swipeIndex) {
+        persistedNode.content = content;
+        persistedNode.variantCount = variantCount;
+        persistedNode.role = getNodeRole(message);
+        persistedNode.name = String(message?.name ?? '');
+        persistedNode.label = getNodeLabel(message, sourceIndex, swipeIndex, variantCount);
+        persistedNode.message = clone(message) ?? persistedNode.message;
+        persistedNode.message.mes = content;
+        if (Array.isArray(persistedNode.message.swipes) && persistedNode.message.swipes.length > 0) {
+            persistedNode.message.swipe_id = swipeIndex;
+        }
+        return persistedNode;
+    }
     const existing = findNodeByKey(key);
-    if (existing) return existing;
+    if (existing) {
+        setMessageNodeId(message, swipeIndex, existing.id);
+        return existing;
+    }
+    const nodeId = newId();
+    setMessageNodeId(message, swipeIndex, nodeId);
     const snapshot = clone(message) ?? {};
     snapshot.mes = content;
     if (Array.isArray(snapshot.swipes) && snapshot.swipes.length > 0) snapshot.swipe_id = swipeIndex;
     const node = {
-        id: newId(),
+        id: nodeId,
         key,
-        parentId: parentId ?? null,
+        parentId: normalizedParentId,
         sourceIndex,
         depth: parentId && graph.nodes[parentId] ? getNodeDepth(graph.nodes[parentId]) + 1 : 0,
         swipeIndex,
@@ -580,6 +636,7 @@ function createGreetingSwipeMessage(node, currentFirstMessage = null) {
     const message = clone(currentFirstMessage) ?? source;
     message.swipes = swipes;
     message.swipe_id = selectedSwipeIndex;
+    if (Array.isArray(source.swipe_info)) message.swipe_info = clone(source.swipe_info);
     message.mes = swipes[selectedSwipeIndex] ?? String(node.content ?? '');
     if (!Array.isArray(message.swipe_info)) message.swipe_info = [];
     while (message.swipe_info.length < swipes.length) {
@@ -635,10 +692,14 @@ function createNodeButton(node, position, query) {
     button.dataset.nodeId = node.id;
     button.style.left = `${position.x}px`;
     button.style.top = `${position.y}px`;
-    button.classList.toggle('stplus-branching-node-selected', node.id === selectedNodeId);
+    const isSelected = node.id === selectedNodeId;
+    const isActive = graph?.activePath?.includes(node.id) === true;
+    button.classList.toggle('stplus-branching-node-selected', isSelected);
+    button.classList.toggle('stplus-branching-node-active', isActive);
     const matches = !query || `${node.label} ${node.name} ${node.content}`.toLowerCase().includes(query);
     button.classList.toggle('stplus-branching-node-dimmed', !matches);
-    button.title = `${node.label}\n${getPreviewText(node)}`;
+    button.title = `${isActive ? 'Active chat message\n' : ''}${isSelected ? 'Selected for preview/jump\n' : ''}${node.label}\n${getPreviewText(node)}`;
+    button.setAttribute('aria-label', `${node.label}${isActive ? ' (active chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
     button.textContent = node.role === 'user' ? 'U' : node.role === 'system' ? 'S' : 'A';
     button.addEventListener('click', () => selectNode(node.id));
     button.addEventListener('dblclick', jumpToSelected);
@@ -773,7 +834,10 @@ function createWindow() {
     compatibility.className = 'stplus-branching-compatibility';
     compatibility.textContent = 'This tree is a navigator for the current chat. Swipe/reroll variants and their continuations are stored in this chat’s metadata. Native SillyTavern Branch still creates a separate chat; use Export Branch for a vanilla-compatible copy.';
 
-    panel.append(header, controls, tree, preview, compatibility);
+    const legend = document.createElement('small');
+    legend.className = 'stplus-branching-legend';
+    legend.textContent = 'Solid fill = active chat path · colored ring = selected node';
+    panel.append(header, controls, legend, tree, preview, compatibility);
     document.body.appendChild(panel);
 }
 
