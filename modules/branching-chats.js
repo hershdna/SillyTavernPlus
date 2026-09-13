@@ -719,7 +719,6 @@ function createNodeButton(node, position, query) {
     const matches = !query || `${node.label} ${node.name} ${node.content}`.toLowerCase().includes(query);
     button.classList.toggle('stplus-branching-node-dimmed', !matches);
     button.title = `${isActive ? 'Current chat message\\n' : ''}${isSelected ? 'Selected for preview/jump\\n' : ''}${node.label}\\n${getPreviewText(node)}`;
-    button.setAttribute('aria-label', `${node.label}${isActive ? ' (active chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
     button.setAttribute('aria-label', `${node.label}${isActive ? ' (current chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
     button.textContent = node.role === 'user' ? 'U' : node.role === 'system' ? 'S' : 'A';
     button.addEventListener('click', () => selectNode(node.id));
