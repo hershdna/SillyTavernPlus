@@ -741,6 +741,15 @@ function handleNodeLayerPointerDown(event) {
     if (event.button === 0) event.stopPropagation();
 }
 
+function handleNodeLayerPointerUp(event) {
+    const nodeId = getNodeIdFromEvent(event);
+    if (!nodeId) return;
+    // Some extensions cancel the compatibility click event after pointer-up.
+    // Select here as a fallback without preventing the browser's click.
+    event.stopPropagation();
+    selectNode(nodeId);
+}
+
 function handleNodeLayerClick(event) {
     const nodeId = getNodeIdFromEvent(event);
     if (!nodeId) return;
@@ -897,6 +906,7 @@ function createWindow() {
     // Delegate node events from the persistent layer. Individual node
     // buttons are replaced when the graph is rebuilt, but this layer is not.
     nodeLayer.addEventListener('pointerdown', handleNodeLayerPointerDown);
+    nodeLayer.addEventListener('pointerup', handleNodeLayerPointerUp);
     nodeLayer.addEventListener('click', handleNodeLayerClick);
     nodeLayer.addEventListener('dblclick', handleNodeLayerDoubleClick);
     tree.append(edgeLayer, nodeLayer);
