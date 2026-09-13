@@ -738,7 +738,13 @@ function getNodeIdFromEvent(event) {
 }
 
 function handleNodeLayerPointerDown(event) {
-    if (event.button === 0) event.stopPropagation();
+    if (event.button !== 0) return;
+    const nodeId = getNodeIdFromEvent(event);
+    if (!nodeId) return;
+    // Select on the first reliable primary-pointer event. This avoids losing
+    // selection when another extension cancels the later compatibility click.
+    event.stopPropagation();
+    selectNode(nodeId);
 }
 
 function handleNodeLayerPointerUp(event) {
