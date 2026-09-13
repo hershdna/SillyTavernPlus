@@ -497,23 +497,32 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     height: 44px;
     padding: 0;
     color: var(--SmartThemeBodyColor, #eee);
-    background: var(--SmartThemeBlurTintColor, #303238);
-    border: 2px solid var(--SmartThemeQuoteColor, #5fa9d8);
+    background: transparent;
+    border: 2px solid var(--SmartThemeBorderColor, #666);
     border-radius: 50%;
     cursor: pointer;
     transform: translateY(-50%);
     transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
-.stplus-branching-node:hover,
-.stplus-branching-node-selected {
+.stplus-branching-node:hover {
     box-shadow: 0 0 0 3px rgb(95 169 216 / 25%);
     transform: translateY(-50%) scale(1.08);
 }
 
-.stplus-branching-node-selected {
-    background: var(--SmartThemeQuoteColor, #5fa9d8);
+.stplus-branching-node-active {
+    background: var(--SmartThemeQuoteColor, #f39c12);
+    border-color: var(--SmartThemeQuoteColor, #f39c12);
     color: #111;
+}
+
+.stplus-branching-node-selected {
+    box-shadow: 0 0 0 3px var(--SmartThemeEmColor, #5fa9d8);
+    transform: translateY(-50%) scale(1.08);
+}
+
+.stplus-branching-node-active.stplus-branching-node-selected {
+    box-shadow: 0 0 0 3px var(--SmartThemeEmColor, #5fa9d8), 0 0 0 5px rgb(243 156 18 / 20%);
 }
 
 .stplus-branching-node-dimmed {
