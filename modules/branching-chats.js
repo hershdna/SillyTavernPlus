@@ -255,13 +255,22 @@ function hasMeaningfulContent(content) {
     return String(content ?? '').trim().length > 0;
 }
 
+function hasMeaningfulNode(node) {
+    return hasMeaningfulContent(node?.content)
+        || hasMeaningfulContent(node?.message?.mes)
+        || hasMeaningfulContent(node?.message?.reasoning)
+        || hasMeaningfulContent(node?.message?.extra?.reasoning)
+        || hasMeaningfulContent(node?.message?.extra?.reasoning_display_text)
+        || hasMeaningfulContent(node?.message?.extra?.display_text);
+}
+
 // Earlier versions observed MESSAGE_RECEIVED and DOM mutations while a
 // response was streaming. That produced a new node for every partial/empty
 // assistant placeholder. Remove those legacy nodes and reconnect any child
 // nodes to their real parent before rebuilding the active path.
 function pruneEmptyNodes(targetGraph) {
     const emptyIds = new Set(Object.values(targetGraph?.nodes ?? {})
-        .filter((node) => !hasMeaningfulContent(node?.content))
+        .filter((node) => !hasMeaningfulNode(node))
         .map((node) => node.id));
     if (emptyIds.size === 0) return false;
 
@@ -555,6 +564,8 @@ function openWindow() {
 
 function closeWindow() {
     panel?.classList.remove('stplus-branching-window-open');
+    // Keep hidden state synchronized so reopening never shows stale styling.
+    render();
 }
 
 function selectNode(nodeId) {
@@ -585,6 +596,9 @@ async function jumpToSelected() {
         chat.splice(0, chat.length, ...replacement);
         selectedNodeId = selected.id;
         pendingSelectionNodeId = selected.id;
+        // Persist the new current endpoint before the reload begins.
+        graph.activePath = path.map((node) => node.id);
+        normalizeGraph(graph);
         lastChatSignature = '';
         const liveContext = getLiveContext();
         const willReload = typeof liveContext?.reloadCurrentChat === 'function';
@@ -685,6 +699,10 @@ function exportSelectedBranch() {
     window.toastr?.success?.('Selected branch exported as a vanilla SillyTavern chat.');
 }
 
+function getCurrentNodeId() {
+    return graph?.activePath?.at(-1) ?? null;
+}
+
 function createNodeButton(node, position, query) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -693,13 +711,16 @@ function createNodeButton(node, position, query) {
     button.style.left = `${position.x}px`;
     button.style.top = `${position.y}px`;
     const isSelected = node.id === selectedNodeId;
-    const isActive = graph?.activePath?.includes(node.id) === true;
+    // Only the final node is the currently visible message. Earlier nodes
+    // remain in the path but do not receive the solid active fill.
+    const isActive = node.id === getCurrentNodeId();
     button.classList.toggle('stplus-branching-node-selected', isSelected);
     button.classList.toggle('stplus-branching-node-active', isActive);
     const matches = !query || `${node.label} ${node.name} ${node.content}`.toLowerCase().includes(query);
     button.classList.toggle('stplus-branching-node-dimmed', !matches);
-    button.title = `${isActive ? 'Active chat message\n' : ''}${isSelected ? 'Selected for preview/jump\n' : ''}${node.label}\n${getPreviewText(node)}`;
+    button.title = `${isActive ? 'Current chat message\\n' : ''}${isSelected ? 'Selected for preview/jump\\n' : ''}${node.label}\\n${getPreviewText(node)}`;
     button.setAttribute('aria-label', `${node.label}${isActive ? ' (active chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
+    button.setAttribute('aria-label', `${node.label}${isActive ? ' (current chat message)' : ''}${isSelected ? ' (selected)' : ''}`);
     button.textContent = node.role === 'user' ? 'U' : node.role === 'system' ? 'S' : 'A';
     button.addEventListener('click', () => selectNode(node.id));
     button.addEventListener('dblclick', jumpToSelected);
@@ -780,7 +801,8 @@ function render() {
     if (previewTitle) previewTitle.textContent = selected ? `${selected.label}${selected.variantCount > 1 ? ` · variant ${selected.swipeIndex + 1}/${selected.variantCount}` : ''}` : 'Select a message node';
     if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
-    if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'} · ${graph.activePath.length} active`;
+    const currentNode = graph.nodes[getCurrentNodeId()];
+    if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'} · current ${currentNode?.label ?? 'none'}`;
 }
 
 function createWindow() {
@@ -836,7 +858,7 @@ function createWindow() {
 
     const legend = document.createElement('small');
     legend.className = 'stplus-branching-legend';
-    legend.textContent = 'Solid fill = active chat path · colored ring = selected node';
+    legend.textContent = 'Solid fill = current chat message · colored ring = selected node';
     panel.append(header, controls, legend, tree, preview, compatibility);
     document.body.appendChild(panel);
 }
@@ -1042,6 +1064,7 @@ export function refresh() {
     }
     installButton();
     syncGraph();
+    render();
 }
 
 export { createGraph, getVariantContents, getActiveSwipeIndex };
