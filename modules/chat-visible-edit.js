@@ -1,5 +1,6 @@
 const EDITING_CLASS = 'stplus-visible-editing';
 const ACTIONS_CLASS = 'stplus-visible-edit-actions';
+const ACTION_HOST_CLASS = 'stplus-visible-edit-action-host';
 
 let context = null;
 let settings = null;
@@ -93,6 +94,15 @@ function createAction(iconClass, title, onClick) {
     return action;
 }
 
+function getActionHost(messageElement) {
+    // Keep the edit controls in the message header. The footer of a message
+    // is occupied by SillyTavern's swipe controls, so appending controls to
+    // .mes_block can put the cancel button on top of the swipe arrow/counter.
+    return messageElement.querySelector('.mes_block > .ch_name')
+        ?? messageElement.querySelector('.ch_name')
+        ?? messageElement.querySelector('.mes_block');
+}
+
 function syncMessageSwipe(message, text) {
     if (!Array.isArray(message?.swipes) || message.swipes.length === 0) return;
     const swipeId = Number.parseInt(message.swipe_id, 10);
@@ -168,7 +178,7 @@ function beginEdit(messageElement, messageText, event) {
     const confirm = createAction('fa-solid fa-check', 'Confirm', confirmEdit);
     const cancel = createAction('fa-solid fa-xmark', 'Cancel', cancelEdit);
     const actions = document.createElement('div');
-    actions.className = ACTIONS_CLASS;
+    actions.className = `${ACTIONS_CLASS} ${ACTION_HOST_CLASS}`;
     actions.append(confirm, cancel);
     edit.actions = actions;
 
@@ -178,7 +188,7 @@ function beginEdit(messageElement, messageText, event) {
     messageText.setAttribute('spellcheck', 'false');
     messageText.setAttribute('role', 'textbox');
     messageText.setAttribute('aria-label', `Edit message ${messageId + 1}`);
-    messageText.closest('.mes_block')?.appendChild(actions);
+    getActionHost(messageElement)?.appendChild(actions);
     activeEdit = edit;
 
     event.preventDefault();

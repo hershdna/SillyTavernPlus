@@ -371,10 +371,12 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 }
 
 .stplus-visible-edit-actions {
-    display: flex;
-    justify-content: flex-end;
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
     gap: 4px;
-    margin-top: 5px;
+    margin: 0 0 0 4px;
+    vertical-align: middle;
 }
 
 .stplus-visible-edit-action {
@@ -383,6 +385,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     height: 28px;
     padding: 0;
     line-height: 1;
+    margin: 0;
 }
 
 .stplus-wi-reasoning-setting {
