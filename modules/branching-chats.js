@@ -103,6 +103,21 @@ function centerTreeView() {
     applyTreeViewTransform();
 }
 
+function centerActiveNodeView(positions) {
+    const tree = panel?.querySelector('.stplus-branching-tree');
+    const canvas = panel?.querySelector('.stplus-branching-tree-canvas');
+    const activeNode = positions?.get?.(getCurrentNodeId());
+    if (!(tree instanceof HTMLElement) || !(canvas instanceof HTMLElement) || !activeNode) {
+        centerTreeView();
+        return;
+    }
+    if (!tree.clientWidth || !tree.clientHeight || !canvas.offsetWidth || !canvas.offsetHeight) return;
+    treePanX = tree.clientWidth / 2 - (activeNode.x + TREE_NODE_RADIUS) * treeZoom;
+    treePanY = tree.clientHeight / 2 - activeNode.y * treeZoom;
+    treeViewInitialized = true;
+    applyTreeViewTransform();
+}
+
 function getTreePointerPosition(event, tree) {
     const rect = tree.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -948,7 +963,7 @@ function syncGraph(force = false) {
     normalizeGraph(graph);
     if (!selectedNodeId || !graph.nodes[selectedNodeId]) selectedNodeId = activePath.at(-1) ?? null;
     schedulePersist();
-    render();
+    render({ centerActiveNode: true });
 }
 
 function getPathToNode(nodeId) {
@@ -1231,7 +1246,7 @@ function createNodeButton(node, position, query) {
     return button;
 }
 
-function render() {
+function render({ centerActiveNode = false } = {}) {
     if (!panel || !graph) return;
     const nodeLayer = panel.querySelector('.stplus-branching-node-layer');
     const edgeLayer = panel.querySelector('.stplus-branching-edge-layer');
@@ -1310,7 +1325,8 @@ function render() {
     if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'}`;
     treeCanvas.style.width = `${canvasWidth}px`;
     treeCanvas.style.height = `${canvasHeight}px`;
-    if (!treeViewInitialized) centerTreeView();
+    if (centerActiveNode) centerActiveNodeView(positions);
+    else if (!treeViewInitialized) centerTreeView();
     else applyTreeViewTransform();
 }
 
