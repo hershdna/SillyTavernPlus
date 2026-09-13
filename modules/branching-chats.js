@@ -8,28 +8,6 @@ const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
 const PERSIST_DELAY = 350;
 const CHAT_STATE_POLL_INTERVAL = 100;
-const DEBUG_CHAT_LIFECYCLE = true;
-let lastDebugState = '';
-
-function debugChatLifecycle(phase, extra = {}) {
-    if (!DEBUG_CHAT_LIFECYCLE) return;
-    const state = {
-        phase,
-        chatKey: getChatKey(),
-        chatIdentity: getChatIdentity(),
-        chatLength: getChat().length,
-        loadedChatKey,
-        loadedChatRawKey,
-        loadedChatEventKey,
-        graphNodes: graph ? Object.keys(graph.nodes ?? {}).length : null,
-        ...extra,
-    };
-    const serialized = JSON.stringify(state);
-    if (serialized === lastDebugState) return;
-    lastDebugState = serialized;
-    console.warn('[SillyTavernPlus][chat-debug] ' + serialized);
-}
-
 let context = null;
 let settings = null;
 let panel = null;
@@ -811,7 +789,6 @@ function mergeGeneratedSiblingIntoSwipe(message, parentId, sourceIndex) {
 }
 
 function syncGraph(force = false) {
-    debugChatLifecycle('sync-enter', { force, generationActive, enabled: settings?.branchingChatsEnabled });
     if (!settings?.branchingChatsEnabled) return;
     // The chat array is intentionally mutable during generation. Wait for
     // GENERATION_ENDED so streaming/reasoning updates cannot become nodes.
@@ -819,13 +796,11 @@ function syncGraph(force = false) {
     // deliver CHAT_LOADED to third-party listeners, and that would leave the
     // next chat permanently blank. The generation guard is sufficient.
     if (generationActive) {
-        debugChatLifecycle('sync-blocked-generation');
         return;
     }
     const chatKey = getChatKey();
     const chatIdentity = getChatIdentity();
     if (!chatKey) {
-        debugChatLifecycle('sync-no-chat-key');
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
@@ -882,7 +857,6 @@ function syncGraph(force = false) {
     normalizeGraph(graph);
     if (!selectedNodeId || !graph.nodes[selectedNodeId]) selectedNodeId = activePath.at(-1) ?? null;
     schedulePersist();
-    debugChatLifecycle('sync-render', { signatureLength: signature.length });
     render();
 }
 
@@ -1347,7 +1321,10 @@ function bindEvents() {
         if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
     };
     const onChatChanged = (chatId) => {
-        debugChatLifecycle('event-chat-changed', { eventChatId: chatId });
+        // Generation state belongs to the chat that was being generated.
+        // Reset it on a chat transition even if ST's generation-ended event
+        // was delayed or was not delivered to third-party listeners.
+        generationActive = false;
         // CHAT_CHANGED is the stable lifecycle signal available across ST
         // releases. CHAT_LOADED is not present in every release and may be
         // delivered before or after this callback. Invalidate the watcher
@@ -1418,7 +1395,8 @@ function bindEvents() {
     };
 
     const onChatCreated = () => {
-        debugChatLifecycle('event-chat-created');
+        // A newly created chat cannot still be streaming the previous chat.
+        generationActive = false;
         // A fresh chat can emit CHAT_CREATED after CHAT_LOADED and
         // CHAT_CHANGED. In that order the graph is already the new chat's
         // graph; clearing it here would restore the stale-viewport bug.
@@ -1465,7 +1443,9 @@ function bindEvents() {
     };
 
     const onChatLoaded = (detail) => {
-        debugChatLifecycle('event-chat-loaded', { eventChatId: getLifecycleChatKey(detail) });
+        // CHAT_LOADED replaces the chat object and metadata. Clear transient
+        // state from the previous chat before the authoritative rebuild below.
+        generationActive = false;
         // CHAT_LOADED is the authoritative point: chat and chat_metadata have
         // been replaced and SillyTavern has finished loading the file.
         const keepWindowOpen = reopenAfterChatLoad
@@ -1507,6 +1487,7 @@ function bindEvents() {
     };
 
     const onChatDeleted = (deletedChat) => {
+        generationActive = false;
         // Deleting an unrelated chat from the chat browser must not discard
         // the tree for the chat that is still open. ST versions differ in
         // whether this event carries a string ID or an object, so only treat
