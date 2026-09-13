@@ -29,6 +29,64 @@ let reopenAfterChatLoad = false;
 let jumpInProgress = false;
 let persistRevision = 0;
 let persistQueue = Promise.resolve();
+let chatStateWatcher = null;
+let observedChatIdentity = null;
+let observedChatIdentityTicks = 0;
+
+function startChatStateWatcher() {
+    if (chatStateWatcher) return;
+    // Some chat-browser paths replace the chat object without reliably
+    // emitting every lifecycle event to third-party extensions. Keep a
+    // lightweight identity/signature watcher as a safety net.
+    const check = () => {
+        const currentChatIdentity = getChatIdentity();
+        if (currentChatIdentity !== observedChatIdentity) {
+            observedChatIdentity = currentChatIdentity;
+            observedChatIdentityTicks = 0;
+            return;
+        }
+        observedChatIdentityTicks += 1;
+        // Require a stable identity for several ticks so an intermediate
+        // empty/loading state cannot overwrite the new chat's metadata.
+        if (observedChatIdentityTicks < 3) return;
+        if (!currentChatIdentity) {
+            if (graph || loadedChatKey || panel?.classList.contains('stplus-branching-window-open')) {
+                window.clearTimeout(syncTimer);
+                window.clearTimeout(persistTimer);
+                persistRevision += 1;
+                chatLoadPending = false;
+                graph = null;
+                loadedChatKey = null;
+                lastChatSignature = '';
+                selectedNodeId = null;
+                reopenAfterChatLoad = false;
+                closeWindow();
+                document.getElementById(MODULE_BUTTON_ID)?.remove();
+            }
+            return;
+        }
+        if (generationActive) return;
+        if (currentChatIdentity !== loadedChatKey) {
+            const keepWindowOpen = reopenAfterChatLoad
+                || panel?.classList.contains('stplus-branching-window-open') === true;
+            chatLoadPending = false;
+            newChatPending = false;
+            graph = null;
+            loadedChatKey = null;
+            lastChatSignature = '';
+            selectedNodeId = null;
+            pendingSelectionNodeId = null;
+            loadedChatEventKey = currentChatIdentity;
+            syncGraph(true);
+            if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+            reopenAfterChatLoad = false;
+            render();
+            return;
+        }
+        if (!chatLoadPending) syncGraph(false);
+    };
+    chatStateWatcher = window.setInterval(check, 300);
+}
 
 function getLiveContext() {
     // SillyTavern can replace chat and chat_metadata objects while loading a
@@ -1161,6 +1219,7 @@ export function initialize(stContext, stSettings) {
     settings = stSettings;
     createWindow();
     bindEvents();
+    startChatStateWatcher();
 }
 
 export function refresh() {
