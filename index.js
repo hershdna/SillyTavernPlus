@@ -61,11 +61,24 @@
                 else window.setTimeout(scan, 0);
             };
             const frontingMutationSelector = '#movingDivs, #top-settings-holder, #top-bar, [data-dragged], [role="dialog"], .stplus-branching-window, .ui-dialog, .ui-autocomplete, .popup';
+            const branchingWindowSelector = '#stplus-branching-chats-window';
+            const isInsideBranchingWindow = (element) => {
+                const branchingWindow = document.querySelector(branchingWindowSelector);
+                return element instanceof Element && branchingWindow instanceof Element
+                    && element !== branchingWindow
+                    && branchingWindow.contains(element);
+            };
             const isRelevantMutation = (mutation) => {
                 const target = mutation.target instanceof Element ? mutation.target : null;
+                // Rendering selection must not trigger another global scan:
+                // the branch module rebuilds its buttons during a scan, and
+                // observing those children can detach the button being clicked.
+                if (isInsideBranchingWindow(target)) return false;
                 if (target === document.body || target?.matches(frontingMutationSelector) || target?.closest(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`)) return true;
                 return Array.from(mutation.addedNodes).some((node) => {
                     if (!(node instanceof Element)) return false;
+                    if (node.matches(branchingWindowSelector)) return true;
+                    if (isInsideBranchingWindow(node)) return false;
                     return node.matches(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`)
                         || node.parentElement?.matches('#movingDivs, #top-settings-holder, #top-bar')
                         || Boolean(node.querySelector(`.alternate_grettings, #WorldInfo, #wiCheckboxes, #wiActivationSettings, #top-settings-holder, #top-bar, #extensionTopBar, ${frontingMutationSelector}`));
