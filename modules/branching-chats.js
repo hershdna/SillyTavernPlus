@@ -7,6 +7,7 @@ const SCHEMA_VERSION = 3;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
 const PERSIST_DELAY = 350;
+const CHAT_STATE_POLL_INTERVAL = 100;
 
 let context = null;
 let settings = null;
@@ -32,7 +33,7 @@ let persistRevision = 0;
 let persistQueue = Promise.resolve();
 let chatStateWatcher = null;
 let observedChatIdentity = null;
-let observedChatIdentityTicks = 0;
+let observedChatState = '';
 let chatDomWatcher = null;
 let chatDomSyncTimer = null;
 const objectIdentityTokens = new WeakMap();
@@ -138,43 +139,43 @@ function startChatDomWatcher() {
 }
 function startChatStateWatcher() {
     if (chatStateWatcher) return;
-    // Some chat-browser paths replace the chat object without reliably
-    // emitting every lifecycle event to third-party extensions. Keep a
-    // lightweight identity/signature watcher as a safety net.
+    // Some chat-browser paths replace the chat and/or metadata without
+    // reliably emitting every lifecycle event to third-party extensions.
+    // Observe the live state itself. The full message signature is included
+    // because a few ST paths can reuse the first message object while loading
+    // another file; the old identity-only watcher missed that transition.
     const check = () => {
         if (!settings?.branchingChatsEnabled) return;
+        // Never consume the observed state while a response is streaming.
+        // Otherwise the final state would look unchanged when generation
+        // ends and the graph would miss the completed response.
+        if (isGenerationInProgress()) return;
+        const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
-        if (currentChatIdentity !== observedChatIdentity) {
-            observedChatIdentity = currentChatIdentity;
-            observedChatIdentityTicks = 0;
-            return;
-        }
-        observedChatIdentityTicks += 1;
-        // One settled interval is enough here. CHAT_LOADED is authoritative,
-        // while this watcher covers chat-browser paths that skip third-party
-        // lifecycle events; waiting several intervals leaves a stale panel
-        // visible long enough to make the new chat unusable.
-        if (observedChatIdentityTicks < 1) return;
+        const currentChatSignature = currentChatIdentity ? getChatSignature(getChat()) : '';
+        const currentChatState = JSON.stringify([currentChatKey, currentChatIdentity, currentChatSignature]);
+        if (currentChatState === observedChatState) return;
+        observedChatState = currentChatState;
         if (!currentChatIdentity) {
-            if (graph || loadedChatKey || panel?.classList.contains('stplus-branching-window-open')) {
-                window.clearTimeout(syncTimer);
-                window.clearTimeout(persistTimer);
-                persistRevision += 1;
-                chatLoadPending = false;
-                graph = null;
-                loadedChatKey = null;
-                lastChatSignature = '';
-                loadedChatEventKey = null;
-                loadedChatRawKey = null;
-                selectedNodeId = null;
-                reopenAfterChatLoad = false;
-                closeWindow();
-                document.getElementById(MODULE_BUTTON_ID)?.remove();
-            }
+            window.clearTimeout(syncTimer);
+            window.clearTimeout(persistTimer);
+            persistRevision += 1;
+            chatLoadPending = false;
+            graph = null;
+            loadedChatKey = null;
+            lastChatSignature = '';
+            loadedChatEventKey = null;
+            loadedChatRawKey = null;
+            selectedNodeId = null;
+            pendingSelectionNodeId = null;
+            reopenAfterChatLoad = false;
+            closeWindow();
+            document.getElementById(MODULE_BUTTON_ID)?.remove();
             return;
         }
-        if (generationActive) return;
-        if (currentChatIdentity !== loadedChatKey) {
+        // A changed load identity or raw chat key means a different chat was
+        // loaded, even if the lifecycle event was absent or arrived early.
+        if (currentChatIdentity !== loadedChatKey || currentChatKey !== loadedChatRawKey) {
             const keepWindowOpen = reopenAfterChatLoad
                 || panel?.classList.contains('stplus-branching-window-open') === true;
             chatLoadPending = false;
@@ -185,23 +186,32 @@ function startChatStateWatcher() {
             selectedNodeId = null;
             pendingSelectionNodeId = null;
             loadedChatEventKey = currentChatIdentity;
-            loadedChatRawKey = getChatKey();
+            loadedChatRawKey = currentChatKey;
             syncGraph(true);
             if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
             reopenAfterChatLoad = false;
             render();
             return;
         }
-        if (!chatLoadPending) syncGraph(false);
+        // The chat can be replaced without a load event while retaining the
+        // same identity. Force a viewport rebuild for that settled state.
+        syncGraph(true);
     };
-    chatStateWatcher = window.setInterval(check, 300);
+    chatStateWatcher = window.setInterval(check, CHAT_STATE_POLL_INTERVAL);
 }
 
 function getLiveContext() {
     // SillyTavern can replace chat and chat_metadata objects while loading a
     // chat. The context returned during extension startup may still reference
     // the old objects, so use a fresh context for stateful operations.
-    return globalThis.SillyTavern?.getContext?.() ?? context;
+    try {
+        return globalThis.SillyTavern?.getContext?.() ?? context;
+    } catch (error) {
+        // Some SillyTavern builds briefly throw while the selected character or
+        // group is being swapped. Keep the extension alive and use the last
+        // context until the next poll/event sees the settled chat.
+        return context;
+    }
 }
 
 const clone = (value) => {
@@ -228,7 +238,30 @@ function getChat() {
 
 function getChatKey() {
     const liveContext = getLiveContext();
-    const currentChatId = liveContext?.getCurrentChatId?.() ?? liveContext?.chatId;
+    // getCurrentChatId() is the documented live accessor. Do not prefer a
+    // context property first: some ST versions expose `chatId` as a snapshot
+    // while the accessor has already moved to the newly opened chat.
+    let currentChatId = null;
+    try {
+        currentChatId = liveContext?.getCurrentChatId?.();
+    } catch (error) {
+        currentChatId = null;
+    }
+    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
+        currentChatId = liveContext?.chatId;
+    }
+    // Older SillyTavern context versions do not expose chatId at all. Since
+    // loaded chats have a stable metadata integrity token, use it as a
+    // chat-scoped fallback when there is actual chat data. This keeps later
+    // chat opens addressable without ever using the character ID (which would
+    // incorrectly merge multiple chats for one character).
+    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
+        const integrity = liveContext?.chatMetadata?.integrity ?? liveContext?.chat_metadata?.integrity;
+        if (Array.isArray(liveContext?.chat) && liveContext.chat.length > 0
+            && typeof integrity === 'string' && integrity.trim()) {
+            currentChatId = `integrity:${integrity}`;
+        }
+    }
     if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') return null;
     return String(currentChatId);
 }
@@ -543,6 +576,36 @@ function findNodeByKey(key) {
     return Object.values(graph?.nodes ?? {}).find((node) => node.key === key) ?? null;
 }
 
+function findNodeByStructuralSlot(parentId, sourceIndex, swipeIndex, message) {
+    const normalizedParentId = parentId ?? null;
+    const role = getNodeRole(message);
+    const candidates = Object.values(graph?.nodes ?? {}).filter((node) =>
+        node.parentId === normalizedParentId
+        && node.sourceIndex === sourceIndex
+        && node.swipeIndex === swipeIndex
+        && node.role === role);
+    // A native swipe occupies one structural slot. Use the slot only when it
+    // is unambiguous; legacy duplicate nodes must not be silently conflated.
+    return candidates.length === 1 ? candidates[0] : null;
+}
+
+function updateNodeFromMessage(node, message, sourceIndex, swipeIndex, content, variantCount) {
+    node.key = getNodeKey(node.parentId, sourceIndex, swipeIndex, content);
+    node.content = content;
+    node.sourceIndex = sourceIndex;
+    node.swipeIndex = swipeIndex;
+    node.variantCount = variantCount;
+    node.role = getNodeRole(message);
+    node.name = String(message?.name ?? '');
+    node.label = getNodeLabel(message, sourceIndex, swipeIndex, variantCount);
+    node.message = clone(message) ?? node.message;
+    node.message.mes = content;
+    if (Array.isArray(node.message.swipes) && node.message.swipes.length > 0) {
+        node.message.swipe_id = swipeIndex;
+    }
+    setMessageNodeId(message, swipeIndex, node.id);
+}
+
 function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variantCount) {
     const key = getNodeKey(parentId, sourceIndex, swipeIndex, content);
     const persistedId = getMessageNodeId(message, swipeIndex);
@@ -552,21 +615,17 @@ function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variant
         && persistedNode.parentId === normalizedParentId
         && persistedNode.sourceIndex === sourceIndex
         && persistedNode.swipeIndex === swipeIndex) {
-        persistedNode.content = content;
-        persistedNode.variantCount = variantCount;
-        persistedNode.role = getNodeRole(message);
-        persistedNode.name = String(message?.name ?? '');
-        persistedNode.label = getNodeLabel(message, sourceIndex, swipeIndex, variantCount);
-        persistedNode.message = clone(message) ?? persistedNode.message;
-        persistedNode.message.mes = content;
-        if (Array.isArray(persistedNode.message.swipes) && persistedNode.message.swipes.length > 0) {
-            persistedNode.message.swipe_id = swipeIndex;
-        }
+        updateNodeFromMessage(persistedNode, message, sourceIndex, swipeIndex, content, variantCount);
         return persistedNode;
     }
-    const existing = findNodeByKey(key);
+    // The message-level ID is preferred, followed by the exact content key.
+    // Some SillyTavern serializers/extensions omit unknown `extra` fields on
+    // assistant messages, so the ID may be absent after reload. In that case
+    // use the stable parent/depth/swipe slot before creating a new node.
+    const existing = findNodeByKey(key)
+        ?? findNodeByStructuralSlot(parentId, sourceIndex, swipeIndex, message);
     if (existing) {
-        setMessageNodeId(message, swipeIndex, existing.id);
+        updateNodeFromMessage(existing, message, sourceIndex, swipeIndex, content, variantCount);
         return existing;
     }
     const nodeId = newId();
@@ -1140,7 +1199,11 @@ function installButton() {
 
 function bindEvents() {
     if (listenersBound) return;
-    const eventTypes = context?.eventTypes ?? {};
+    const liveContext = getLiveContext();
+    const eventTypeSources = [context?.eventTypes, liveContext?.eventTypes]
+        .filter((value) => value && typeof value === 'object');
+    const eventSources = [...new Set([context?.eventSource, liveContext?.eventSource]
+        .filter((value) => value && typeof value.on === 'function'))];
     const scheduleSync = (delay = SYNC_DELAY) => {
         window.clearTimeout(syncTimer);
         syncTimer = window.setTimeout(() => syncGraph(true), delay);
@@ -1163,12 +1226,15 @@ function bindEvents() {
         if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
     };
     const onChatChanged = (chatId) => {
-        // CHAT_LOADED is emitted after SillyTavern has replaced chat and
-        // metadata, then CHAT_CHANGED follows. Do not clear the graph again
-        // in that second event or the viewport can remain on the old tree.
+        // CHAT_CHANGED is the stable lifecycle signal available across ST
+        // releases. CHAT_LOADED is not present in every release and may be
+        // delivered before or after this callback. Invalidate the watcher
+        // cache here: otherwise it can already contain the new chat state,
+        // see no change after we clear the graph, and leave the panel blank.
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
+        observedChatState = '';
         const eventChatKey = typeof chatId === 'string' || typeof chatId === 'number'
             ? String(chatId)
             : getChatKey();
@@ -1178,16 +1244,15 @@ function bindEvents() {
         else reopenAfterChatLoad = false;
 
         const currentChatIdentity = getChatIdentity();
-        // CHAT_CHANGED can arrive before CHAT_LOADED. Do not compare only the
-        // current getter: it may still expose the previous chat during that
-        // transition. Require the event ID, raw loaded ID, and load token to
-        // agree before retaining the existing graph.
+        // Retain state only when the loaded handler and this event agree. The
+        // normal path below clears the viewport immediately, then the state
+        // watcher or CHAT_LOADED rebuilds it from the newly active chat.
         const chatWasLoaded = eventChatKey !== null
             && currentChatKey === eventChatKey
             && loadedChatRawKey === eventChatKey
             && currentChatIdentity !== null
             && loadedChatEventKey === currentChatIdentity;
-        chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED) && !chatWasLoaded;
+        chatLoadPending = false;
         if (chatWasLoaded) {
             // The loaded-chat handler already selected the new graph. Keep
             // the panel open state and refresh the viewport in this event too
@@ -1215,7 +1280,9 @@ function bindEvents() {
         pendingSelectionNodeId = null;
         if (currentChatKey) {
             installButton();
-            if (!chatLoadPending) scheduleSync(250);
+            // This is deliberately scheduled even when CHAT_LOADED exists:
+            // older/current ST paths can omit it for chat-browser actions.
+            scheduleSync(250);
         } else {
             chatLoadPending = false;
             loadedChatEventKey = null;
@@ -1228,6 +1295,10 @@ function bindEvents() {
         // A fresh chat can emit CHAT_CREATED after CHAT_LOADED and
         // CHAT_CHANGED. In that order the graph is already the new chat's
         // graph; clearing it here would restore the stale-viewport bug.
+        // CHAT_CREATED can be emitted after the chat state has already
+        // changed. Invalidate the watcher cache for the same reason as
+        // CHAT_CHANGED, and let the settled state decide what to load.
+        observedChatState = '';
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
         const chatWasLoaded = currentChatIdentity !== null
@@ -1246,7 +1317,7 @@ function bindEvents() {
 
         newChatPending = true;
         reloadTargetChatKey = null;
-        chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED);
+        chatLoadPending = false;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
@@ -1259,7 +1330,7 @@ function bindEvents() {
         pendingSelectionNodeId = null;
         if (getChatKey()) {
             installButton();
-            if (!chatLoadPending) scheduleSync(250);
+            scheduleSync(250);
         } else {
             chatLoadPending = false;
             document.getElementById(MODULE_BUTTON_ID)?.remove();
@@ -1273,6 +1344,7 @@ function bindEvents() {
             || panel?.classList.contains('stplus-branching-window-open') === true;
         reopenAfterChatLoad = keepWindowOpen;
         chatLoadPending = false;
+        observedChatState = '';
         window.clearTimeout(syncTimer);
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
@@ -1322,6 +1394,7 @@ function bindEvents() {
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
+        observedChatState = '';
         closeWindow();
         graph = null;
         loadedChatKey = null;
@@ -1331,9 +1404,12 @@ function bindEvents() {
         document.getElementById(MODULE_BUTTON_ID)?.remove();
     };
     const on = (name, handler) => {
-        const eventName = eventTypes[name];
-        if (!eventName) return;
-        context.eventSource?.on?.(eventName, handler);
+        const eventNames = [...new Set(eventTypeSources
+            .map((eventTypes) => eventTypes[name])
+            .filter(Boolean))];
+        eventSources.forEach((eventSource) => {
+            eventNames.forEach((eventName) => eventSource.on(eventName, handler));
+        });
     };
     on('GENERATION_STARTED', onGenerationStarted);
     on('GENERATION_ENDED', onGenerationEnded);

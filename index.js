@@ -1,10 +1,19 @@
 (() => {
     'use strict';
 
-    // SillyTavern loads extension entrypoints as ES modules, where
-    // document.currentScript is null. Resolve sibling modules from this file.
+    // SillyTavern imports the manifest entrypoint as an ES module. Resolve
+    // sibling modules from this module URL; a document-relative fallback is
+    // incorrect for global extensions and makes the whole extension fail to
+    // initialize when it is served from /scripts/extensions/third-party/.
     const extensionRoot = new URL('./', import.meta.url);
-    const loadModule = (name) => import(new URL(`modules/${name}.js`, extensionRoot));
+    // SillyTavern can re-run an extension entrypoint without a full page
+    // navigation. Change this key whenever manifest.json is bumped so a
+    // repaired module cannot be hidden by the browser's ESM cache.
+    const MODULE_CACHE_VERSION = '0.5.40';
+    const loadModule = (name) => {
+        const moduleUrl = new URL(`modules/${name}.js?v=${MODULE_CACHE_VERSION}`, extensionRoot);
+        return import(moduleUrl);
+    };
 
     async function initialize() {
         const context = window.SillyTavern?.getContext?.();
