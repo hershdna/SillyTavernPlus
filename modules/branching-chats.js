@@ -1069,7 +1069,7 @@ function updateSelectionPresentation() {
     const previewTitle = panel.querySelector('.stplus-branching-preview-title');
     const previewText = panel.querySelector('.stplus-branching-preview-text');
     const jumpButton = panel.querySelector('[data-action="jump"]');
-    if (previewTitle) previewTitle.textContent = selected ? selected.label + (selected.variantCount > 1 ? ' · variant ' + (selected.swipeIndex + 1) + '/' + selected.variantCount : '') : 'Select a message node';
+    if (previewTitle) previewTitle.textContent = selected ? selected.label + (selected.variantCount > 1 ? ' · swipe ' + (selected.swipeIndex + 1) + '/' + selected.variantCount : '') : 'Select a message node';
     if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
 }
@@ -1201,19 +1201,18 @@ function render() {
         const end = positions.get(node.id);
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(start.x + 22));
-        line.setAttribute('y1', String(start.y + 22));
+        line.setAttribute('y1', String(start.y));
         line.setAttribute('x2', String(end.x + 22));
-        line.setAttribute('y2', String(end.y + 22));
+        line.setAttribute('y2', String(end.y));
         line.classList.add('stplus-branching-edge');
         edgeLayer.appendChild(line);
     });
 
     const selected = getSelectedNode();
-    if (previewTitle) previewTitle.textContent = selected ? `${selected.label}${selected.variantCount > 1 ? ` · variant ${selected.swipeIndex + 1}/${selected.variantCount}` : ''}` : 'Select a message node';
+    if (previewTitle) previewTitle.textContent = selected ? `${selected.label}${selected.variantCount > 1 ? ` · swipe ${selected.swipeIndex + 1}/${selected.variantCount}` : ''}` : 'Select a message node';
     if (previewText) previewText.textContent = selected ? (getPreviewText(selected) || '(empty message)') : 'Click a node to preview its message. Double-click or use Jump to Here to make it the active chat path.';
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = !selected;
-    const currentNode = graph.nodes[getCurrentNodeId()];
-    if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'} · current ${currentNode?.label ?? 'none'}`;
+    if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'}`;
 }
 
 function createWindow() {
@@ -1241,11 +1240,11 @@ function createWindow() {
     search.placeholder = 'Search messages…';
     search.title = 'Filter the branch tree by message text or speaker';
     search.addEventListener('input', render);
-    const refreshButton = createButton('Refresh', 'Rebuild the tree from the current chat', () => syncGraph(true));
     const jump = createButton('Jump to Here', 'Make the selected node the active chat path', jumpToSelected);
     jump.dataset.action = 'jump';
+    jump.classList.add('stplus-branching-preview-jump');
     const exportButton = createButton('Export Branch', 'Export the selected path as a vanilla SillyTavern JSONL chat', exportSelectedBranch);
-    controls.append(search, refreshButton, jump, exportButton);
+    controls.append(search, exportButton);
 
     const tree = document.createElement('div');
     tree.className = 'stplus-branching-tree';
@@ -1267,16 +1266,11 @@ function createWindow() {
     previewTitle.className = 'stplus-branching-preview-title';
     const previewText = document.createElement('p');
     previewText.className = 'stplus-branching-preview-text';
-    preview.append(previewTitle, previewText);
-
-    const compatibility = document.createElement('small');
-    compatibility.className = 'stplus-branching-compatibility';
-    compatibility.textContent = 'This tree is a navigator for the current chat. Swipe/reroll variants and their continuations are stored in this chat’s metadata. Native SillyTavern Branch still creates a separate chat; use Export Branch for a vanilla-compatible copy.';
-
-    const legend = document.createElement('small');
-    legend.className = 'stplus-branching-legend';
-    legend.textContent = 'Solid fill = current chat message · colored ring = selected node';
-    panel.append(header, controls, legend, tree, preview, compatibility);
+    const previewActions = document.createElement('div');
+    previewActions.className = 'stplus-branching-preview-actions';
+    previewActions.appendChild(jump);
+    preview.append(previewTitle, previewText, previewActions);
+    panel.append(header, controls, tree, preview);
     document.body.appendChild(panel);
 }
 

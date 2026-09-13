@@ -500,7 +500,7 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     height: 44px;
     padding: 0;
     color: var(--SmartThemeBodyColor, #eee);
-    background: transparent;
+    background: #171717;
     border: 2px solid var(--SmartThemeBorderColor, #666);
     border-radius: 50%;
     cursor: pointer;
@@ -532,15 +532,6 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     opacity: 0.2;
 }
 
-.stplus-branching-legend {
-    display: block;
-    flex: 0 0 auto;
-    padding: 5px 12px;
-    color: var(--SmartThemeBodyColor, #eee);
-    opacity: 0.72;
-    border-top: 1px solid var(--SmartThemeBorderColor, #666);
-}
-
 .stplus-branching-preview {
     flex: 0 0 auto;
     max-height: 180px;
@@ -548,6 +539,12 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     padding: 10px 12px;
     background: rgb(255 255 255 / 4%);
     border-top: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-branching-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
 }
 
 .stplus-branching-preview-title {
@@ -560,15 +557,6 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     opacity: 0.85;
-}
-
-.stplus-branching-compatibility {
-    display: block;
-    flex: 0 0 auto;
-    padding: 7px 12px 9px;
-    color: var(--SmartThemeBodyColor, #eee);
-    border-top: 1px solid var(--SmartThemeBorderColor, #666);
-    opacity: 0.65;
 }
 
 .stplus-branching-toolbar-button span {

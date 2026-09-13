@@ -5,7 +5,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 ## Features
 
 - Reorder alternate greetings with numeric position controls.
-- Keep swipe/reroll variants and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, search, and vanilla JSONL branch export.
+- Keep swipe/reroll alternatives and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, search, and vanilla JSONL branch export.
 - Scope branch data and controls to the currently open chat; changing or closing a chat closes the branch window and clears its in-memory graph.
 - Reset branch state on SillyTavern chat creation/deletion events and guard stored metadata with the active chat identity.
 - Persist branch metadata through SillyTavern's dedicated metadata save path so jumps survive reloads and reopening the chat.
@@ -25,7 +25,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 
 ## Chat branches
 
-Open **Branches** while a chat is active. The window is a navigator: each message variant is a sibling at its turn depth, and later variants are children of the exact message they continue. Select a node and choose **Jump to Here** to make that path active; continuing the conversation records the new continuation in the same chat’s `stplusBranchingChats` metadata. This does not create a new entry in SillyTavern’s chat browser.
+Open **Branches** while a chat is active. The window is a navigator: each swipe is a sibling at its turn depth, and later swipes are children of the exact message they continue. Select a node and choose **Jump to Here** to make that path active; continuing the conversation records the new continuation in the same chat’s `stplusBranchingChats` metadata. This does not create a new entry in SillyTavern’s chat browser.
 
 SillyTavern’s native **Branch** message action remains unchanged and continues to create a separate vanilla chat. To turn an ST+ path into a normal chat file, select it and choose **Export Branch**, then import the generated JSONL through SillyTavern’s chat controls.
 
