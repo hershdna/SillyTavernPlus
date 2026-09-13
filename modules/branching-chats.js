@@ -49,6 +49,7 @@ let treeZoom = 1;
 let treePanX = 0;
 let treePanY = 0;
 let treeViewInitialized = false;
+let centerActiveNodePending = false;
 let treePanState = null;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
@@ -95,12 +96,13 @@ function resetTreeView() {
 function centerTreeView() {
     const tree = panel?.querySelector('.stplus-branching-tree');
     const canvas = panel?.querySelector('.stplus-branching-tree-canvas');
-    if (!(tree instanceof HTMLElement) || !(canvas instanceof HTMLElement)) return;
-    if (!tree.clientWidth || !tree.clientHeight || !canvas.offsetWidth || !canvas.offsetHeight) return;
+    if (!(tree instanceof HTMLElement) || !(canvas instanceof HTMLElement)) return false;
+    if (!tree.clientWidth || !tree.clientHeight || !canvas.offsetWidth || !canvas.offsetHeight) return false;
     treePanX = (tree.clientWidth - canvas.offsetWidth * treeZoom) / 2;
     treePanY = (tree.clientHeight - canvas.offsetHeight * treeZoom) / 2;
     treeViewInitialized = true;
     applyTreeViewTransform();
+    return true;
 }
 
 function centerActiveNodeView(positions) {
@@ -108,14 +110,14 @@ function centerActiveNodeView(positions) {
     const canvas = panel?.querySelector('.stplus-branching-tree-canvas');
     const activeNode = positions?.get?.(getCurrentNodeId());
     if (!(tree instanceof HTMLElement) || !(canvas instanceof HTMLElement) || !activeNode) {
-        centerTreeView();
-        return;
+        return centerTreeView();
     }
-    if (!tree.clientWidth || !tree.clientHeight || !canvas.offsetWidth || !canvas.offsetHeight) return;
+    if (!tree.clientWidth || !tree.clientHeight || !canvas.offsetWidth || !canvas.offsetHeight) return false;
     treePanX = tree.clientWidth / 2 - (activeNode.x + TREE_NODE_RADIUS) * treeZoom;
     treePanY = tree.clientHeight / 2 - activeNode.y * treeZoom;
     treeViewInitialized = true;
     applyTreeViewTransform();
+    return true;
 }
 
 function getTreePointerPosition(event, tree) {
@@ -932,6 +934,7 @@ function syncGraph(force = false) {
     const chat = getChat();
     const signature = getChatSignature(chat);
     if (!force && signature === lastChatSignature) return;
+    centerActiveNodePending = true;
     lastChatSignature = signature;
     if (!graph) graph = createGraph(chatKey);
     graph.chatId = chatKey;
@@ -1325,7 +1328,9 @@ function render({ centerActiveNode = false } = {}) {
     if (status) status.textContent = `${nodes.length} message node${nodes.length === 1 ? '' : 's'}`;
     treeCanvas.style.width = `${canvasWidth}px`;
     treeCanvas.style.height = `${canvasHeight}px`;
-    if (centerActiveNode) centerActiveNodeView(positions);
+    if (centerActiveNode || centerActiveNodePending) {
+        if (centerActiveNodeView(positions)) centerActiveNodePending = false;
+    }
     else if (!treeViewInitialized) centerTreeView();
     else applyTreeViewTransform();
 }
@@ -1692,6 +1697,7 @@ export function refresh() {
         return;
     }
     installButton();
+    centerActiveNodePending = true;
     syncGraph();
     render();
 }
