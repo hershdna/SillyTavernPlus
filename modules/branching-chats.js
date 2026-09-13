@@ -25,6 +25,7 @@ let pendingSelectionNodeId = null;
 let reloadTargetChatKey = null;
 let chatLoadPending = false;
 let loadedChatEventKey = null;
+let loadedChatRawKey = null;
 let reopenAfterChatLoad = false;
 let jumpInProgress = false;
 let persistRevision = 0;
@@ -32,6 +33,62 @@ let persistQueue = Promise.resolve();
 let chatStateWatcher = null;
 let observedChatIdentity = null;
 let observedChatIdentityTicks = 0;
+let chatDomWatcher = null;
+let chatDomSyncTimer = null;
+const objectIdentityTokens = new WeakMap();
+let nextObjectIdentityToken = 1;
+
+function getObjectIdentityToken(value) {
+    if (!value || typeof value !== 'object') return 'none';
+    let token = objectIdentityTokens.get(value);
+    if (!token) {
+        token = nextObjectIdentityToken++;
+        objectIdentityTokens.set(value, token);
+    }
+    return String(token);
+}
+
+function startChatDomWatcher() {
+    if (chatDomWatcher || typeof MutationObserver !== 'function') return;
+    const reconcile = () => {
+        if (!settings?.branchingChatsEnabled || generationActive || chatLoadPending) return;
+        const currentChatKey = getChatKey();
+        const currentChatIdentity = getChatIdentity();
+        if (!currentChatKey || !currentChatIdentity || currentChatIdentity === loadedChatKey) return;
+        const keepWindowOpen = reopenAfterChatLoad
+            || panel?.classList.contains('stplus-branching-window-open') === true;
+        window.clearTimeout(syncTimer);
+        window.clearTimeout(persistTimer);
+        persistRevision += 1;
+        graph = null;
+        loadedChatKey = null;
+        lastChatSignature = '';
+        selectedNodeId = null;
+        pendingSelectionNodeId = null;
+        loadedChatEventKey = currentChatIdentity;
+        loadedChatRawKey = currentChatKey;
+        syncGraph(true);
+        if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
+        reopenAfterChatLoad = false;
+        render();
+    };
+    const schedule = () => {
+        window.clearTimeout(chatDomSyncTimer);
+        chatDomSyncTimer = window.setTimeout(reconcile, 120);
+    };
+    chatDomWatcher = new MutationObserver((mutations) => {
+        const relevant = mutations.some((mutation) => {
+            const target = mutation.target instanceof Element
+                ? mutation.target
+                : mutation.target?.parentElement;
+            if (target?.closest?.('#chat')) return true;
+            return Array.from(mutation.addedNodes ?? []).some((node) =>
+                node instanceof Element && (node.id === 'chat' || node.closest?.('#chat')));
+        });
+        if (relevant) schedule();
+    });
+    chatDomWatcher.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
 
 function startChatStateWatcher() {
     if (chatStateWatcher) return;
@@ -47,9 +104,11 @@ function startChatStateWatcher() {
             return;
         }
         observedChatIdentityTicks += 1;
-        // Require a stable identity for several ticks so an intermediate
-        // empty/loading state cannot overwrite the new chat's metadata.
-        if (observedChatIdentityTicks < 3) return;
+        // One settled interval is enough here. CHAT_LOADED is authoritative,
+        // while this watcher covers chat-browser paths that skip third-party
+        // lifecycle events; waiting several intervals leaves a stale panel
+        // visible long enough to make the new chat unusable.
+        if (observedChatIdentityTicks < 1) return;
         if (!currentChatIdentity) {
             if (graph || loadedChatKey || panel?.classList.contains('stplus-branching-window-open')) {
                 window.clearTimeout(syncTimer);
@@ -59,6 +118,8 @@ function startChatStateWatcher() {
                 graph = null;
                 loadedChatKey = null;
                 lastChatSignature = '';
+                loadedChatEventKey = null;
+                loadedChatRawKey = null;
                 selectedNodeId = null;
                 reopenAfterChatLoad = false;
                 closeWindow();
@@ -78,6 +139,7 @@ function startChatStateWatcher() {
             selectedNodeId = null;
             pendingSelectionNodeId = null;
             loadedChatEventKey = currentChatIdentity;
+            loadedChatRawKey = getChatKey();
             syncGraph(true);
             if (keepWindowOpen) panel?.classList.add('stplus-branching-window-open');
             reopenAfterChatLoad = false;
@@ -129,14 +191,23 @@ function getChatIdentity() {
     const chatKey = getChatKey();
     if (!chatKey) return null;
     // Chat IDs can be reused or remain unchanged while SillyTavern loads a
-    // different file. Integrity is generated per chat file and distinguishes
-    // those transitions.
-    return `${chatKey}::${getChatIntegrity() ?? 'unknown'}`;
+    // different file. Include the integrity value and the object identities
+    // of the loaded metadata/first message as in-memory load tokens. The
+    // first message token stays stable while replies are appended, but changes
+    // when another chat file is loaded—even when its greeting text is equal.
+    const liveContext = getLiveContext();
+    const metadata = liveContext?.chatMetadata ?? liveContext?.chat_metadata ?? null;
+    const firstMessage = getChat()[0] ?? null;
+    return chatKey + '::' + (getChatIntegrity() ?? 'unknown')
+        + '::meta-' + getObjectIdentityToken(metadata)
+        + '::first-' + getObjectIdentityToken(firstMessage);
 }
+
+const EMPTY_CHAT_METADATA = {};
 
 function getChatMetadata() {
     const liveContext = getLiveContext();
-    return liveContext?.chatMetadata ?? liveContext?.chat_metadata ?? {};
+    return liveContext?.chatMetadata ?? liveContext?.chat_metadata ?? EMPTY_CHAT_METADATA;
 }
 
 function getChatIntegrity() {
@@ -539,6 +610,7 @@ function syncGraph(force = false) {
         newChatPending = false;
         chatLoadPending = false;
         loadedChatEventKey = null;
+        loadedChatRawKey = null;
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
@@ -1049,15 +1121,24 @@ function bindEvents() {
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
-        const currentChatKey = typeof chatId === 'string' || typeof chatId === 'number'
+        const eventChatKey = typeof chatId === 'string' || typeof chatId === 'number'
             ? String(chatId)
             : getChatKey();
+        const currentChatKey = getChatKey();
         const wasOpen = panel?.classList.contains('stplus-branching-window-open') === true;
         if (currentChatKey) reopenAfterChatLoad = reopenAfterChatLoad || wasOpen;
         else reopenAfterChatLoad = false;
 
         const currentChatIdentity = getChatIdentity();
-        const chatWasLoaded = currentChatIdentity !== null && loadedChatEventKey === currentChatIdentity;
+        // CHAT_CHANGED can arrive before CHAT_LOADED. Do not compare only the
+        // current getter: it may still expose the previous chat during that
+        // transition. Require the event ID, raw loaded ID, and load token to
+        // agree before retaining the existing graph.
+        const chatWasLoaded = eventChatKey !== null
+            && currentChatKey === eventChatKey
+            && loadedChatRawKey === eventChatKey
+            && currentChatIdentity !== null
+            && loadedChatEventKey === currentChatIdentity;
         chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED) && !chatWasLoaded;
         if (chatWasLoaded) {
             // The loaded-chat handler already selected the new graph. Keep
@@ -1068,7 +1149,7 @@ function bindEvents() {
                 loadedChatKey = null;
                 lastChatSignature = '';
             }
-            if (getChatKey() === currentChatKey) syncGraph(true);
+            if (getChatKey() === eventChatKey) syncGraph(true);
             if (reopenAfterChatLoad) panel?.classList.add('stplus-branching-window-open');
             render();
             reopenAfterChatLoad = false;
@@ -1077,6 +1158,8 @@ function bindEvents() {
 
         closeWindow();
         reloadTargetChatKey = null;
+        loadedChatEventKey = null;
+        loadedChatRawKey = null;
         graph = null;
         loadedChatKey = null;
         lastChatSignature = '';
@@ -1088,6 +1171,7 @@ function bindEvents() {
         } else {
             chatLoadPending = false;
             loadedChatEventKey = null;
+            loadedChatRawKey = null;
             document.getElementById(MODULE_BUTTON_ID)?.remove();
         }
     };
@@ -1098,7 +1182,9 @@ function bindEvents() {
         // graph; clearing it here would restore the stale-viewport bug.
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
-        const chatWasLoaded = currentChatIdentity !== null && loadedChatEventKey === currentChatIdentity;
+        const chatWasLoaded = currentChatIdentity !== null
+            && loadedChatRawKey === currentChatKey
+            && loadedChatEventKey === currentChatIdentity;
         if (chatWasLoaded) {
             newChatPending = false;
             chatLoadPending = false;
@@ -1143,6 +1229,7 @@ function bindEvents() {
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
         loadedChatEventKey = currentChatIdentity;
+        loadedChatRawKey = currentChatKey;
         if (!currentChatKey) {
             graph = null;
             loadedChatKey = null;
@@ -1183,6 +1270,7 @@ function bindEvents() {
         reloadTargetChatKey = null;
         chatLoadPending = false;
         loadedChatEventKey = null;
+        loadedChatRawKey = null;
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
@@ -1221,6 +1309,7 @@ export function initialize(stContext, stSettings) {
     createWindow();
     bindEvents();
     startChatStateWatcher();
+    startChatDomWatcher();
 }
 
 export function refresh() {
