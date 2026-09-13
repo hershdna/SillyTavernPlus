@@ -1,5 +1,15 @@
 {
   "display_name": "SillyTavernPlus",
+  "version": "0.5.38",
+  "author": "hershdna",
+  "homePage": "https://github.com/hershdna/SillyTavernPlus",
+  "loading_order": 9998,
+  "js": "index.js",
+  "css": "style.css",
+  "auto_update": true
+}
+{
+  "display_name": "SillyTavernPlus",
   "version": "0.5.37",
   "author": "hershdna",
   "homePage": "https://github.com/hershdna/SillyTavernPlus",
