@@ -66,6 +66,15 @@ function getChatKey() {
     return String(currentChatId);
 }
 
+function getChatIdentity() {
+    const chatKey = getChatKey();
+    if (!chatKey) return null;
+    // Chat IDs can be reused or remain unchanged while SillyTavern loads a
+    // different file. Integrity is generated per chat file and distinguishes
+    // those transitions.
+    return `${chatKey}::${getChatIntegrity() ?? 'unknown'}`;
+}
+
 function getChatMetadata() {
     const liveContext = getLiveContext();
     return liveContext?.chatMetadata ?? liveContext?.chat_metadata ?? {};
@@ -459,6 +468,7 @@ function syncGraph(force = false) {
     // GENERATION_ENDED so streaming/reasoning updates cannot become nodes.
     if (generationActive || chatLoadPending) return;
     const chatKey = getChatKey();
+    const chatIdentity = getChatIdentity();
     if (!chatKey) {
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
@@ -474,9 +484,9 @@ function syncGraph(force = false) {
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
     }
-    if (newChatPending || loadedChatKey !== chatKey) {
+    if (newChatPending || loadedChatKey !== chatIdentity) {
         graph = newChatPending ? createGraph(chatKey) : readStoredGraph(chatKey);
-        loadedChatKey = chatKey;
+        loadedChatKey = chatIdentity;
         lastChatSignature = '';
         selectedNodeId = null;
         newChatPending = false;
@@ -987,13 +997,14 @@ function bindEvents() {
         if (currentChatKey) reopenAfterChatLoad = reopenAfterChatLoad || wasOpen;
         else reopenAfterChatLoad = false;
 
-        const chatWasLoaded = currentChatKey !== null && loadedChatEventKey === currentChatKey;
+        const currentChatIdentity = getChatIdentity();
+        const chatWasLoaded = currentChatIdentity !== null && loadedChatEventKey === currentChatIdentity;
         chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED) && !chatWasLoaded;
         if (chatWasLoaded) {
             // The loaded-chat handler already selected the new graph. Keep
             // the panel open state and refresh the viewport in this event too
             // because ST emits CHAT_CHANGED immediately afterward.
-            if (!graph || loadedChatKey !== currentChatKey) {
+            if (!graph || loadedChatKey !== currentChatIdentity) {
                 graph = null;
                 loadedChatKey = null;
                 lastChatSignature = '';
@@ -1027,7 +1038,8 @@ function bindEvents() {
         // CHAT_CHANGED. In that order the graph is already the new chat's
         // graph; clearing it here would restore the stale-viewport bug.
         const currentChatKey = getChatKey();
-        const chatWasLoaded = currentChatKey !== null && loadedChatEventKey === currentChatKey;
+        const currentChatIdentity = getChatIdentity();
+        const chatWasLoaded = currentChatIdentity !== null && loadedChatEventKey === currentChatIdentity;
         if (chatWasLoaded) {
             newChatPending = false;
             chatLoadPending = false;
@@ -1070,7 +1082,8 @@ function bindEvents() {
         chatLoadPending = false;
         window.clearTimeout(syncTimer);
         const currentChatKey = getChatKey();
-        loadedChatEventKey = currentChatKey;
+        const currentChatIdentity = getChatIdentity();
+        loadedChatEventKey = currentChatIdentity;
         if (!currentChatKey) {
             graph = null;
             loadedChatKey = null;
