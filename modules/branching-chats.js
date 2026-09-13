@@ -204,7 +204,14 @@ function getLiveContext() {
     // SillyTavern can replace chat and chat_metadata objects while loading a
     // chat. The context returned during extension startup may still reference
     // the old objects, so use a fresh context for stateful operations.
-    return globalThis.SillyTavern?.getContext?.() ?? context;
+    try {
+        return globalThis.SillyTavern?.getContext?.() ?? context;
+    } catch (error) {
+        // Some SillyTavern builds briefly throw while the selected character or
+        // group is being swapped. Keep the extension alive and use the last
+        // context until the next poll/event sees the settled chat.
+        return context;
+    }
 }
 
 const clone = (value) => {
@@ -231,7 +238,29 @@ function getChat() {
 
 function getChatKey() {
     const liveContext = getLiveContext();
-    const currentChatId = liveContext?.getCurrentChatId?.() ?? liveContext?.chatId;
+    // Prefer the value captured on the fresh context. Calling
+    // getCurrentChatId() can throw during a chat transition in older builds;
+    // that must not abort the lifecycle watcher or strand later chats.
+    let currentChatId = liveContext?.chatId;
+    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
+        try {
+            currentChatId = liveContext?.getCurrentChatId?.();
+        } catch (error) {
+            currentChatId = null;
+        }
+    }
+    // Older SillyTavern context versions do not expose chatId at all. Since
+    // loaded chats have a stable metadata integrity token, use it as a
+    // chat-scoped fallback when there is actual chat data. This keeps later
+    // chat opens addressable without ever using the character ID (which would
+    // incorrectly merge multiple chats for one character).
+    if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') {
+        const integrity = liveContext?.chatMetadata?.integrity ?? liveContext?.chat_metadata?.integrity;
+        if (Array.isArray(liveContext?.chat) && liveContext.chat.length > 0
+            && typeof integrity === 'string' && integrity.trim()) {
+            currentChatId = `integrity:${integrity}`;
+        }
+    }
     if (currentChatId === undefined || currentChatId === null || String(currentChatId).trim() === '') return null;
     return String(currentChatId);
 }
@@ -1143,7 +1172,12 @@ function installButton() {
 
 function bindEvents() {
     if (listenersBound) return;
-    const eventTypes = context?.eventTypes ?? {};
+    const liveContext = getLiveContext();
+    const eventTypeSources = [context?.eventTypes, liveContext?.eventTypes]
+        .filter((value) => value && typeof value === 'object');
+    const eventSources = [...new Set([context?.eventSource, liveContext?.eventSource]
+        .filter((value) => value && typeof value.on === 'function'))];
+    const hasEventType = (name) => eventTypeSources.some((eventTypes) => Boolean(eventTypes[name]));
     const scheduleSync = (delay = SYNC_DELAY) => {
         window.clearTimeout(syncTimer);
         syncTimer = window.setTimeout(() => syncGraph(true), delay);
@@ -1190,7 +1224,7 @@ function bindEvents() {
             && loadedChatRawKey === eventChatKey
             && currentChatIdentity !== null
             && loadedChatEventKey === currentChatIdentity;
-        chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED) && !chatWasLoaded;
+        chatLoadPending = hasEventType('CHAT_LOADED') && !chatWasLoaded;
         if (chatWasLoaded) {
             // The loaded-chat handler already selected the new graph. Keep
             // the panel open state and refresh the viewport in this event too
@@ -1249,7 +1283,7 @@ function bindEvents() {
 
         newChatPending = true;
         reloadTargetChatKey = null;
-        chatLoadPending = Boolean(context?.eventTypes?.CHAT_LOADED);
+        chatLoadPending = hasEventType('CHAT_LOADED');
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
@@ -1334,9 +1368,12 @@ function bindEvents() {
         document.getElementById(MODULE_BUTTON_ID)?.remove();
     };
     const on = (name, handler) => {
-        const eventName = eventTypes[name];
-        if (!eventName) return;
-        context.eventSource?.on?.(eventName, handler);
+        const eventNames = [...new Set(eventTypeSources
+            .map((eventTypes) => eventTypes[name])
+            .filter(Boolean))];
+        eventSources.forEach((eventSource) => {
+            eventNames.forEach((eventName) => eventSource.on(eventName, handler));
+        });
     };
     on('GENERATION_STARTED', onGenerationStarted);
     on('GENERATION_ENDED', onGenerationEnded);
@@ -1381,4 +1418,3 @@ export function refresh() {
 }
 
 export { createGraph, getVariantContents, getActiveSwipeIndex };
-
