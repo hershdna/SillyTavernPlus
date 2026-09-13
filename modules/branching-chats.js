@@ -74,7 +74,11 @@ function startChatDomWatcher() {
     };
     const reconcile = () => {
         if (!settings?.branchingChatsEnabled) return;
-        if (isGenerationInProgress() || chatLoadPending) {
+        // The lifecycle flag is only advisory. CHAT_LOADED can be missed by
+        // an extension, and waiting on it permanently strands the new chat
+        // with an empty viewport. The current identity is the authoritative
+        // fallback once chat data has actually changed.
+        if (isGenerationInProgress()) {
             schedule();
             return;
         }
@@ -93,7 +97,13 @@ function startChatDomWatcher() {
         }
         const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true
             || reopenAfterChatLoad;
-        if (currentChatIdentity !== loadedChatKey) {
+        const settledNewChat = currentChatIdentity !== loadedChatKey;
+        if (chatLoadPending && !settledNewChat) {
+            schedule();
+            return;
+        }
+        chatLoadPending = false;
+        if (settledNewChat) {
             window.clearTimeout(syncTimer);
             window.clearTimeout(persistTimer);
             persistRevision += 1;
