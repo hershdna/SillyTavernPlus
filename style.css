@@ -356,8 +356,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     line-height: 1.25;
 }
 
-.stplus-settings-option:hover small,
-.stplus-settings-option:focus-within small {
+.stplus-settings-option:hover small {
     display: block;
 }
 
