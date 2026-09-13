@@ -572,11 +572,13 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 }
 
 .stplus-branching-toolbar-button {
-    /* Match the flex sizing of native .drawer toolbar items. */
-    flex: 0 1 auto;
-    width: 100%;
-    min-width: 0;
-    height: auto;
+    /* Native toolbar items are one top-bar block wide. The empty semantic
+       button has no text intrinsic width, so keep the icon slot from
+       collapsing while preserving the native block size at every font scale. */
+    flex: 0 0 var(--topBarBlockSize, 46px) !important;
+    width: var(--topBarBlockSize, 46px) !important;
+    min-width: var(--topBarBlockSize, 46px) !important;
+    height: var(--topBarBlockSize, 46px) !important;
     padding: 0;
     color: inherit;
     background: transparent;
