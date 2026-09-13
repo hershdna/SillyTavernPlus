@@ -52,6 +52,7 @@ const DIMENSIONAL_MOVINGUI_STYLE_PROPERTIES = new Set([
 
 let context = null;
 let settings = null;
+let lifecycleListenersBound = false;
 const managedPanels = new Map();
 
 function isMovingUiActive() {
@@ -92,6 +93,34 @@ export function applySavedMovingUiState(panel) {
         applied = true;
     }
     return applied;
+}
+
+export function refreshSavedMovingUiState() {
+    if (!isMovingUiActive()) return;
+    document.querySelectorAll(SAVED_STATE_PANEL_SELECTOR).forEach((panel) => {
+        if (panel instanceof HTMLElement && panel.id && panel.isConnected) applySavedMovingUiState(panel);
+    });
+}
+
+function scheduleSavedStateRefresh() {
+    // Native chat/preset handlers can finish in a later task. Retry briefly
+    // so both startup and CHAT_CHANGED/CHAT_LOADED settle before we apply the
+    // selected preset's geometry. This does not run during normal dragging.
+    [0, 100, 500].forEach((delay) => {
+        window.setTimeout(refreshSavedMovingUiState, delay);
+    });
+}
+
+function bindLifecycleListeners() {
+    if (lifecycleListenersBound) return;
+    const eventSource = context?.eventSource;
+    const eventTypes = context?.eventTypes;
+    if (!eventSource?.on || !eventTypes) return;
+    ['APP_READY', 'SETTINGS_LOADED', 'SETTINGS_UPDATED', 'CHAT_CHANGED', 'CHAT_LOADED', 'CHAT_CREATED']
+        .map((name) => eventTypes[name])
+        .filter(Boolean)
+        .forEach((eventName) => eventSource.on(eventName, scheduleSavedStateRefresh));
+    lifecycleListenersBound = true;
 }
 
 function getContainingBlockPosition(panel, left, top) {
@@ -258,6 +287,8 @@ function removeAllHandles() {
 export function initialize(stContext, stSettings) {
     context = stContext;
     settings = stSettings;
+    bindLifecycleListeners();
+    scheduleSavedStateRefresh();
 }
 
 export function refresh() {
