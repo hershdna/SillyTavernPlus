@@ -493,6 +493,9 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
 
 .stplus-branching-node {
     position: absolute;
+    user-select: none;
+    touch-action: manipulation;
+    pointer-events: auto;
     width: 44px;
     height: 44px;
     padding: 0;
