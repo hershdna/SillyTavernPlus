@@ -9,7 +9,7 @@
     // module from the browser's ESM cache, making lifecycle fixes appear to
     // have no effect. Keep the key stable for this release and change it
     // whenever manifest.json is bumped.
-    const MODULE_CACHE_VERSION = '0.5.36';
+    const MODULE_CACHE_VERSION = '0.5.38';
     const loadModule = (name) => import(new URL(`modules/${name}.js?v=${MODULE_CACHE_VERSION}`, extensionRoot));
 
     async function initialize() {
@@ -113,4 +113,3 @@
 
     initialize();
 })();
-
