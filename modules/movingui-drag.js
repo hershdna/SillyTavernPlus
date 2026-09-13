@@ -6,6 +6,21 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#WorldInfo.stplus-floating-worlds',
 ].join(',');
 
+const LATE_LOADED_PANEL_SELECTOR = [
+    MOVINGUI_PANEL_SELECTOR,
+    '[data-dragged]',
+].join(',');
+
+const SAVED_MOVINGUI_STYLE_PROPERTIES = [
+    'top',
+    'left',
+    'right',
+    'bottom',
+    'width',
+    'height',
+    'margin',
+];
+
 let context = null;
 let settings = null;
 const managedPanels = new Map();
@@ -15,6 +30,28 @@ function isMovingUiActive() {
         && context?.powerUserSettings?.movingUI === true
         && context?.isMobile?.() !== true
         && document.body?.classList.contains('movingUI');
+}
+
+// SillyTavern loads power-user settings before late-loading extensions create
+// their windows. Apply only the saved state for a newly discovered ST+ panel;
+// native panels have already gone through SillyTavern's own loader and should
+// not be rewritten by this compatibility layer.
+export function applySavedMovingUiState(panel) {
+    if (!isMovingUiActive()
+        || !(panel instanceof HTMLElement)
+        || !panel.id
+        || !panel.matches(LATE_LOADED_PANEL_SELECTOR)) return false;
+
+    const savedState = context?.powerUserSettings?.movingUIState?.[panel.id];
+    if (!savedState || typeof savedState !== 'object') return false;
+
+    let applied = false;
+    for (const property of SAVED_MOVINGUI_STYLE_PROPERTIES) {
+        if (!Object.hasOwn(savedState, property) || savedState[property] === undefined || savedState[property] === null) continue;
+        panel.style[property] = String(savedState[property]);
+        applied = true;
+    }
+    return applied;
 }
 
 function getContainingBlockPosition(panel, left, top) {
@@ -192,7 +229,10 @@ export function refresh() {
     const candidates = new Set(document.querySelectorAll(MOVINGUI_PANEL_SELECTOR));
     for (const panel of candidates) {
         if (!(panel instanceof HTMLElement) || !panel.id || !panel.isConnected) continue;
-        if (!managedPanels.has(panel)) managedPanels.set(panel, addDragHandle(panel));
+        if (!managedPanels.has(panel)) {
+            applySavedMovingUiState(panel);
+            managedPanels.set(panel, addDragHandle(panel));
+        }
     }
     for (const [panel, cleanup] of managedPanels) {
         if (!candidates.has(panel) || !panel.isConnected) {

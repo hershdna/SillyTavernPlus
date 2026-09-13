@@ -1,4 +1,4 @@
-import { normalizePanelPosition, setPanelViewportPosition } from './movingui-drag.js';
+import { applySavedMovingUiState, normalizePanelPosition, setPanelViewportPosition } from './movingui-drag.js';
 
 const RESIZE_HANDLE_CLASS = 'stplus-movingui-resize-handle';
 const READY_ATTRIBUTE = 'data-stplus-movingui-resize-ready';
@@ -264,6 +264,7 @@ export function refresh() {
 
     const candidates = getCandidatePanels();
     for (const panel of candidates) {
+        if (!managedPanels.has(panel)) applySavedMovingUiState(panel);
         applyResizeConstraints(panel);
         if (!managedPanels.has(panel)) managedPanels.set(panel, addResizeHandles(panel));
     }
