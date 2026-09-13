@@ -20,6 +20,161 @@ function getMessageId(messageElement) {
     return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
+function getEditableTextNodes(root) {
+    const nodes = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+        const parent = node.parentElement;
+        if (!parent || parent.closest('script, style')) continue;
+
+        let hidden = false;
+        for (let element = parent; element && element !== root; element = element.parentElement) {
+            const styles = getComputedStyle(element);
+            if (styles.display === 'none' || styles.visibility === 'hidden') {
+                hidden = true;
+                break;
+            }
+        }
+        if (!hidden && node.nodeValue) nodes.push(node);
+    }
+    return nodes;
+}
+
+function collectRenderedText(root) {
+    return getEditableTextNodes(root).map((node) => node.nodeValue).join('');
+}
+
+function maskSourceMarkup(source) {
+    const masked = source.split('');
+    const mask = (start, end) => {
+        for (let index = start; index < end; index++) masked[index] = '\0';
+    };
+
+    for (let index = 0; index < source.length; index++) {
+        if (source.startsWith('<!--', index)) {
+            const end = source.indexOf('-->', index + 4);
+            const boundary = end === -1 ? source.length : end + 3;
+            mask(index, boundary);
+            index = boundary - 1;
+            continue;
+        }
+
+        // Mask HTML tags while leaving Markdown syntax intact. The latter is
+        // important because the visible word in `*emphasis*` still exists in
+        // the source and can be mapped without removing its delimiters.
+        if (source[index] === '<' && /[A-Za-z/!?]/.test(source[index + 1] ?? '')) {
+            const end = source.indexOf('>', index + 1);
+            if (end !== -1) {
+                mask(index, end + 1);
+                index = end;
+            }
+        }
+    }
+    return masked.join('');
+}
+
+function buildRenderedSourceMap(source, root) {
+    const sourceView = maskSourceMarkup(source);
+    const segments = [];
+    const nodes = getEditableTextNodes(root);
+    let renderedOffset = 0;
+    let sourceCursor = 0;
+
+    for (const node of nodes) {
+        const text = node.nodeValue;
+        const sourceStart = sourceView.indexOf(text, sourceCursor);
+        const mapped = sourceStart !== -1;
+        const segment = {
+            renderedStart: renderedOffset,
+            renderedEnd: renderedOffset + text.length,
+            sourceStart: mapped ? sourceStart : null,
+            sourceEnd: mapped ? sourceStart + text.length : null,
+        };
+        segments.push(segment);
+        renderedOffset += text.length;
+        if (mapped) sourceCursor = segment.sourceEnd;
+    }
+
+    return {
+        renderedText: nodes.map((node) => node.nodeValue).join(''),
+        segments,
+        complete: segments.every((segment) => segment.sourceStart !== null),
+    };
+}
+
+function getSourceBoundary(sourceMap, renderedOffset, preferEnd = false) {
+    for (const segment of sourceMap.segments) {
+        if (renderedOffset < segment.renderedStart || renderedOffset > segment.renderedEnd) continue;
+        const offset = renderedOffset - segment.renderedStart;
+        return segment.sourceStart + offset;
+    }
+
+    const mappedSegments = sourceMap.segments.filter((segment) => segment.sourceStart !== null);
+    if (!mappedSegments.length) return null;
+    return preferEnd ? mappedSegments.at(-1).sourceEnd : mappedSegments[0].sourceStart;
+}
+
+function getVisibleTextHunk(before, after) {
+    let start = 0;
+    while (start < before.length && start < after.length && before[start] === after[start]) start++;
+
+    let beforeEnd = before.length;
+    let afterEnd = after.length;
+    while (beforeEnd > start && afterEnd > start && before[beforeEnd - 1] === after[afterEnd - 1]) {
+        beforeEnd--;
+        afterEnd--;
+    }
+
+    return {
+        renderedStart: start,
+        renderedEnd: beforeEnd,
+        insertedText: after.slice(start, afterEnd),
+    };
+}
+
+function escapeInsertedText(text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+}
+
+function applyVisibleTextEdit(edit, currentRenderedText) {
+    if (currentRenderedText === edit.sourceMap.renderedText) return edit.originalSource;
+    if (!edit.sourceMap.complete) {
+        throw new Error('Could not map the rendered message back to its source text.');
+    }
+
+    const hunk = getVisibleTextHunk(edit.sourceMap.renderedText, currentRenderedText);
+    const ranges = edit.sourceMap.segments
+        .filter((segment) => segment.renderedStart < hunk.renderedEnd && segment.renderedEnd > hunk.renderedStart)
+        .map((segment) => ({
+            start: segment.sourceStart + Math.max(hunk.renderedStart, segment.renderedStart) - segment.renderedStart,
+            end: segment.sourceStart + Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart,
+        }));
+    const insertedText = escapeInsertedText(hunk.insertedText);
+
+    if (!ranges.length) {
+        const sourceBoundary = getSourceBoundary(edit.sourceMap, hunk.renderedStart);
+        if (sourceBoundary === null) throw new Error('Could not locate the edit in the source text.');
+        return edit.originalSource.slice(0, sourceBoundary) + insertedText + edit.originalSource.slice(sourceBoundary);
+    }
+
+    let result = '';
+    let sourceCursor = 0;
+    let inserted = false;
+    for (const range of ranges) {
+        result += edit.originalSource.slice(sourceCursor, range.start);
+        if (!inserted) {
+            result += insertedText;
+            inserted = true;
+        }
+        sourceCursor = range.end;
+    }
+    return result + edit.originalSource.slice(sourceCursor);
+}
+
 function restoreAttributes(edit) {
     const { messageText, originalContentEditable, originalSpellcheck, originalRole, originalAriaLabel } = edit;
     if (!messageText.isConnected) return;
@@ -179,14 +334,24 @@ async function confirmEdit() {
         return;
     }
 
-    // The regular contenteditable surface keeps SillyTavern's normal
-    // whitespace/layout behavior. Input guards prevent formatting commands
-    // and HTML paste from changing the rendered elements around the text.
-    const text = edit.messageText.innerHTML;
-    message.mes = text;
-    syncMessageSwipe(message, text);
-    if (message.extra && Object.prototype.hasOwnProperty.call(message.extra, 'display_text')) {
+    // Keep SillyTavern's original source intact and apply only the visible
+    // text delta. Saving messageText.innerHTML would flatten Markdown,
+    // discard comments, and cause the next messageFormatting pass to wrap
+    // already-rendered quotes a second time.
+    let text;
+    try {
+        text = applyVisibleTextEdit(edit, collectRenderedText(edit.messageText));
+    } catch (error) {
+        console.warn('[SillyTavernPlus] Could not preserve message formatting while saving.', error);
+        removeEditUi(edit, true);
+        return;
+    }
+
+    if (edit.sourceKey === 'display_text') {
         message.extra.display_text = text;
+    } else {
+        message.mes = text;
+        syncMessageSwipe(message, text);
     }
     removeEditUi(edit, false);
     await emitMessageEvent('MESSAGE_EDITED', edit.messageId);
@@ -208,6 +373,10 @@ function beginEdit(messageElement, messageText, event) {
         messageElement,
         messageText,
         originalHTML: messageText.innerHTML,
+        originalSource: Object.prototype.hasOwnProperty.call(message.extra ?? {}, 'display_text')
+            ? String(message.extra.display_text ?? '')
+            : String(message.mes ?? ''),
+        sourceKey: Object.prototype.hasOwnProperty.call(message.extra ?? {}, 'display_text') ? 'display_text' : 'mes',
         originalContentEditable: messageText.getAttribute('contenteditable'),
         originalSpellcheck: messageText.getAttribute('spellcheck'),
         originalRole: messageText.getAttribute('role'),
@@ -215,6 +384,7 @@ function beginEdit(messageElement, messageText, event) {
         actions: null,
         editorListeners: [],
     };
+    edit.sourceMap = buildRenderedSourceMap(edit.originalSource, messageText);
     const confirm = createAction('fa-solid fa-check', 'Confirm', confirmEdit);
     const cancel = createAction('fa-solid fa-xmark', 'Cancel', cancelEdit);
     const actions = document.createElement('div');
