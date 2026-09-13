@@ -81,13 +81,14 @@ function addDragHandle(panel) {
     if (!header.id && !panel.matches('#WorldInfo.stplus-floating-worlds')) header.id = `${panel.id}header`;
     header.classList.add('stplus-movingui-header');
 
-    const handle = document.createElement('button');
-    handle.type = 'button';
-    handle.className = `drag-grabber ${DRAG_HANDLE_CLASS}`;
+    // Use the same element and Font Awesome grip icon as native MovingUI.
+    // The drag behavior remains extension-owned so third-party panels do not
+    // need to expose a particular header structure.
+    const handle = document.createElement('div');
+    handle.className = `fa-solid fa-grip drag-grabber ${DRAG_HANDLE_CLASS}`;
     handle.dataset.stplusOwned = '1';
     handle.title = 'Move this window';
     handle.setAttribute('aria-label', `Move ${panel.getAttribute('aria-label') || 'window'}`);
-    handle.innerHTML = '<i class="fa-solid fa-up-down-left-right" aria-hidden="true"></i>';
     header.appendChild(handle);
 
     let dragState = null;

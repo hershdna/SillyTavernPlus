@@ -262,34 +262,16 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     cursor: nwse-resize;
 }
 
-/* MovingUI-compatible top-right reposition handle for ST+ windows. */
+/* Keep ST+ headers positioned so the native-looking MovingUI grip sits beside
+   the close control without changing the native grip's appearance. */
 .stplus-movingui-header {
     position: relative;
 }
 
-.stplus-movingui-drag-handle {
-    position: absolute;
-    top: 5px;
+/* ST+ headers reserve the close button's space and place the native grip just
+   to its left. All other MovingUI styling comes from .drag-grabber. */
+.stplus-movingui-header .stplus-movingui-drag-handle {
     right: 42px;
-    z-index: 2;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    color: inherit;
-    cursor: move;
-    opacity: 0.55;
-}
-
-.stplus-movingui-drag-handle:hover,
-.stplus-movingui-drag-handle:focus-visible {
-    opacity: 1;
-}
-
-body:not(.movingUI) .stplus-movingui-drag-handle {
-    display: none !important;
 }
 
 .stplus-settings-window.stplus-settings-window-open {
@@ -589,8 +571,20 @@ body:not(.movingUI) .stplus-movingui-drag-handle {
     opacity: 0.85;
 }
 
-.stplus-branching-toolbar-button span {
-    margin-left: 5px;
+.stplus-branching-toolbar-button {
+    flex: 0 0 auto;
+    width: 62px;
+    min-width: 62px;
+    height: var(--topBarBlockSize, 46px);
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+.stplus-branching-toolbar-button .drawer-icon {
+    margin: 0;
 }
 
 @media (max-width: 700px) {

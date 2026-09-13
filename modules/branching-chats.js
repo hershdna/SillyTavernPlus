@@ -1365,16 +1365,16 @@ function createWindow() {
     panel.id = WINDOW_ID;
     panel.className = 'stplus-branching-window';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'SillyTavernPlus chat branches');
+    panel.setAttribute('aria-label', 'SillyTavernPlus chat tree');
 
     const header = document.createElement('div');
     header.className = 'stplus-branching-header';
     const title = document.createElement('h3');
-    title.textContent = 'Chat Branches';
+    title.textContent = 'Chat Tree';
     const status = document.createElement('small');
     status.className = 'stplus-branching-status';
-    const close = createButton('×', 'Close chat branches', closeWindow, 'stplus-branching-close');
-    close.setAttribute('aria-label', 'Close chat branches');
+    const close = createButton('×', 'Close chat tree', closeWindow, 'stplus-branching-close');
+    close.setAttribute('aria-label', 'Close chat tree');
     header.append(title, status, close);
 
     const controls = document.createElement('div');
@@ -1435,10 +1435,13 @@ function installButton() {
     if (!(host instanceof HTMLElement)) return;
     let button = document.getElementById(MODULE_BUTTON_ID);
     if (!(button instanceof HTMLButtonElement)) {
-        button = createButton('Branches', 'Open SillyTavernPlus chat branches', openWindow, 'stplus-branching-toolbar-button');
+        button = createButton('', 'Open SillyTavernPlus chat tree', openWindow, 'stplus-branching-toolbar-button');
         button.id = MODULE_BUTTON_ID;
-        button.innerHTML = '<i class="fa-solid fa-code-branch" aria-hidden="true"></i><span>Branches</span>';
     }
+    button.className = 'drawer stplus-branching-toolbar-button';
+    button.title = 'Open SillyTavernPlus chat tree';
+    button.setAttribute('aria-label', 'Open SillyTavernPlus chat tree');
+    button.innerHTML = '<span class="drawer-icon fa-solid fa-code-branch fa-fw closedIcon" aria-hidden="true"></span>';
     if (button.parentElement !== host) host.appendChild(button);
 }
 
