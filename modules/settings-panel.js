@@ -218,7 +218,8 @@ function createSettingsWindow() {
     ));
     body.append(charactersSection);
 
-    charactersSection.append(createCheckbox(
+    const chatSection = createSettingsSection('Chat');
+    chatSection.append(createCheckbox(
         'stplus-branching-chats-enabled',
         'Chat branching',
         'Keep alternate chat paths in one conversation with a navigable tree and vanilla JSONL export.',
@@ -227,6 +228,7 @@ function createSettingsWindow() {
             callbacks?.onBranchingChatsChanged?.();
         },
     ));
+    body.append(chatSection);
 
     const movingUiSection = createSettingsSection('MovingUI');
     movingUiSection.append(createCheckbox(

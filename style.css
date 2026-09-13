@@ -156,7 +156,7 @@
     z-index: 10000;
     top: 12vh;
     left: 50%;
-    width: min(380px, calc(100vw - 24px));
+    width: min(760px, calc(100vw - 24px));
     max-height: calc(100vh - 24px);
     box-sizing: border-box;
     overflow: auto;
@@ -303,30 +303,38 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 }
 
 .stplus-settings-window-body {
-    padding: 12px;
+    padding: 10px 12px 12px;
+    font-size: 0.88em;
 }
 
 .stplus-settings-window-body > p {
     margin-top: 0;
+    margin-bottom: 8px;
+    opacity: 0.8;
 }
 
 .stplus-settings-section {
-    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0 18px;
+    margin-top: 12px;
 }
 
 .stplus-settings-section-title {
+    grid-column: 1 / -1;
     margin: 0;
-    padding: 6px 0;
+    padding: 5px 0;
     color: var(--SmartThemeQuoteColor, #9ecbff);
     border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
-    font-size: 1.05em;
+    font-size: 1em;
 }
 
 .stplus-settings-option {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 9px 0;
+    gap: 7px;
+    min-width: 0;
+    padding: 7px 0;
     cursor: pointer;
 }
 
@@ -338,11 +346,19 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 .stplus-settings-option span {
     display: flex;
     flex-flow: column;
-    gap: 3px;
+    gap: 2px;
+    min-width: 0;
 }
 
 .stplus-settings-option small {
+    display: none;
     opacity: 0.75;
+    line-height: 1.25;
+}
+
+.stplus-settings-option:hover small,
+.stplus-settings-option:focus-within small {
+    display: block;
 }
 
 .stplus-wi-reasoning-setting {
@@ -373,6 +389,12 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 
 #stplus-reasoning-scan-depth {
     width: 5em;
+}
+
+@media (max-width: 560px) {
+    .stplus-settings-section {
+        grid-template-columns: 1fr;
+    }
 }
 
 .stplus-branching-window {
