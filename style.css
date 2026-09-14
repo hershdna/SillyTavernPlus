@@ -740,6 +740,26 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     line-height: 1.35;
 }
 
+.stplus-chat-history-body .stplus-history-reasoning {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: none;
+}
+
+.stplus-history-reasoning[hidden],
+.stplus-chat-history-actions [hidden] {
+    display: none !important;
+}
+
+.stplus-history-reasoning > .mes_block {
+    width: 100%;
+    padding: 0;
+}
+
 .stplus-chat-history-actions,
 .stplus-chat-history-stale-actions {
     display: flex;

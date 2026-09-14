@@ -16,7 +16,8 @@ function fixture() {
     const prompts = {};
     let generator = async () => 'Generated summary';
     const document = { activeElement: null, querySelector: () => null };
-    const sandbox = vm.createContext({ console, structuredClone, setTimeout, clearTimeout, document,
+    const sandbox = vm.createContext({ console, structuredClone, setTimeout, clearTimeout, document, AbortController,
+        generateHistory: args => generator(args),
         HTMLElement: Element, HTMLInputElement: Element, HTMLTextAreaElement: Element, HTMLButtonElement: Element,
         window: { setTimeout, clearTimeout },
         SillyTavern: { getContext: () => ({ chat, chatMetadata: metadata, getCurrentChatId: () => chatId,
@@ -28,7 +29,7 @@ function fixture() {
     });
     const source = fs.readFileSync(path.join(__dirname, '../modules/chat-history.js'), 'utf8')
         .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { render, saveEditedSummary, getSnapshot, generateSummary, clearCurrentSummary, resolveStale, injectCurrentSummary };', sandbox);
+    vm.runInContext(source + '\nthis.api = { render, saveEditedSummary, getSnapshot, generateSummary, clearCurrentSummary, resolveStale, injectCurrentSummary, stripBookmarks, parseBookmark, editableSummary };', sandbox);
     sandbox.testPanel = { querySelector: s => nodes.get(s) || null };
     vm.runInContext("panel = testPanel; settings = { chatHistoryEnabled: true, chatHistoryAutoInjectEnabled: true };", sandbox);
     return { api: sandbox.api, sandbox, nodes, document, prompts,
@@ -36,11 +37,12 @@ function fixture() {
         setGenerator(fn) { generator = fn; },
         reload() { metadata = JSON.parse(JSON.stringify(saved)); },
         switchChat() { chatId = 'chat-b'; metadata = { integrity: 'chat-b' }; chat = [message('z')]; },
-        async edit(text) {
+        async edit(text, addBookmark = true) {
             sandbox.api.render();
             const box = nodes.get('.stplus-chat-history-summary');
             document.activeElement = box;
-            box.value = text;
+            const tag = box.value.match(/\[\[history:\d+\]\]/g)?.at(-1) ?? `[[history:${chat.length}]]`;
+            box.value = addBookmark ? `${text}\n\n${tag}` : text;
             // Native pointerdown/blur can trigger an unrelated global UI scan
             // before the subsequent click dispatches Save.
             document.activeElement = null;
@@ -54,10 +56,10 @@ function message(text) { return { mes: text, name: 'Test', send_date: text, is_u
 test('draft survives blur + refresh before Save; metadata round trips', async () => {
     const f = fixture();
     await f.edit('Saved test summary');
-    assert.equal(f.saved?.stplusChatHistory.records[0].summary, 'Saved test summary');
+    assert.equal(f.saved?.stplusChatHistory.records[0].summary, 'Saved test summary\n\n[[history:2]]');
     f.reload();
     assert.equal(f.api.getSnapshot().anchorIndex, 1);
-    assert.equal(f.nodes.get('.stplus-chat-history-summary').value, 'Saved test summary');
+    assert.equal(f.nodes.get('.stplus-chat-history-summary').value, 'Saved test summary\n\n[[history:2]]');
 });
 
 test('editing a summary does not move its bookmark over new messages', async () => {
@@ -78,12 +80,62 @@ test('incremental generation sends only previous summary and new range; retains 
     assert.match(prompt, /\[Message 2 \| Test\]/);
     assert.doesNotMatch(prompt, /\[Message [01] \| Test\]/);
     assert.equal(f.saved.stplusChatHistory.records.length, 2);
-    assert.equal(f.api.getSnapshot().record.summary, 'Updated facts');
+    assert.equal(f.api.getSnapshot().record.summary, 'Updated facts\n\n[[history:3]]');
+    assert.doesNotMatch(prompt, /\[\[history:/);
     f.chat.pop();
-    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts');
+    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\n[[history:2]]');
     f.chat.push(message('c'));
     await f.api.clearCurrentSummary();
     assert.equal(f.api.getSnapshot().record, null);
+});
+
+test('editing or deleting the visible bookmark controls the next range and survives reload', async () => {
+    const f = fixture(); await f.edit('Summary');
+    await f.edit('Summary [[history:1]]', false);
+    f.reload();
+    assert.equal(f.api.getSnapshot().anchorIndex, 0);
+    assert.equal(f.api.getSnapshot().newMessages.length, 1);
+    await f.edit('Summary without a bookmark', false);
+    f.reload();
+    assert.equal(f.api.getSnapshot().anchorIndex, -1);
+    assert.equal(f.api.getSnapshot().stale, false);
+    assert.equal(f.api.getSnapshot().newMessages.length, 2);
+    assert.equal(f.nodes.get('.stplus-chat-history-summary').value, 'Summary without a bookmark');
+});
+
+test('last bookmark wins, all tags are culled, and invalid edits do not save', async () => {
+    const f = fixture();
+    await f.edit('First [[history:2]]\nSecond [[history:1]]', false);
+    assert.equal(f.api.getSnapshot().anchorIndex, 0);
+    f.api.injectCurrentSummary();
+    assert.doesNotMatch(f.prompts.stplus_chat_history.value, /history:/);
+    for (const invalid of ['[[history:99]]', '[[history:0]]', '[[history:abc]]', '[[history:2']) {
+        await f.edit(`Do not save ${invalid}`, false);
+        assert.equal(f.api.getSnapshot().record.summary, 'First [[history:2]]\nSecond [[history:1]]');
+        assert.doesNotMatch(f.api.stripBookmarks(`Private tag ${invalid}`), /history:/);
+    }
+});
+
+test('legacy summaries show an editable tag without silently writing metadata', async () => {
+    const f = fixture(); await f.edit('Legacy');
+    const record = f.metadata.stplusChatHistory.records[0];
+    delete record.bookmarkFormat; record.summary = 'Legacy';
+    f.api.render();
+    assert.equal(f.nodes.get('.stplus-chat-history-summary').value, 'Legacy\n\n[[history:2]]');
+    assert.equal(record.summary, 'Legacy');
+});
+
+test('streamed reasoning is saved separately and never injected or included in future summary requests', async () => {
+    const f = fixture();
+    f.setGenerator(async args => {
+        args.onProgress({text:'', reasoning:'Private model thought', duration:20, done:false});
+        args.onProgress({text:'Facts', reasoning:'Private model thought', duration:20, done:true});
+        return {text:'Facts', reasoning:'Private model thought'};
+    });
+    await f.api.generateSummary();
+    assert.equal(f.saved.stplusChatHistory.records[0].generationReasoning.reasoning, 'Private model thought');
+    f.api.injectCurrentSummary();
+    assert.equal(f.prompts.stplus_chat_history.value, 'Chat history summary:\nFacts');
 });
 
 test('branch metadata IDs and summary anchor use the same path', async () => {

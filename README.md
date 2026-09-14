@@ -33,7 +33,7 @@ SillyTavern’s native **Branch** message action remains unchanged and continues
 
 ## Chat History
 
-Open the book icon in the top toolbar while a chat is open. **Generate summary** uses the selected SillyTavern API and your summary instructions. **Update summary** sends the previous summary as context alongside only messages after its bookmark; it does not add an OOC exchange to the chat. Requests use `generateRaw` so the ordinary full chat prompt is not included a second time.
+Open the book icon in the top toolbar while a chat is open. **Generate summary** uses the selected SillyTavern API and your summary instructions. **Update summary** sends the previous summary as context alongside only messages after its bookmark; it does not add an OOC exchange to the chat. Requests use SillyTavern's raw prompt builders, so the ordinary full chat prompt is not included a second time.
 
 Edit the summary directly and choose **Save edited summary**. Editing an existing summary keeps its original bookmark. Configure the injection header, depth, and injection checkbox in the same window. Summaries and their source checkpoints live in the chat's `stplusChatHistory` metadata in its JSONL file; ordinary vanilla message rows remain unchanged. Generation uses tokens from the configured API.
 
@@ -42,6 +42,12 @@ Edits, deletions, swipes and tree jumps are checked against the covered message 
 If you change chats or branches during generation, the result is rejected rather than attached to a different conversation. Unsaved summary drafts survive UI refreshes within the session and are scoped to their chat and path.
 
 Injection uses SillyTavern's native `setExtensionPrompt` in-chat system position, with the selected depth, for both text and chat completion. Generation follows the current API's response-token limit (including reasoning where applicable); increase that limit if a summary is cut off. **Clear** archives the current path's summary checkpoints so an earlier checkpoint does not silently become active again.
+
+### Thinking and visible bookmarks
+
+Thinking appears in SillyTavern's native collapsible reasoning block, with the same formatting, timing, auto-expand setting, copy control, and collapse control. Streaming follows the API's streaming setting; non-streaming backends show returned reasoning when the response finishes. Hidden reasoning cannot be revealed. Summary reasoning is stored separately in the checkpoint and is never injected. The summary's reasoning display is read-only (it does not invoke chat-message edit/delete actions). **Stop** discards unfinished work; supported streaming requests are cancelled with their own abort signal, without touching the chat's streaming processor.
+
+Bookmarks appear directly in the editor as `[[history:4]]` (through message 4, counted from 1). The **last** tag in the text determines where the next incremental update starts. Edit it and save to change the boundary, or delete all tags and save to remove the boundary; the next update then incorporates all current messages alongside the previous summary. All reserved bookmark tags are stripped before injection and before sending previous context to the summarizer. Invalid or out-of-range tags cannot be saved. Generated summaries receive a fresh ending tag. Legacy bookmarks are displayed as tags automatically, and become text-controlled when saved. Source-node IDs and fingerprints still verify branch validity; the visible number is not used as a globally unique message ID.
 
 ## Installation
 
