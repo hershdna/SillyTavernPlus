@@ -127,6 +127,19 @@ export async function createHistoryReasoningView(host) {
     dummy.hidden = true;
     block.append(details, dummy);
     host.replaceChildren(block);
+    const summary = details.querySelector('.mes_reasoning_summary');
+    summary?.addEventListener('click', e => {
+        // The native handler is delegated from document and assumes every
+        // reasoning block belongs to a real chat message. This isolated
+        // summary block must toggle itself without allowing that handler to
+        // act on the user's chat messages.
+        if (e.target.closest('.mes_reasoning_actions')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        details.open = !details.open;
+        details.querySelector('.mes_reasoning_arrow')?.classList.toggle('fa-chevron-up', details.open);
+        details.querySelector('.mes_reasoning_arrow')?.classList.toggle('fa-chevron-down', !details.open);
+    });
     let handler = new ReasoningHandler();
     handler.messageDom = host;
     let scope = null;
