@@ -174,12 +174,21 @@ async function saveMetadata() {
 async function writeState(state) {
     const live = getLiveContext();
     const metadata = live?.chatMetadata ?? live?.chat_metadata;
-    if (!metadata || typeof metadata !== 'object') return false;
-    metadata[METADATA_KEY] = {
+    const payload = {
         version: 1,
         records: state.records,
         archived: state.archived.slice(-MAX_ARCHIVED_RECORDS),
     };
+    // SillyTavern's current context updates chat metadata through this helper.
+    // Direct assignment is retained for older builds, but must not be the only
+    // path: some context objects expose a read-only metadata snapshot.
+    if (typeof live?.updateChatMetadata === 'function') {
+        live.updateChatMetadata({ [METADATA_KEY]: payload }, false);
+    } else if (metadata && typeof metadata === 'object') {
+        metadata[METADATA_KEY] = payload;
+    } else {
+        return false;
+    }
     await saveMetadata();
     return true;
 }
@@ -660,4 +669,3 @@ async function injectCurrentSummary(chat) {
     };
     chat.splice(Math.max(0, chat.length - depth), 0, clone(injection));
 }
-
