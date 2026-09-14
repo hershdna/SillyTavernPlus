@@ -184,6 +184,23 @@ async function writeState(state) {
     // path: some context objects expose a read-only metadata snapshot.
     if (typeof live?.updateChatMetadata === 'function') {
         live.updateChatMetadata({ [METADATA_KEY]: payload }, false);
+        // updateChatMetadata() replaces SillyTavern's metadata object. Older
+        // context snapshots (including the one passed to this module at
+        // startup) still point at the previous object, so keep those aliases
+        // synchronized for the rest of this turn and for older ST builds.
+        const currentMetadata = live.chatMetadata ?? live.chat_metadata;
+        if (currentMetadata && typeof currentMetadata === 'object') {
+            currentMetadata[METADATA_KEY] = payload;
+        }
+        if (metadata && typeof metadata === 'object') {
+            metadata[METADATA_KEY] = payload;
+        }
+        if (context && context !== live) {
+            const contextMetadata = context.chatMetadata ?? context.chat_metadata;
+            if (contextMetadata && typeof contextMetadata === 'object') {
+                contextMetadata[METADATA_KEY] = payload;
+            }
+        }
     } else if (metadata && typeof metadata === 'object') {
         metadata[METADATA_KEY] = payload;
     } else {
