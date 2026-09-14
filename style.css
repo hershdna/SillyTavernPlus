@@ -742,6 +742,8 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 
 .stplus-chat-history-body .stplus-history-reasoning {
     display: block;
+    flex: 0 0 auto;
+    height: auto;
     width: 100%;
     min-height: 0;
     padding: 0;
@@ -758,6 +760,10 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 .stplus-history-reasoning > .mes_block {
     width: 100%;
     padding: 0;
+}
+
+.stplus-history-reasoning .mes_reasoning {
+    max-height: 35vh;
 }
 
 .stplus-chat-history-actions,
