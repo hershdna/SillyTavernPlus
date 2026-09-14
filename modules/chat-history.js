@@ -2,6 +2,7 @@ const MODULE_BUTTON_ID = 'stplus-chat-history-button';
 const WINDOW_ID = 'stplus-chat-history-window';
 const METADATA_KEY = 'stplusChatHistory';
 const INJECTION_MARKER = 'stplusChatHistoryInjection';
+const PROMPT_KEY = 'stplus_chat_history';
 const NODE_ID_FIELD = 'stplusBranchingNodeId';
 const DEFAULT_PROMPT = 'Write a concise bullet list of only the important events, decisions, facts, relationships, and unresolved threads. Do not include filler or commentary about the summary itself.';
 const DEFAULT_HEADER = 'Chat history summary:';
@@ -325,7 +326,7 @@ async function generateSummary() {
             globalThis.toastr?.info?.('No new messages have been added since the last summary.');
             return;
         }
-        const result = await generator({ prompt: buildSummaryPrompt(snapshot, previousSummary, sourceMessages) });
+        const result = await generator({ prompt: buildSummaryPrompt(snapshot, previousSummary, sourceMessages), trimNames: false });
         const summary = extractGeneratedText(result);
         if (!summary) throw new Error('The model returned an empty summary.');
         const current = getSnapshot();
@@ -362,9 +363,11 @@ async function generateSummary() {
         state.records.push(record);
         await writeState(state);
         drafts.delete(snapshotScope(snapshot));
-        renderedValue = summary;
-        const box = panel?.querySelector('.stplus-chat-history-summary');
-        if (box) box.value = summary;
+        if (snapshotScope(getSnapshot()) === snapshotScope(snapshot)) {
+            renderedValue = summary;
+            const box = panel?.querySelector('.stplus-chat-history-summary');
+            if (box) box.value = summary;
+        }
         globalThis.toastr?.success?.('Chat history summary updated.');
     } catch (error) {
         console.error('[SillyTavernPlus] Chat history generation failed:', error);
@@ -431,8 +434,9 @@ async function clearCurrentSummary() {
     const state = readState();
     const record = state.records.find((item) => item.id === snapshot.record.id);
     if (!record) return;
-    state.records = state.records.filter((item) => item.id !== record.id);
-    state.archived.push({ ...record, archived: true, archivedAt: Date.now(), archiveReason: 'cleared' });
+    const cleared = state.records.filter(item => item.id === record.id || isPrefix(item.pathIds, snapshot.pathIds));
+    state.records = state.records.filter(item => !cleared.includes(item));
+    state.archived.push(...cleared.map(item => ({ ...item, archived: true, archivedAt: Date.now(), archiveReason: 'cleared' })));
     await writeState(state);
     drafts.delete(snapshotScope(snapshot));
     renderedValue = '';
@@ -500,7 +504,7 @@ function render() {
     if (staleBox instanceof HTMLElement) staleBox.hidden = !snapshot.stale;
     if (sourceInfo) {
         sourceInfo.textContent = snapshot.chatKey
-            ? `${snapshot.messages.length} active messages · ${snapshot.newMessages.length} message${snapshot.newMessages.length === 1 ? '' : 's'} since the bookmark.`
+            ? `${snapshot.messages.length} active messages · ${snapshot.newMessages.length} message${snapshot.newMessages.length === 1 ? '' : 's'} since the bookmark. Generation uses your API's response-token limit, including any reasoning tokens.`
             : 'Summaries are stored in the currently open chat only.';
     }
     if (generateButton instanceof HTMLButtonElement) {
@@ -717,6 +721,7 @@ export function initialize(stContext, stSettings) {
 
 export function refresh() {
     createWindow();
+    injectCurrentSummary();
     if (settings?.chatHistoryEnabled === false) {
         panel.classList.remove('stplus-chat-history-window-open');
         document.getElementById(MODULE_BUTTON_ID)?.remove();
@@ -726,28 +731,29 @@ export function refresh() {
     render();
 }
 
-async function injectCurrentSummary(chat) {
-    if (!Array.isArray(chat)) return;
-    for (let index = chat.length - 1; index >= 0; index--) {
+function injectCurrentSummary(chat) {
+    // Remove old-version synthetic prompt rows, if the caller reused a prompt.
+    if (Array.isArray(chat)) for (let index = chat.length - 1; index >= 0; index--) {
         if (chat[index]?.extra?.[INJECTION_MARKER] === true) chat.splice(index, 1);
     }
-    if (!settings?.chatHistoryEnabled || settings.chatHistoryAutoInjectEnabled === false || !Array.isArray(chat)) return;
+    const live = getLiveContext();
+    // Native IN_CHAT (1), SYSTEM (0) prompt injection is handled by both the
+    // text-completion and chat-completion builders without altering chat rows.
+    const setPrompt = (text, depth = 0) => live?.setExtensionPrompt?.(PROMPT_KEY, text, 1, depth, false, 0);
+    if (!settings?.chatHistoryEnabled || settings.chatHistoryAutoInjectEnabled === false) {
+        setPrompt('');
+        return;
+    }
     const snapshot = getSnapshot();
     const record = snapshot.record;
     const accepted = record?.allowStale === true && record.acceptedScope === snapshotScope(snapshot)
         && record.acceptedFingerprints?.every((value, index) => value === snapshot.messages[index]?.fingerprint);
-    if (!record?.summary || (snapshot.stale && !accepted)) return;
-    if (chat.some((message) => message?.extra?.[INJECTION_MARKER] === true)) return;
+    if (!snapshot.chatKey || !snapshot.messages.length || !record?.summary || (snapshot.stale && !accepted)) {
+        setPrompt('');
+        return;
+    }
     const depthValue = Number.parseInt(settings.chatHistoryInjectionDepth, 10);
     const depth = Number.isInteger(depthValue) ? Math.max(0, Math.min(100, depthValue)) : 4;
     const header = String(settings.chatHistoryInjectionHeader || DEFAULT_HEADER).trim();
-    const injection = {
-        name: 'Chat History',
-        is_user: false,
-        is_system: true,
-        role: 'system',
-        mes: `${header}\n${record.summary}`,
-        extra: { [INJECTION_MARKER]: true },
-    };
-    chat.splice(Math.max(0, chat.length - depth), 0, clone(injection));
+    setPrompt(`${header}\n${record.summary}`, depth);
 }

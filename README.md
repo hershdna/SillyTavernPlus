@@ -41,6 +41,8 @@ Edits, deletions, swipes and tree jumps are checked against the covered message 
 
 If you change chats or branches during generation, the result is rejected rather than attached to a different conversation. Unsaved summary drafts survive UI refreshes within the session and are scoped to their chat and path.
 
+Injection uses SillyTavern's native `setExtensionPrompt` in-chat system position, with the selected depth, for both text and chat completion. Generation follows the current API's response-token limit (including reasoning where applicable); increase that limit if a summary is cut off. **Clear** archives the current path's summary checkpoints so an earlier checkpoint does not silently become active again.
+
 ## Installation
 
 Copy this repository into:
