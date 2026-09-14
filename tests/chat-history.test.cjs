@@ -188,3 +188,30 @@ test('injection rejects stale sources and clears after switching chats', async (
     f.api.injectCurrentSummary();
     assert.equal(f.prompts.stplus_chat_history.value, '');
 });
+
+test('Keep and use clears the stale state for the approved branch', async () => {
+    const f = fixture(); await f.edit('Summary');
+    f.metadata.stplusBranchingChats = { activePath: ['a', 'different'] };
+    assert.equal(f.api.getSnapshot().stale, true);
+    await f.api.resolveStale('keep');
+    assert.equal(f.api.getSnapshot().stale, false);
+    f.api.injectCurrentSummary();
+    assert.match(f.prompts.stplus_chat_history.value, /Summary/);
+});
+
+test('Prune archives a stale summary instead of leaving it active', async () => {
+    const f = fixture(); await f.edit('Summary');
+    f.metadata.stplusBranchingChats = { activePath: ['a', 'different'] };
+    await f.api.resolveStale('prune');
+    assert.equal(f.api.getSnapshot().record, null);
+    assert.equal(f.metadata.stplusChatHistory.archived.at(-1).archiveReason, 'stale-pruned');
+});
+
+test('Regenerate here replaces a stale summary on the current branch', async () => {
+    const f = fixture(); await f.edit('Old summary');
+    f.metadata.stplusBranchingChats = { activePath: ['a', 'different'] };
+    f.setGenerator(async () => 'Regenerated summary');
+    await f.api.resolveStale('regenerate');
+    assert.equal(f.api.getSnapshot().stale, false);
+    assert.match(f.api.getSnapshot().record.summary, /Regenerated summary/);
+});

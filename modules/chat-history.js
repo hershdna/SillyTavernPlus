@@ -1,4 +1,4 @@
-import { generateHistory, createHistoryReasoningView } from './history-generation.js?v=0.5.76';
+import { generateHistory, createHistoryReasoningView } from './history-generation.js?v=0.5.77';
 
 const MODULE_BUTTON_ID = 'stplus-chat-history-button';
 const WINDOW_ID = 'stplus-chat-history-window';
@@ -289,7 +289,15 @@ function getSnapshot() {
         (fingerprint, index) => fingerprint === messages[index]?.fingerprint,
     );
     const unbookmarked = record?.bookmarkFormat === 1 && !record.anchorMessageId;
-    const stale = Boolean(record) && (!matchingRecord || (!unbookmarked && (!anchorStillMatches || !sourcesStillMatch)));
+    // Keep-and-use records are explicitly approved for this exact chat/path
+    // and source snapshot. Honor that decision while calculating the view as
+    // well as while injecting the prompt; otherwise the stale warning and
+    // its action buttons immediately come back after Keep is clicked.
+    const accepted = record?.allowStale === true
+        && record.acceptedScope === JSON.stringify([getChatKey(), getMetadata().integrity ?? null, pathIds])
+        && record.acceptedFingerprints?.every((value, index) => value === messages[index]?.fingerprint);
+    const stale = Boolean(record) && !accepted
+        && (!matchingRecord || (!unbookmarked && (!anchorStillMatches || !sourcesStillMatch)));
     const validAnchorIndex = !stale && anchorIndex >= 0 ? anchorIndex : -1;
     return {
         chat,
