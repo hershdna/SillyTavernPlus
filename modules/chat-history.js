@@ -160,6 +160,13 @@ function readState() {
 
 async function saveMetadata() {
     const live = getLiveContext();
+    // Prefer the same complete-chat save path used by the working branch
+    // module. It serializes the current chat_metadata object on all supported
+    // SillyTavern builds, including profile-backed Chat Completion sessions.
+    if (typeof live?.saveChat === 'function') {
+        await live.saveChat();
+        return;
+    }
     if (typeof live?.saveMetadata === 'function') {
         await live.saveMetadata();
         return;
