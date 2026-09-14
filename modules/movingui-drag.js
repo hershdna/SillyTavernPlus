@@ -3,11 +3,13 @@ const READY_ATTRIBUTE = 'data-stplus-movingui-drag-ready';
 const MOVINGUI_PANEL_SELECTOR = [
     '.stplus-settings-window',
     '.stplus-branching-window',
+    '.stplus-chat-history-window',
     '#WorldInfo.stplus-floating-worlds',
 ].join(',');
 
 const LATE_LOADED_PANEL_SELECTOR = [
     MOVINGUI_PANEL_SELECTOR,
+    '.stplus-chat-history-window',
     '[data-dragged]',
 ].join(',');
 

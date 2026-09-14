@@ -657,6 +657,193 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     margin: 0;
 }
 
+.stplus-chat-history-window {
+    position: fixed;
+    z-index: 10009;
+    top: 8vh;
+    left: 50%;
+    display: none;
+    width: min(760px, calc(100vw - 24px));
+    height: min(720px, calc(100vh - 48px));
+    min-width: 360px;
+    min-height: 320px;
+    box-sizing: border-box;
+    overflow: hidden;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: var(--SmartThemeBlurTintColor, #202124);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 45%);
+    transform: translateX(-50%);
+}
+
+.stplus-chat-history-window.stplus-chat-history-window-open {
+    display: flex;
+    flex-direction: column;
+}
+
+.stplus-chat-history-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 5px 8px 5px 12px;
+    background: inherit;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-chat-history-header h3 {
+    margin: 0;
+    padding-right: 76px;
+}
+
+.stplus-chat-history-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.72;
+}
+
+.stplus-chat-history-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 1.2em;
+}
+
+.stplus-chat-history-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 10px 12px 12px;
+    overflow: auto;
+    font-size: 0.9em;
+}
+
+.stplus-chat-history-summary {
+    flex: 1 1 180px;
+    min-height: 140px;
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 8px;
+    color: inherit;
+    background: var(--SmartThemeBlurTintColor, #111);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+    font: inherit;
+    line-height: 1.35;
+}
+
+.stplus-chat-history-actions,
+.stplus-chat-history-stale-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.stplus-chat-history-settings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    padding: 9px;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+}
+
+.stplus-chat-history-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.stplus-chat-history-field-wide {
+    grid-column: 1 / -1;
+}
+
+.stplus-chat-history-field label {
+    opacity: 0.8;
+}
+
+.stplus-chat-history-field input,
+.stplus-chat-history-field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 6px 7px;
+    color: inherit;
+    background: var(--SmartThemeBlurTintColor, #111);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+    font: inherit;
+}
+
+.stplus-chat-history-field textarea {
+    min-height: 72px;
+    resize: vertical;
+}
+
+.stplus-chat-history-inject-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    grid-column: 1 / -1;
+}
+
+.stplus-chat-history-stale {
+    padding: 8px;
+    color: var(--SmartThemeEmColor, #ffb38a);
+    background: rgb(180 100 30 / 15%);
+    border: 1px solid rgb(220 145 60 / 55%);
+    border-radius: 4px;
+}
+
+.stplus-chat-history-info {
+    margin: 0;
+    opacity: 0.72;
+    line-height: 1.35;
+}
+
+.stplus-chat-history-toolbar-button {
+    flex: 0 0 var(--topBarBlockSize, 46px) !important;
+    width: var(--topBarBlockSize, 46px) !important;
+    min-width: var(--topBarBlockSize, 46px) !important;
+    height: var(--topBarBlockSize, 46px) !important;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+.stplus-chat-history-toolbar-button .drawer-icon {
+    margin: 0;
+}
+
+@media (max-width: 700px) {
+    .stplus-chat-history-window {
+        min-width: 0;
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+    }
+
+    .stplus-chat-history-settings {
+        grid-template-columns: 1fr;
+    }
+
+    .stplus-chat-history-field-wide,
+    .stplus-chat-history-inject-toggle {
+        grid-column: auto;
+    }
+}
+
 @media (max-width: 700px) {
     .stplus-alt-greeting-reorder .stplus-alt-position-control {
         margin-left: 2px;

@@ -1,10 +1,11 @@
 {
   "display_name": "SillyTavernPlus",
-  "version": "0.5.65",
+  "version": "0.5.66",
   "author": "hershdna",
   "homePage": "https://github.com/hershdna/SillyTavernPlus",
   "loading_order": 9998,
   "js": "index.js",
   "css": "style.css",
-  "auto_update": true
+  "auto_update": true,
+  "generate_interceptor": "stplusChatHistoryGenerateInterceptor"
 }

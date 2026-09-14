@@ -19,6 +19,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#gallery',
     '#movingDivs > div',
     '.stplus-branching-window',
+    '.stplus-chat-history-window',
     '[data-dragged]',
 ].join(',');
 

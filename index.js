@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.65';
+    const MODULE_CACHE_VERSION = '0.5.66';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -26,12 +26,13 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, branchingChats, chatVisibleEdit, settingsPanel, movingUiResize, movingUiDrag, movingUiFront] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, settingsPanel, movingUiResize, movingUiDrag, movingUiFront] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
                 loadModule('branching-chats'),
                 loadModule('chat-visible-edit'),
+                loadModule('chat-history'),
                 loadModule('settings-panel'),
                 loadModule('movingui-resize'),
                 loadModule('movingui-drag'),
@@ -43,6 +44,7 @@
             lorebookMods.initialize(context, settings);
             branchingChats.initialize(context, settings);
             chatVisibleEdit.initialize(context, settings);
+            chatHistory.initialize(context, settings);
             movingUiResize.initialize(context, settings);
             movingUiDrag.initialize(context, settings);
             movingUiFront.initialize(context, settings);
@@ -50,6 +52,7 @@
                 onGreetingModsChanged: () => greetingMods.refresh(),
                 onBranchingChatsChanged: () => branchingChats.refresh(),
                 onFormattedMessageEditChanged: () => chatVisibleEdit.refresh(),
+                onChatHistoryChanged: () => chatHistory.refresh(),
                 onLorebookModsChanged: () => lorebookMods.refresh(),
                 onMovingUiResizeChanged: () => movingUiResize.refresh(),
                 onMovingUiDragChanged: () => movingUiDrag.refresh(),
@@ -68,6 +71,7 @@
                 // mutations such as MovingUI z-index changes.
                 settingsPanel.refresh();
                 chatVisibleEdit.refresh();
+                chatHistory.refresh();
                 movingUiResize.refresh();
                 movingUiDrag.refresh();
                 movingUiFront.refresh();

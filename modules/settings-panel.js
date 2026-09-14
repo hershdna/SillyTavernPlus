@@ -220,6 +220,15 @@ function createSettingsWindow() {
 
     const chatSection = createSettingsSection('Chat');
     chatSection.append(createCheckbox(
+        'stplus-chat-history-enabled',
+        'Chat history summaries',
+        'Generate branch-aware summaries and optionally inject the current summary into prompts.',
+        (enabled) => {
+            settings.chatHistoryEnabled = enabled;
+            callbacks?.onChatHistoryChanged?.();
+        },
+    ));
+    chatSection.append(createCheckbox(
         'stplus-branching-chats-enabled',
         'Chat branching',
         'Keep alternate chat paths in one conversation with a navigable tree and vanilla JSONL export.',
@@ -331,6 +340,7 @@ export function refresh() {
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
+    const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
     const formattedMessageEditCheckbox = document.getElementById('stplus-formatted-message-edit-enabled');
     const movingUiResizeCheckbox = document.getElementById('stplus-movingui-resize-enabled');
     const movingUiDragCheckbox = document.getElementById('stplus-movingui-drag-enabled');
@@ -340,6 +350,7 @@ export function refresh() {
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
+    if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;
     if (formattedMessageEditCheckbox) formattedMessageEditCheckbox.checked = settings.formattedMessageEditEnabled;
     if (movingUiResizeCheckbox) movingUiResizeCheckbox.checked = settings.movingUiResizeEnabled;
     if (movingUiDragCheckbox) movingUiDragCheckbox.checked = settings.movingUiDragEnabled;

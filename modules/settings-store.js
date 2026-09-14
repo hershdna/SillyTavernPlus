@@ -8,6 +8,11 @@ const DEFAULT_SETTINGS = Object.freeze({
     movingUiBringToFrontEnabled: true,
     movingUiOpenOnTopEnabled: true,
     movingUiUnboundedResizeEnabled: true,
+    chatHistoryEnabled: true,
+    chatHistoryAutoInjectEnabled: true,
+    chatHistoryPrompt: 'Write a concise bullet list of only the important events, decisions, facts, relationships, and unresolved threads. Do not include filler or commentary about the summary itself.',
+    chatHistoryInjectionHeader: 'Chat history summary:',
+    chatHistoryInjectionDepth: 4,
     reasoningScanEnabled: false,
     reasoningScanDepth: 1,
 });
@@ -18,6 +23,11 @@ let settings = null;
 function normalizeDepth(value) {
     const depth = Number.parseInt(value, 10);
     return Number.isInteger(depth) ? Math.max(1, Math.min(100, depth)) : DEFAULT_SETTINGS.reasoningScanDepth;
+}
+
+function normalizeChatHistoryDepth(value) {
+    const depth = Number.parseInt(value, 10);
+    return Number.isInteger(depth) ? Math.max(0, Math.min(100, depth)) : DEFAULT_SETTINGS.chatHistoryInjectionDepth;
 }
 
 export function initializeSettings(stContext) {
@@ -36,6 +46,15 @@ export function initializeSettings(stContext) {
         movingUiBringToFrontEnabled: saved.movingUiBringToFrontEnabled !== false,
         movingUiOpenOnTopEnabled: saved.movingUiOpenOnTopEnabled !== false,
         movingUiUnboundedResizeEnabled: saved.movingUiUnboundedResizeEnabled !== false,
+        chatHistoryEnabled: saved.chatHistoryEnabled !== false,
+        chatHistoryAutoInjectEnabled: saved.chatHistoryAutoInjectEnabled !== false,
+        chatHistoryPrompt: typeof saved.chatHistoryPrompt === 'string' && saved.chatHistoryPrompt.trim()
+            ? saved.chatHistoryPrompt
+            : DEFAULT_SETTINGS.chatHistoryPrompt,
+        chatHistoryInjectionHeader: typeof saved.chatHistoryInjectionHeader === 'string'
+            ? saved.chatHistoryInjectionHeader
+            : DEFAULT_SETTINGS.chatHistoryInjectionHeader,
+        chatHistoryInjectionDepth: normalizeChatHistoryDepth(saved.chatHistoryInjectionDepth),
         reasoningScanEnabled: saved.reasoningScanEnabled === true,
         reasoningScanDepth: normalizeDepth(saved.reasoningScanDepth),
     };
@@ -51,4 +70,4 @@ export function getSettings() {
     return settings ?? DEFAULT_SETTINGS;
 }
 
-export { normalizeDepth };
+export { normalizeDepth, normalizeChatHistoryDepth };
