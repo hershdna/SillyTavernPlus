@@ -52,6 +52,8 @@ let treeViewInitialized = false;
 let centerActiveNodePending = false;
 let centerActiveNodeFrame = 0;
 let treePanState = null;
+let deletionSyncPending = false;
+let deletedSwipeSlotsPending = [];
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
 
@@ -770,6 +772,119 @@ function getMessageNodeId(message, swipeIndex) {
     return typeof directId === 'string' && directId.trim() ? directId : null;
 }
 
+function getChatNodeIds(targetGraph, chat) {
+    const liveIds = new Set();
+    if (!targetGraph?.nodes || !Array.isArray(chat)) return liveIds;
+    chat.forEach((message) => {
+        const variants = getVariantContents(message);
+        variants.forEach((content, swipeIndex) => {
+            if (!hasMeaningfulContent(content)) return;
+            const nodeId = getMessageNodeId(message, swipeIndex);
+            if (nodeId && targetGraph.nodes[nodeId]) liveIds.add(nodeId);
+        });
+    });
+    return liveIds;
+}
+
+function collectGraphDescendants(targetGraph, rootId) {
+    const descendants = new Set([rootId]);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        Object.values(targetGraph?.nodes ?? {}).forEach((node) => {
+            if (descendants.has(node.id) || !descendants.has(node.parentId)) return;
+            descendants.add(node.id);
+            changed = true;
+        });
+    }
+    return descendants;
+}
+
+function pruneDeletedGraphNodes(targetGraph, liveIds, deletedNodeIds = []) {
+    if (!targetGraph?.nodes) return false;
+    const activeIds = new Set(targetGraph.activePath ?? []);
+    const roots = new Set(deletedNodeIds.filter((id) => activeIds.has(id) || targetGraph.nodes[id]));
+    // A normal message deletion does not report its index. The node IDs on
+    // the old active path are the reliable deletion diff: nodes still present
+    // in chat (including all surviving swipes) remain live; the missing path
+    // nodes are the message(s) removed by SillyTavern.
+    activeIds.forEach((id) => {
+        if (!liveIds.has(id)) roots.add(id);
+    });
+    if (roots.size === 0) return false;
+
+    const candidates = new Set();
+    roots.forEach((rootId) => {
+        if (targetGraph.nodes[rootId]) {
+            collectGraphDescendants(targetGraph, rootId).forEach((id) => candidates.add(id));
+        }
+    });
+    if (candidates.size === 0) return false;
+
+    // Keep a surviving message and everything below it. This matters when ST
+    // removes one array element: later messages keep their node IDs but their
+    // parent shifts past the deleted message. Obsolete siblings/subtrees do
+    // not have a live ancestor and are removed.
+    const removeIds = new Set();
+    candidates.forEach((id) => {
+        if (liveIds.has(id)) return;
+        if (roots.has(id)) {
+            removeIds.add(id);
+            return;
+        }
+        let parentId = targetGraph.nodes[id]?.parentId ?? null;
+        while (parentId) {
+            // A stale root is the deletion boundary. A live ancestor above
+            // that root belongs to the surviving path, but does not make a
+            // branch that belonged to the deleted message valid.
+            if (roots.has(parentId)) {
+                removeIds.add(id);
+                return;
+            }
+            if (liveIds.has(parentId)) return;
+            parentId = targetGraph.nodes[parentId]?.parentId ?? null;
+        }
+        removeIds.add(id);
+    });
+    if (removeIds.size === 0) return false;
+
+    const nearestSurvivingParent = (node) => {
+        let parentId = node.parentId ?? null;
+        const seen = new Set();
+        while (parentId && !seen.has(parentId)) {
+            seen.add(parentId);
+            if (!removeIds.has(parentId) && targetGraph.nodes[parentId]) return parentId;
+            parentId = targetGraph.nodes[parentId]?.parentId ?? null;
+        }
+        return null;
+    };
+    Object.values(targetGraph.nodes).forEach((node) => {
+        if (removeIds.has(node.id)) return;
+        if (removeIds.has(node.parentId)) {
+            node.parentId = nearestSurvivingParent(node);
+            node.key = getNodeKey(node.parentId, node.sourceIndex, node.swipeIndex, node.content);
+        }
+    });
+    removeIds.forEach((id) => delete targetGraph.nodes[id]);
+    targetGraph.activePath = (targetGraph.activePath ?? []).filter((id) => !removeIds.has(id));
+    normalizeGraph(targetGraph);
+    return true;
+}
+
+function reconcileDeletedGraph(targetGraph, chat, deletedSwipeSlots = []) {
+    const liveIds = getChatNodeIds(targetGraph, chat);
+    const deletedNodeIds = [];
+    deletedSwipeSlots.forEach((slot) => {
+        const messageIndex = Number(slot?.messageIndex);
+        const swipeIndex = Number(slot?.swipeIndex);
+        if (!Number.isInteger(messageIndex) || !Number.isInteger(swipeIndex)) return;
+        Object.values(targetGraph.nodes).forEach((node) => {
+            if (node.sourceIndex === messageIndex && node.swipeIndex === swipeIndex) deletedNodeIds.push(node.id);
+        });
+    });
+    return pruneDeletedGraphNodes(targetGraph, liveIds, deletedNodeIds);
+}
+
 function setMessageNodeId(message, swipeIndex, nodeId) {
     if (!message || typeof message !== 'object' || !nodeId) return;
     if (Array.isArray(message.swipes) && message.swipes.length > 0) {
@@ -834,9 +949,13 @@ function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variant
     const persistedNode = persistedId ? graph?.nodes?.[persistedId] : null;
     const normalizedParentId = parentId ?? null;
     if (persistedNode
-        && persistedNode.parentId === normalizedParentId
         && persistedNode.sourceIndex === sourceIndex
         && persistedNode.swipeIndex === swipeIndex) {
+        // SillyTavern removes one array element for a normal message delete.
+        // Messages after the deleted element retain their node IDs, but move
+        // to the deleted node's parent. Treat the embedded ID as authoritative
+        // and reparent that surviving node instead of creating a duplicate.
+        persistedNode.parentId = normalizedParentId;
         updateNodeFromMessage(persistedNode, message, sourceIndex, swipeIndex, content, variantCount);
         return persistedNode;
     }
@@ -954,12 +1073,18 @@ function syncGraph(force = false) {
     }
     const chat = getChat();
     const signature = getChatSignature(chat);
-    if (!force && signature === lastChatSignature) return;
+    const shouldReconcileDeletion = deletionSyncPending;
+    if (!force && signature === lastChatSignature && !shouldReconcileDeletion) return;
     centerActiveNodePending = true;
     lastChatSignature = signature;
     if (!graph) graph = createGraph(chatKey);
     graph.chatId = chatKey;
     graph.chatIntegrity = getChatIntegrity();
+    if (shouldReconcileDeletion) {
+        reconcileDeletedGraph(graph, chat, deletedSwipeSlotsPending);
+        deletionSyncPending = false;
+        deletedSwipeSlotsPending = [];
+    }
     pruneEmptyNodes(graph);
     normalizeGraph(graph);
 
@@ -1467,6 +1592,26 @@ function bindEvents() {
     const onSafeChatMutation = () => {
         if (!generationActive) scheduleSync(0);
     };
+    const onMessageDeleted = () => {
+        // MESSAGE_DELETED carries the post-delete chat length, not the
+        // deleted message index. syncGraph compares the old active path with
+        // the surviving message node IDs to identify the removed node.
+        deletionSyncPending = true;
+        if (!generationActive) scheduleSync(0);
+    };
+    const onSwipeDeleted = (detail) => {
+        const payload = detail?.detail ?? detail;
+        const messageIndex = Number(payload?.messageId);
+        const swipeIndex = Number(payload?.swipeId);
+        if (Number.isInteger(messageIndex) && Number.isInteger(swipeIndex)) {
+            deletedSwipeSlotsPending.push({ messageIndex, swipeIndex });
+            // Keep a malformed/repeated event burst from growing without
+            // bound while still retaining every distinct deletion in a tick.
+            deletedSwipeSlotsPending = deletedSwipeSlotsPending.slice(-32);
+        }
+        deletionSyncPending = true;
+        if (!generationActive) scheduleSync(0);
+    };
     const onSwipe = () => {
         // Swiping emits before the replacement response is finished. Give
         // GENERATION_STARTED time to mark the stream active; GENERATION_ENDED
@@ -1486,6 +1631,8 @@ function bindEvents() {
         window.clearTimeout(syncTimer);
         window.clearTimeout(persistTimer);
         persistRevision += 1;
+        deletionSyncPending = false;
+        deletedSwipeSlotsPending = [];
         observedChatState = '';
         const eventChatKey = normalizeChatKey(chatId);
         noteLifecycleChatKey(eventChatKey);
@@ -1580,6 +1727,8 @@ function bindEvents() {
         }
 
         newChatPending = true;
+        deletionSyncPending = false;
+        deletedSwipeSlotsPending = [];
         reloadTargetChatKey = null;
         chatLoadPending = false;
         window.clearTimeout(syncTimer);
@@ -1633,6 +1782,8 @@ function bindEvents() {
         const isSameChatReload = reloadChatPending
             || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
         if (!isSameChatReload) {
+            deletionSyncPending = false;
+            deletedSwipeSlotsPending = [];
             graph = null;
             loadedChatKey = null;
         }
@@ -1706,7 +1857,8 @@ function bindEvents() {
     on('MESSAGE_SWIPED', onSwipe);
     on('MESSAGE_UPDATED', onSafeChatMutation);
     on('MESSAGE_EDITED', onSafeChatMutation);
-    on('MESSAGE_DELETED', onSafeChatMutation);
+    on('MESSAGE_DELETED', onMessageDeleted);
+    on('MESSAGE_SWIPE_DELETED', onSwipeDeleted);
     // MESSAGE_RECEIVED is deliberately not used: SillyTavern can emit it
     // while a streamed response is still being assembled.
     listenersBound = true;
