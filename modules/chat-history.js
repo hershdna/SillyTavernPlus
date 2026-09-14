@@ -1,5 +1,3 @@
-import { save } from './settings-store.js';
-
 const MODULE_BUTTON_ID = 'stplus-chat-history-button';
 const WINDOW_ID = 'stplus-chat-history-window';
 const METADATA_KEY = 'stplusChatHistory';
@@ -16,6 +14,20 @@ let refreshTimer = null;
 let listenersBound = false;
 let actionInProgress = false;
 let forceFullGeneration = false;
+const drafts = new Map();
+let renderedScope = null;
+let renderedValue = '';
+
+function snapshotScope(snapshot) {
+    return JSON.stringify([snapshot.chatKey, snapshot.integrity, snapshot.pathIds]);
+}
+
+function captureDraft() {
+    const box = panel?.querySelector('.stplus-chat-history-summary');
+    if (renderedScope && box && box.value !== renderedValue) {
+        drafts.set(renderedScope, box.value);
+    }
+}
 
 function getLiveContext() {
     try {
@@ -23,6 +35,10 @@ function getLiveContext() {
     } catch {
         return context;
     }
+}
+
+function save() {
+    getLiveContext()?.saveSettingsDebounced?.();
 }
 
 function getChat() {
@@ -155,7 +171,7 @@ function normalizeState(raw) {
 }
 
 function readState() {
-    return normalizeState(getMetadata()[METADATA_KEY]);
+    return normalizeState(clone(getMetadata()[METADATA_KEY]));
 }
 
 async function saveMetadata() {
@@ -175,7 +191,7 @@ async function saveMetadata() {
         live.saveChatDebounced();
         return;
     }
-    live?.saveSettingsDebounced?.();
+    throw new Error('SillyTavern does not expose a chat save method.');
 }
 
 async function writeState(state) {
@@ -186,32 +202,14 @@ async function writeState(state) {
         records: state.records,
         archived: state.archived.slice(-MAX_ARCHIVED_RECORDS),
     };
-    // SillyTavern's current context updates chat metadata through this helper.
-    // Direct assignment is retained for older builds, but must not be the only
-    // path: some context objects expose a read-only metadata snapshot.
+    // Update only the current chat. Never mutate the startup context's
+    // metadata: that object may belong to a chat which has since been closed.
     if (typeof live?.updateChatMetadata === 'function') {
         live.updateChatMetadata({ [METADATA_KEY]: payload }, false);
-        // updateChatMetadata() replaces SillyTavern's metadata object. Older
-        // context snapshots (including the one passed to this module at
-        // startup) still point at the previous object, so keep those aliases
-        // synchronized for the rest of this turn and for older ST builds.
-        const currentMetadata = live.chatMetadata ?? live.chat_metadata;
-        if (currentMetadata && typeof currentMetadata === 'object') {
-            currentMetadata[METADATA_KEY] = payload;
-        }
-        if (metadata && typeof metadata === 'object') {
-            metadata[METADATA_KEY] = payload;
-        }
-        if (context && context !== live) {
-            const contextMetadata = context.chatMetadata ?? context.chat_metadata;
-            if (contextMetadata && typeof contextMetadata === 'object') {
-                contextMetadata[METADATA_KEY] = payload;
-            }
-        }
     } else if (metadata && typeof metadata === 'object') {
         metadata[METADATA_KEY] = payload;
     } else {
-        return false;
+        throw new Error('No active chat metadata is available.');
     }
     await saveMetadata();
     return true;
@@ -226,10 +224,12 @@ function getSnapshot() {
     const chat = getChat();
     const pathIds = getActivePathIds(chat);
     const messages = getSnapshotMessages(chat);
+    messages.forEach((message, index) => { message.id = pathIds[index]; });
     const state = readState();
-    const matching = state.records
+    const matching = state.records.slice().reverse()
         .filter((record) => !record.archived && isPrefix(record.pathIds, pathIds))
-        .sort((a, b) => (b.pathIds?.length ?? 0) - (a.pathIds?.length ?? 0));
+        .sort((a, b) => (b.pathIds?.length ?? 0) - (a.pathIds?.length ?? 0)
+            || Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
     const matchingRecord = matching[0] ?? null;
     const staleRecord = matchingRecord
         ? null
@@ -240,11 +240,16 @@ function getSnapshot() {
     const anchorIndex = record ? pathIds.indexOf(record.anchorMessageId) : -1;
     const anchorStillMatches = anchorIndex >= 0
         && (!record.anchorFingerprint || record.anchorFingerprint === messages[anchorIndex]?.fingerprint);
-    const stale = Boolean(record) && (!matchingRecord || !anchorStillMatches);
+    const sourcesStillMatch = !record?.sourceFingerprints || record.sourceFingerprints.every(
+        (fingerprint, index) => fingerprint === messages[index]?.fingerprint,
+    );
+    const stale = Boolean(record) && (!matchingRecord || !anchorStillMatches || !sourcesStillMatch);
     const validAnchorIndex = !stale && anchorIndex >= 0 ? anchorIndex : -1;
     return {
         chat,
+        firstMessage: chat[0],
         chatKey: getChatKey(),
+        integrity: getMetadata().integrity ?? null,
         pathIds,
         messages,
         state,
@@ -291,7 +296,10 @@ function extractGeneratedText(result) {
 
 function getGenerator() {
     const live = getLiveContext();
-    return live?.generateQuietPrompt ?? globalThis.generateQuietPrompt;
+    // Quiet generation also includes the ordinary full chat prompt. Raw
+    // generation uses precisely the previous summary + new range we supply,
+    // while still using SillyTavern's currently selected API.
+    return live?.generateRaw;
 }
 
 async function generateSummary() {
@@ -303,7 +311,7 @@ async function generateSummary() {
     }
     const generator = getGenerator();
     if (typeof generator !== 'function') {
-        globalThis.toastr?.error?.('SillyTavern did not expose quiet generation.');
+        globalThis.toastr?.error?.('This SillyTavern version does not expose raw generation.');
         return;
     }
     actionInProgress = true;
@@ -317,17 +325,24 @@ async function generateSummary() {
             globalThis.toastr?.info?.('No new messages have been added since the last summary.');
             return;
         }
-        const result = await generator({
-            quietPrompt: buildSummaryPrompt(snapshot, previousSummary, sourceMessages),
-        });
+        const result = await generator({ prompt: buildSummaryPrompt(snapshot, previousSummary, sourceMessages) });
         const summary = extractGeneratedText(result);
         if (!summary) throw new Error('The model returned an empty summary.');
+        const current = getSnapshot();
+        if (snapshotScope(current) !== snapshotScope(snapshot)
+            || current.firstMessage !== snapshot.firstMessage
+            || current.messages.some((message, index) => message.fingerprint !== snapshot.messages[index]?.fingerprint)) {
+            throw new Error('The chat or branch changed during generation. Generate again for the current chat.');
+        }
         const state = readState();
         const existing = !full && snapshot.record && !snapshot.stale
             ? state.records.find((record) => record.id === snapshot.record.id)
             : null;
         const lastMessage = snapshot.messages.at(-1);
-        const record = existing ?? {
+        // Retain the previous checkpoint so jumping behind this update can
+        // still use the older summary whose sources remain on that path.
+        const record = {
+            ...(existing ?? {}),
             id: `stplus-history-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             createdAt: Date.now(),
         };
@@ -336,6 +351,7 @@ async function generateSummary() {
             pathIds: snapshot.pathIds.slice(),
             anchorMessageId: lastMessage?.id ?? null,
             anchorFingerprint: lastMessage?.fingerprint ?? null,
+            sourceFingerprints: snapshot.messages.map(message => message.fingerprint),
             sourceMessageCount: snapshot.messages.length,
             summary,
             prompt: String(settings?.chatHistoryPrompt || DEFAULT_PROMPT),
@@ -343,8 +359,12 @@ async function generateSummary() {
             archived: false,
             allowStale: false,
         });
-        if (!existing) state.records.push(record);
+        state.records.push(record);
         await writeState(state);
+        drafts.delete(snapshotScope(snapshot));
+        renderedValue = summary;
+        const box = panel?.querySelector('.stplus-chat-history-summary');
+        if (box) box.value = summary;
         globalThis.toastr?.success?.('Chat history summary updated.');
     } catch (error) {
         console.error('[SillyTavernPlus] Chat history generation failed:', error);
@@ -356,6 +376,7 @@ async function generateSummary() {
 }
 
 async function saveEditedSummary() {
+    if (actionInProgress) return;
     const summaryBox = panel?.querySelector('.stplus-chat-history-summary');
     if (!(summaryBox instanceof HTMLTextAreaElement)) return;
     const snapshot = getSnapshot();
@@ -369,12 +390,15 @@ async function saveEditedSummary() {
         id: `stplus-history-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         createdAt: Date.now(),
     };
-    Object.assign(nextRecord, {
+    if (!record) Object.assign(nextRecord, {
         branchKey: snapshot.pathIds.join('/'),
         pathIds: snapshot.pathIds.slice(),
         anchorMessageId: lastMessage?.id ?? null,
         anchorFingerprint: lastMessage?.fingerprint ?? null,
+        sourceFingerprints: snapshot.messages.map(message => message.fingerprint),
         sourceMessageCount: snapshot.messages.length,
+    });
+    Object.assign(nextRecord, {
         summary: summaryBox.value.trim(),
         prompt: String(settings?.chatHistoryPrompt || DEFAULT_PROMPT),
         updatedAt: Date.now(),
@@ -382,12 +406,26 @@ async function saveEditedSummary() {
         allowStale: false,
     });
     if (!record) state.records.push(nextRecord);
-    await writeState(state);
-    globalThis.toastr?.success?.('Chat history summary saved.');
-    render();
+    actionInProgress = true;
+    try {
+        await writeState(state);
+        drafts.delete(snapshotScope(snapshot));
+        if (snapshotScope(getSnapshot()) === snapshotScope(snapshot)) {
+            renderedValue = nextRecord.summary;
+            summaryBox.value = nextRecord.summary;
+        }
+        globalThis.toastr?.success?.('Chat history summary saved.');
+    } catch (error) {
+        console.error('[SillyTavernPlus] Saving history failed:', error);
+        globalThis.toastr?.error?.(`Could not save summary: ${error.message || error}`);
+    } finally {
+        actionInProgress = false;
+        render();
+    }
 }
 
 async function clearCurrentSummary() {
+    if (actionInProgress) return;
     const snapshot = getSnapshot();
     if (!snapshot.record) return;
     const state = readState();
@@ -396,6 +434,10 @@ async function clearCurrentSummary() {
     state.records = state.records.filter((item) => item.id !== record.id);
     state.archived.push({ ...record, archived: true, archivedAt: Date.now(), archiveReason: 'cleared' });
     await writeState(state);
+    drafts.delete(snapshotScope(snapshot));
+    renderedValue = '';
+    const box = panel?.querySelector('.stplus-chat-history-summary');
+    if (box) box.value = '';
     render();
 }
 
@@ -407,6 +449,8 @@ async function resolveStale(action) {
     if (!record) return;
     if (action === 'keep') {
         record.allowStale = true;
+        record.acceptedScope = snapshotScope(snapshot);
+        record.acceptedFingerprints = snapshot.messages.map(message => message.fingerprint);
         record.updatedAt = Date.now();
     } else if (action === 'prune') {
         state.records = state.records.filter((item) => item.id !== record.id);
@@ -428,6 +472,7 @@ function setInputValue(selector, value) {
 
 function render() {
     if (!panel) return;
+    captureDraft();
     const snapshot = getSnapshot();
     const status = panel.querySelector('.stplus-chat-history-status');
     const summaryBox = panel.querySelector('.stplus-chat-history-summary');
@@ -439,13 +484,18 @@ function render() {
     const hasSummary = Boolean(snapshot.record?.summary);
     if (status) {
         if (!snapshot.chatKey) status.textContent = 'No active chat';
-        else if (actionInProgress) status.textContent = 'Generating summary…';
+        else if (actionInProgress) status.textContent = 'Working…';
         else if (snapshot.stale) status.textContent = 'Summary is stale for this branch';
         else if (hasSummary) status.textContent = `Summarized through message ${snapshot.anchorIndex + 1}`;
         else status.textContent = 'No summary generated yet';
     }
-    if (summaryBox instanceof HTMLTextAreaElement && document.activeElement !== summaryBox) {
-        summaryBox.value = snapshot.record?.summary ?? '';
+    if (summaryBox instanceof HTMLTextAreaElement) {
+        const scope = snapshotScope(snapshot);
+        const value = drafts.get(scope) ?? snapshot.record?.summary ?? '';
+        if (summaryBox.value !== value) summaryBox.value = value;
+        renderedScope = scope;
+        renderedValue = value;
+        summaryBox.disabled = actionInProgress || !snapshot.chatKey;
     }
     if (staleBox instanceof HTMLElement) staleBox.hidden = !snapshot.stale;
     if (sourceInfo) {
@@ -503,6 +553,7 @@ function createWindow() {
     const summary = document.createElement('textarea');
     summary.className = 'stplus-chat-history-summary';
     summary.placeholder = 'No summary yet. Generate one or write your own.';
+    summary.addEventListener('input', captureDraft);
     summary.setAttribute('aria-label', 'Current chat history summary');
     const actions = document.createElement('div');
     actions.className = 'stplus-chat-history-actions';
@@ -648,6 +699,7 @@ function bindEvents() {
     const names = [
         'APP_READY', 'CHAT_CHANGED', 'CHAT_CREATED', 'CHAT_LOADED', 'CHAT_DELETED',
         'MESSAGE_EDITED', 'MESSAGE_DELETED', 'MESSAGE_SWIPED', 'MESSAGE_UPDATED',
+        'MESSAGE_SENT', 'MESSAGE_RECEIVED', 'CHARACTER_MESSAGE_RENDERED', 'USER_MESSAGE_RENDERED',
         'GENERATION_ENDED', 'SETTINGS_UPDATED',
     ];
     names.map((name) => types[name]).filter(Boolean).forEach((eventName) => source.on(eventName, scheduleRefresh));
@@ -675,10 +727,16 @@ export function refresh() {
 }
 
 async function injectCurrentSummary(chat) {
+    if (!Array.isArray(chat)) return;
+    for (let index = chat.length - 1; index >= 0; index--) {
+        if (chat[index]?.extra?.[INJECTION_MARKER] === true) chat.splice(index, 1);
+    }
     if (!settings?.chatHistoryEnabled || settings.chatHistoryAutoInjectEnabled === false || !Array.isArray(chat)) return;
     const snapshot = getSnapshot();
     const record = snapshot.record;
-    if (!record?.summary || (snapshot.stale && record.allowStale !== true)) return;
+    const accepted = record?.allowStale === true && record.acceptedScope === snapshotScope(snapshot)
+        && record.acceptedFingerprints?.every((value, index) => value === snapshot.messages[index]?.fingerprint);
+    if (!record?.summary || (snapshot.stale && !accepted)) return;
     if (chat.some((message) => message?.extra?.[INJECTION_MARKER] === true)) return;
     const depthValue = Number.parseInt(settings.chatHistoryInjectionDepth, 10);
     const depth = Number.isInteger(depthValue) ? Math.max(0, Math.min(100, depthValue)) : 4;
