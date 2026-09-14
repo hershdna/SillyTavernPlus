@@ -352,12 +352,6 @@ async function saveEditedSummary() {
     const summaryBox = panel?.querySelector('.stplus-chat-history-summary');
     if (!(summaryBox instanceof HTMLTextAreaElement)) return;
     const snapshot = getSnapshot();
-    console.warn('[SillyTavernPlus] Chat History save start', {
-        hasChatKey: Boolean(snapshot.chatKey),
-        messageCount: snapshot.messages.length,
-        hasValue: Boolean(summaryBox.value.trim()),
-        metadataKeys: Object.keys(getMetadata()),
-    });
     if (!snapshot.chatKey || !summaryBox.value.trim()) return;
     const state = readState();
     const record = snapshot.record && !snapshot.stale
@@ -381,12 +375,7 @@ async function saveEditedSummary() {
         allowStale: false,
     });
     if (!record) state.records.push(nextRecord);
-    const written = await writeState(state);
-    console.warn('[SillyTavernPlus] Chat History save result', {
-        written,
-        recordCount: state.records.length,
-        metadataHasHistory: Boolean(getMetadata()[METADATA_KEY]),
-    });
+    await writeState(state);
     globalThis.toastr?.success?.('Chat history summary saved.');
     render();
 }
