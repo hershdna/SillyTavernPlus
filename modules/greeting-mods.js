@@ -142,13 +142,13 @@ function reorderGreeting(list, sourceIndex, requestedPosition) {
     return { ok: true, moved: true, message: `Moved greeting ${sourceIndex + 1} to position ${requestedPosition}.` };
 }
 
-function applyRequestedPosition(input) {
+function applyRequestedPosition(input, requestedValue = input.value) {
     const block = input.closest('.alternate_greeting');
     const list = input.closest('.alternate_greetings_list');
     const popup = input.closest(POPUP_SELECTOR);
     const blocks = getGreetingBlocks(list);
     const sourceIndex = blocks.indexOf(block);
-    const requestedPosition = Number.parseInt(input.value, 10);
+    const requestedPosition = Number.parseInt(requestedValue, 10);
 
     if (!Number.isInteger(requestedPosition)) {
         syncPositionFields(list);
@@ -187,7 +187,20 @@ function createPositionControl(block) {
     moveButton.className = 'menu_button menu_button_icon stplus-alt-position-apply';
     moveButton.innerHTML = '<i class="fa-solid fa-arrow-right"></i><span>Move</span>';
 
-    moveButton.addEventListener('click', () => applyRequestedPosition(input));
+    // Clicking the arrow normally blurs the number field first. SillyTavern's
+    // character-editor refresh can then normalize the field back to its old
+    // position before the click handler runs. Capture the user's value before
+    // that blur and use it for the eventual click; keyboard activation still
+    // reads the live field value normally.
+    let pointerRequestedPosition = null;
+    moveButton.addEventListener('pointerdown', (event) => {
+        if (event.button === 0) pointerRequestedPosition = input.value;
+    });
+    moveButton.addEventListener('click', () => {
+        const requestedPosition = pointerRequestedPosition ?? input.value;
+        pointerRequestedPosition = null;
+        applyRequestedPosition(input, requestedPosition);
+    });
 
     control.append(label, input, moveButton);
     return control;
@@ -230,4 +243,3 @@ export function refresh() {
         else undecorateGreetingPopup(popup);
     });
 }
-
