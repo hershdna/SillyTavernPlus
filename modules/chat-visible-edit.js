@@ -363,8 +363,9 @@ function createAction(iconClass, title, onClick) {
 function updateEditModeToggle(toggle) {
     if (!(toggle instanceof HTMLElement)) return;
     const formatted = editMode === 'formatted';
-    toggle.classList.toggle('fa-toggle-on', formatted);
-    toggle.classList.toggle('fa-toggle-off', !formatted);
+    toggle.classList.remove('fa-toggle-on', 'fa-toggle-off');
+    toggle.textContent = formatted ? 'FMT' : 'VAN';
+    toggle.dataset.mode = formatted ? 'formatted' : 'vanilla';
     toggle.title = formatted ? 'Edit mode: Formatted (click for vanilla)' : 'Edit mode: Vanilla (click for formatted)';
     toggle.setAttribute('aria-label', toggle.title);
     toggle.setAttribute('aria-pressed', String(formatted));
@@ -408,7 +409,7 @@ function installEditModeToggles() {
         if (nativeEdit.nextElementSibling?.classList.contains(EDIT_MODE_TOGGLE_CLASS)) return;
         const toggle = document.createElement('button');
         toggle.type = 'button';
-        toggle.className = `mes_button interactable fa-solid ${EDIT_MODE_TOGGLE_CLASS}`;
+        toggle.className = `mes_button interactable ${EDIT_MODE_TOGGLE_CLASS}`;
         toggle.dataset.stplusOwned = '1';
         const toggleMode = (event) => {
             event.preventDefault();
