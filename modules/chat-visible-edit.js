@@ -382,11 +382,10 @@ function installEditModeToggles() {
     document.querySelectorAll('.mes .mes_edit').forEach((nativeEdit) => {
         if (!(nativeEdit instanceof HTMLElement) || nativeEdit.classList.contains(EDIT_MODE_TOGGLE_CLASS)) return;
         if (nativeEdit.nextElementSibling?.classList.contains(EDIT_MODE_TOGGLE_CLASS)) return;
-        const toggle = document.createElement('div');
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
         toggle.className = `mes_button interactable fa-solid ${EDIT_MODE_TOGGLE_CLASS}`;
         toggle.dataset.stplusOwned = '1';
-        toggle.setAttribute('role', 'button');
-        toggle.tabIndex = 0;
         const toggleMode = (event) => {
             event.preventDefault();
             event.stopPropagation();
