@@ -374,6 +374,30 @@ function updateEditModeToggles() {
     document.querySelectorAll(`.${EDIT_MODE_TOGGLE_CLASS}`).forEach(updateEditModeToggle);
 }
 
+function handleEditModeToggleClick(event) {
+    if (!isEnabled()) return;
+    const toggle = event.target instanceof Element
+        ? event.target.closest(`.${EDIT_MODE_TOGGLE_CLASS}`)
+        : null;
+    if (!(toggle instanceof HTMLElement)) return;
+
+    // Message controls can survive an extension refresh or a chat rerender.
+    // Handle the toggle at the document level as well as on the button itself,
+    // so a reused control never loses its mode-switch behavior.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    setEditMode(editMode === 'formatted' ? 'vanilla' : 'formatted');
+}
+
+function handleEditModeToggleKeydown(event) {
+    if (!isEnabled() || (event.key !== 'Enter' && event.key !== ' ')) return;
+    const toggle = event.target instanceof Element
+        ? event.target.closest(`.${EDIT_MODE_TOGGLE_CLASS}`)
+        : null;
+    if (!(toggle instanceof HTMLElement)) return;
+    handleEditModeToggleClick(event);
+}
+
 function installEditModeToggles() {
     if (!isEnabled()) {
         document.querySelectorAll(`.${EDIT_MODE_TOGGLE_CLASS}`).forEach((toggle) => toggle.remove());
@@ -591,6 +615,8 @@ export function initialize(stContext, stSettings) {
     context = stContext;
     settings = stSettings;
     loadEditMode();
+    document.addEventListener('click', handleEditModeToggleClick, true);
+    document.addEventListener('keydown', handleEditModeToggleKeydown, true);
     document.addEventListener('click', handleNativeEditClick, true);
     document.addEventListener('dblclick', handleDoubleClick, true);
     installEditModeToggles();

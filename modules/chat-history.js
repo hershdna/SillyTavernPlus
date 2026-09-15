@@ -1,4 +1,4 @@
-import { generateHistory, createHistoryReasoningView } from './history-generation.js?v=0.5.82';
+import { generateHistory, createHistoryReasoningView } from './history-generation.js?v=0.5.83';
 
 const MODULE_BUTTON_ID = 'stplus-chat-history-button';
 const WINDOW_ID = 'stplus-chat-history-window';
