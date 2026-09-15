@@ -385,15 +385,14 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 }
 
 .stplus-visible-edit-actions {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    position: absolute;
-    top: 0;
-    right: 0;
+    justify-content: flex-end;
+    width: 100%;
     flex: 0 0 auto;
     gap: 4px;
-    margin: 0;
-    vertical-align: middle;
+    margin: 6px 0;
+    position: static;
     z-index: 2;
 }
 

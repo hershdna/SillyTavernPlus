@@ -338,17 +338,15 @@ function createAction(iconClass, title, onClick) {
     return action;
 }
 
-function getActionHost(messageElement) {
-    // Keep the edit controls in the message header. The footer of a message
-    // is occupied by SillyTavern's swipe controls, so appending controls to
-    // .mes_block can put the cancel button on top of the swipe arrow/counter.
-    const headers = [
-        ...messageElement.querySelectorAll('.mes_block > .ch_name, .ch_name'),
-    ];
-    return headers.find((header) => {
-        const styles = getComputedStyle(header);
-        return styles.display !== 'none' && styles.visibility !== 'hidden';
-    }) ?? messageElement.querySelector('.mes_block') ?? messageElement;
+function getActionInsertionPoint(messageElement) {
+    const block = messageElement.querySelector('.mes_block') ?? messageElement;
+    // SillyTavern renders reasoning as a top-level child of .mes_block,
+    // before .mes_text. Insert the edit row immediately after it so the
+    // controls remain below an expanded thinking stream without covering the
+    // header or the footer swipe controls.
+    const reasoning = Array.from(block.children).find((child) => child.classList.contains('mes_reasoning_details'));
+    const header = Array.from(block.children).find((child) => child.classList.contains('ch_name'));
+    return { block, after: reasoning ?? header ?? null };
 }
 
 function syncMessageSwipe(message, text) {
@@ -453,7 +451,9 @@ function beginEdit(messageElement, messageText, event) {
     messageText.setAttribute('spellcheck', 'false');
     messageText.setAttribute('role', 'textbox');
     messageText.setAttribute('aria-label', `Edit message ${messageId + 1}`);
-    getActionHost(messageElement)?.appendChild(actions);
+    const insertionPoint = getActionInsertionPoint(messageElement);
+    if (insertionPoint.after) insertionPoint.after.after(actions);
+    else insertionPoint.block.prepend(actions);
     activeEdit = edit;
     bindEditorGuards(edit);
 
