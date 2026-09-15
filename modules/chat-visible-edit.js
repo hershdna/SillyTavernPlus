@@ -593,11 +593,15 @@ function handleDoubleClick(event) {
     const messageElement = messageText.closest('.mes');
     if (!(messageElement instanceof HTMLElement)) return;
     if (isVanillaEditOpen(messageElement, messageText)) return;
-    // Double-click is an explicit request for the native SillyTavern editor,
-    // regardless of the mode selected for the pencil button.
     event.preventDefault();
     event.stopPropagation();
-    openVanillaEdit(messageElement);
+    if (editMode === 'formatted') {
+        beginEdit(messageElement, messageText, event);
+    } else {
+        // Vanilla mode delegates to SillyTavern so its editor, formatting,
+        // and save/cancel behavior remain unchanged.
+        openVanillaEdit(messageElement);
+    }
 }
 
 function bindLifecycleEvents() {
