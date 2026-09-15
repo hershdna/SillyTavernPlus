@@ -5,7 +5,7 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 ## Features
 
 - Reorder alternate greetings with numeric position controls.
-- Double-click a rendered chat message to edit its visible text in place while preserving its existing formatting, with vanilla-style confirm and cancel controls.
+- Choose Formatted or Vanilla mode beside SillyTavern's native edit control. Double-click a rendered chat message to open Vanilla editing; Formatted mode edits visible text in place while preserving existing formatting.
 - Keep swipe/reroll alternatives and their continuations in one navigable chat-branch tree, with previews, jump-to-node navigation, search, and vanilla JSONL branch export.
 - Scope branch data and controls to the currently open chat; changing or closing a chat closes the branch window and clears its in-memory graph.
 - Reset branch state on SillyTavern chat creation/deletion events and guard stored metadata with the active chat identity.

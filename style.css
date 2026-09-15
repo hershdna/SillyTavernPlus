@@ -378,6 +378,21 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     outline-offset: 3px;
 }
 
+.stplus-edit-mode-toggle {
+    cursor: pointer;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    line-height: 24px;
+    text-align: center;
+}
+
+.stplus-edit-mode-toggle:focus-visible {
+    outline: 1px solid var(--SmartThemeQuoteColor, #5fa9d8);
+    outline-offset: 2px;
+}
+
 .stplus-visible-edit-editor {
     user-select: text;
     /* Match the normal rendered message surface exactly. */

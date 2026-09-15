@@ -242,7 +242,7 @@ function createSettingsWindow() {
     chatSection.append(createCheckbox(
         'stplus-formatted-message-edit-enabled',
         'Formatted message editing',
-        'Double-click a rendered message to edit only its visible text while preserving its formatting.',
+        'Choose Formatted or Vanilla mode beside the native edit control. Double-click always opens Vanilla editing.',
         (enabled) => {
             settings.formattedMessageEditEnabled = enabled;
             callbacks?.onFormattedMessageEditChanged?.();

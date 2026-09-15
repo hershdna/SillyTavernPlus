@@ -1,14 +1,36 @@
 const EDITING_CLASS = 'stplus-visible-editing';
 const ACTIONS_CLASS = 'stplus-visible-edit-actions';
 const ACTION_HOST_CLASS = 'stplus-visible-edit-action-host';
+const EDIT_MODE_TOGGLE_CLASS = 'stplus-edit-mode-toggle';
+const EDIT_MODE_STORAGE_KEY = 'stplus-formatted-edit-mode';
 
 let context = null;
 let settings = null;
 let activeEdit = null;
 let listenersBound = false;
+let editMode = 'vanilla';
+let forcingVanillaEdit = false;
 
 function isEnabled() {
     return settings?.formattedMessageEditEnabled !== false;
+}
+
+function loadEditMode() {
+    try {
+        editMode = window.localStorage.getItem(EDIT_MODE_STORAGE_KEY) === 'formatted' ? 'formatted' : 'vanilla';
+    } catch {
+        editMode = 'vanilla';
+    }
+}
+
+function setEditMode(mode) {
+    editMode = mode === 'formatted' ? 'formatted' : 'vanilla';
+    try {
+        window.localStorage.setItem(EDIT_MODE_STORAGE_KEY, editMode);
+    } catch {
+        // A restricted storage context should not disable editing.
+    }
+    updateEditModeToggles();
 }
 
 function getChat() {
@@ -338,6 +360,69 @@ function createAction(iconClass, title, onClick) {
     return action;
 }
 
+function updateEditModeToggle(toggle) {
+    if (!(toggle instanceof HTMLElement)) return;
+    const formatted = editMode === 'formatted';
+    toggle.classList.toggle('fa-toggle-on', formatted);
+    toggle.classList.toggle('fa-toggle-off', !formatted);
+    toggle.title = formatted ? 'Edit mode: Formatted (click for vanilla)' : 'Edit mode: Vanilla (click for formatted)';
+    toggle.setAttribute('aria-label', toggle.title);
+    toggle.setAttribute('aria-pressed', String(formatted));
+}
+
+function updateEditModeToggles() {
+    document.querySelectorAll(`.${EDIT_MODE_TOGGLE_CLASS}`).forEach(updateEditModeToggle);
+}
+
+function installEditModeToggles() {
+    if (!isEnabled()) {
+        document.querySelectorAll(`.${EDIT_MODE_TOGGLE_CLASS}`).forEach((toggle) => toggle.remove());
+        return;
+    }
+    document.querySelectorAll('.mes .mes_edit').forEach((nativeEdit) => {
+        if (!(nativeEdit instanceof HTMLElement) || nativeEdit.classList.contains(EDIT_MODE_TOGGLE_CLASS)) return;
+        if (nativeEdit.nextElementSibling?.classList.contains(EDIT_MODE_TOGGLE_CLASS)) return;
+        const toggle = document.createElement('div');
+        toggle.className = `mes_button interactable fa-solid ${EDIT_MODE_TOGGLE_CLASS}`;
+        toggle.dataset.stplusOwned = '1';
+        toggle.setAttribute('role', 'button');
+        toggle.tabIndex = 0;
+        const toggleMode = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setEditMode(editMode === 'formatted' ? 'vanilla' : 'formatted');
+        };
+        toggle.addEventListener('click', toggleMode);
+        toggle.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') toggleMode(event);
+        });
+        nativeEdit.after(toggle);
+        updateEditModeToggle(toggle);
+    });
+}
+
+function getNativeEditButton(messageElement) {
+    return Array.from(messageElement?.querySelectorAll('.mes_edit') ?? [])
+        .find((button) => !button.classList.contains(EDIT_MODE_TOGGLE_CLASS));
+}
+
+function isVanillaEditOpen(messageElement, messageText) {
+    return messageElement.classList.contains('editing')
+        || messageElement.classList.contains('mes_editing')
+        || messageText.querySelector('textarea, input, [contenteditable="true"]') instanceof HTMLElement;
+}
+
+function openVanillaEdit(messageElement) {
+    const nativeEdit = getNativeEditButton(messageElement);
+    if (!(nativeEdit instanceof HTMLElement)) return;
+    forcingVanillaEdit = true;
+    try {
+        nativeEdit.click();
+    } finally {
+        forcingVanillaEdit = false;
+    }
+}
+
 function getActionInsertionPoint(messageElement) {
     const block = messageElement.querySelector('.mes_block') ?? messageElement;
     // SillyTavern renders reasoning as a top-level child of .mes_block,
@@ -463,6 +548,19 @@ function beginEdit(messageElement, messageText, event) {
     placeCaret(messageText, event);
 }
 
+function handleNativeEditClick(event) {
+    if (!isEnabled() || forcingVanillaEdit) return;
+    const nativeEdit = event.target instanceof Element ? event.target.closest('.mes_edit') : null;
+    if (!(nativeEdit instanceof HTMLElement) || nativeEdit.classList.contains(EDIT_MODE_TOGGLE_CLASS)) return;
+    const messageElement = nativeEdit.closest('.mes');
+    const messageText = messageElement?.querySelector('.mes_text');
+    if (!(messageElement instanceof HTMLElement) || !(messageText instanceof HTMLElement)) return;
+    if (editMode !== 'formatted') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    beginEdit(messageElement, messageText, event);
+}
+
 function handleDoubleClick(event) {
     if (!isEnabled()) return;
     if (event.target instanceof Element && event.target.closest(`.${ACTIONS_CLASS}`)) return;
@@ -470,7 +568,12 @@ function handleDoubleClick(event) {
     if (!(messageText instanceof HTMLElement)) return;
     const messageElement = messageText.closest('.mes');
     if (!(messageElement instanceof HTMLElement)) return;
-    beginEdit(messageElement, messageText, event);
+    if (isVanillaEditOpen(messageElement, messageText)) return;
+    // Double-click is an explicit request for the native SillyTavern editor,
+    // regardless of the mode selected for the pencil button.
+    event.preventDefault();
+    event.stopPropagation();
+    openVanillaEdit(messageElement);
 }
 
 function bindLifecycleEvents() {
@@ -488,10 +591,14 @@ function bindLifecycleEvents() {
 export function initialize(stContext, stSettings) {
     context = stContext;
     settings = stSettings;
+    loadEditMode();
+    document.addEventListener('click', handleNativeEditClick, true);
     document.addEventListener('dblclick', handleDoubleClick, true);
+    installEditModeToggles();
     bindLifecycleEvents();
 }
 
 export function refresh() {
     if (!isEnabled()) cancelEdit();
+    installEditModeToggles();
 }
