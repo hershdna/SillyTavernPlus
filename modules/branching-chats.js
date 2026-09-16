@@ -1454,6 +1454,11 @@ function refreshMessageSwipeControls() {
             counter.className = 'stplus-branch-swipe-counter';
             const right = createBranchSwipeButton('right', node, false, 'Next swipe at this depth');
             controls.append(left, counter, right);
+            // Bind directly to the generated controls. SillyTavern can
+            // replace message containers and stop a document-level delegated
+            // listener from seeing the click, even though the button remains
+            // visible and enabled. Direct binding survives those redraws.
+            controls.addEventListener('click', handleBranchSwipeClick);
             messageElement.appendChild(controls);
         }
         const left = controls.querySelector('.stplus-branch-swipe-left');
@@ -2108,10 +2113,6 @@ function bindEvents() {
     on('MESSAGE_EDITED', onSafeChatMutation);
     on('MESSAGE_DELETED', onMessageDeleted);
     on('MESSAGE_SWIPE_DELETED', onSwipeDeleted);
-    // The native SillyTavern click handlers intentionally scope swipes to
-    // `.last_mes`. Branch controls use the same visual affordance on earlier
-    // messages and must intercept only their own buttons.
-    document.addEventListener('click', handleBranchSwipeClick, true);
     // MESSAGE_RECEIVED is deliberately not used: SillyTavern can emit it
     // while a streamed response is still being assembled.
     listenersBound = true;

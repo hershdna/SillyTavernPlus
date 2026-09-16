@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.91';
+    const MODULE_CACHE_VERSION = '0.5.92';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
