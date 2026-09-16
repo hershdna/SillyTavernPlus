@@ -1204,9 +1204,18 @@ function getLongestAvailablePath(startNode, targetGraph = graph) {
 function scrollChatToSourceIndex(sourceIndex) {
     if (!Number.isInteger(sourceIndex) || typeof window.requestAnimationFrame !== 'function') return;
     const scroll = () => {
+        const chatElement = document.querySelector('#chat');
         const message = [...document.querySelectorAll('#chat .mes[mesid]')]
             .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
-        message?.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'auto' });
+        if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return;
+        // Scroll only the chat pane. Element.scrollIntoView() can also scroll
+        // the document when a chat message is temporarily outside the pane,
+        // which moves the top toolbar offscreen after a branch jump/swipe.
+        const chatRect = chatElement.getBoundingClientRect();
+        const messageRect = message.getBoundingClientRect();
+        const centeredOffset = (chatElement.clientHeight - messageRect.height) / 2;
+        const delta = (messageRect.top - chatRect.top) - centeredOffset;
+        if (Number.isFinite(delta)) chatElement.scrollTop += delta;
     };
     window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
 }
