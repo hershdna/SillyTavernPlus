@@ -198,6 +198,14 @@ function isGenerationInProgress() {
     return generationActive || document.body?.dataset.generating === 'true';
 }
 
+function canStartBranchGeneration(liveContext = getLiveContext()) {
+    // Generate() emits GENERATION_STARTED before it checks the backend
+    // connection. On the no-connection early return, some SillyTavern
+    // versions do not emit GENERATION_ENDED, which would strand this module's
+    // generation guard and disable every later branch swipe control.
+    return liveContext?.onlineStatus !== 'no_connection';
+}
+
 function startChatDomWatcher() {
     if (chatDomWatcher || typeof MutationObserver !== 'function') return;
     const schedule = () => {
@@ -1461,6 +1469,10 @@ let branchSwipeInProgress = false;
 async function generateFromPreviousAssistant(node) {
     const liveContext = getLiveContext();
     if (!node || node.role === 'user' || typeof liveContext?.generate !== 'function') return;
+    if (!canStartBranchGeneration(liveContext)) {
+        window.toastr?.warning?.('Connect an API before generating a new swipe.');
+        return;
+    }
 
     // An alternate greeting is already a native swipe slot. Let
     // SillyTavern's own swipe implementation create the next slot so its
@@ -1480,7 +1492,15 @@ async function generateFromPreviousAssistant(node) {
     // generator then appends a fresh assistant reply, which syncGraph folds
     // into the existing same-parent depth group as a native-compatible swipe.
     await jumpToSelected(parent.id);
-    await getLiveContext().generate('normal');
+    try {
+        await getLiveContext().generate('normal');
+    } finally {
+        // GENERATION_ENDED is the normal cleanup path, but Generate() can
+        // resolve early on older/API-specific paths without emitting it.
+        // The promise has settled here, so do not leave the branch controls
+        // permanently disabled.
+        generationActive = false;
+    }
 }
 
 async function handleBranchSwipe(button) {

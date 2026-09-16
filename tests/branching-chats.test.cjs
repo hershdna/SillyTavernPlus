@@ -15,7 +15,7 @@ function loadApi() {
     });
     const source = fs.readFileSync(path.join(__dirname, '../modules/branching-chats.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction };', sandbox);
+    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction };', sandbox);
     return sandbox.api;
 }
 
@@ -113,4 +113,12 @@ test('previous-message swipe navigation follows depth sibling rules', () => {
     assert.equal(api.getBranchSwipeAction(user1, users, 'left').type, 'jump');
     assert.equal(api.getBranchSwipeAction(user1, users, 'left').node.id, user2.id);
     assert.equal(api.getBranchSwipeAction(user1, [user1], 'right').type, 'none');
+});
+
+test('a failed API connection cannot strand branch generation state', () => {
+    const api = loadApi();
+
+    assert.equal(api.canStartBranchGeneration({ onlineStatus: 'no_connection' }), false);
+    assert.equal(api.canStartBranchGeneration({ onlineStatus: 'connected' }), true);
+    assert.equal(api.canStartBranchGeneration({}), true);
 });
