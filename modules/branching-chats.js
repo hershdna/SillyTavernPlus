@@ -946,6 +946,7 @@ function updateNodeFromMessage(node, message, sourceIndex, swipeIndex, content, 
 function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variantCount) {
     const key = getNodeKey(parentId, sourceIndex, swipeIndex, content);
     const persistedId = getMessageNodeId(message, swipeIndex);
+    
     const persistedNode = persistedId ? graph?.nodes?.[persistedId] : null;
     const normalizedParentId = parentId ?? null;
     if (persistedNode
