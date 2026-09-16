@@ -1161,6 +1161,56 @@ function getPathToNode(nodeId) {
     return path;
 }
 
+function getLongestAvailablePath(startNode, targetGraph = graph) {
+    if (!startNode || !targetGraph?.nodes?.[startNode.id]) return [];
+
+    const ancestry = [];
+    const seen = new Set();
+    let cursor = startNode;
+    while (cursor && !seen.has(cursor.id)) {
+        ancestry.unshift(cursor);
+        seen.add(cursor.id);
+        cursor = cursor.parentId ? targetGraph.nodes[cursor.parentId] : null;
+    }
+
+    const childrenByParent = new Map();
+    Object.values(targetGraph.nodes).forEach((node) => {
+        if (!node.parentId) return;
+        const children = childrenByParent.get(node.parentId) ?? [];
+        children.push(node);
+        childrenByParent.set(node.parentId, children);
+    });
+    childrenByParent.forEach((children) => children.sort((a, b) =>
+        getNodeDepth(a) - getNodeDepth(b)
+        || a.sourceIndex - b.sourceIndex
+        || a.swipeIndex - b.swipeIndex
+        || a.createdAt - b.createdAt
+        || a.id.localeCompare(b.id)));
+
+    const chooseLongest = (node, path) => {
+        const children = childrenByParent.get(node.id) ?? [];
+        if (children.length === 0) return path;
+        return children.reduce((best, child) => {
+            const candidate = chooseLongest(child, [...path, child]);
+            // Prefer the deepest continuation. Stable child ordering makes
+            // ties deterministic while preserving the earliest stored branch.
+            return candidate.length > best.length ? candidate : best;
+        }, path);
+    };
+
+    return chooseLongest(startNode, ancestry);
+}
+
+function scrollChatToSourceIndex(sourceIndex) {
+    if (!Number.isInteger(sourceIndex) || typeof window.requestAnimationFrame !== 'function') return;
+    const scroll = () => {
+        const message = [...document.querySelectorAll('#chat .mes[mesid]')]
+            .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
+        message?.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
+}
+
 function getSelectedNode() {
     return graph?.nodes?.[selectedNodeId] ?? null;
 }
@@ -1213,11 +1263,12 @@ function selectNode(nodeId) {
     updateSelectionPresentation();
 }
 
-async function jumpToSelected(nodeId = selectedNodeId) {
+async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = true, scrollToNodeId = null } = {}) {
     if (nodeId && graph?.nodes?.[nodeId]) selectedNodeId = nodeId;
     if (jumpInProgress || !getChatKey()) return;
     const selected = getSelectedNode();
-    const path = getPathToNode(selected?.id);
+    const selectedPath = getPathToNode(selected?.id);
+    const path = openLongestBranch ? getLongestAvailablePath(selected) : selectedPath;
     const chat = getChat();
     if (!selected || path.length === 0 || !Array.isArray(chat)) return;
 
@@ -1279,6 +1330,9 @@ async function jumpToSelected(nodeId = selectedNodeId) {
             scheduleActiveNodeCenter();
         }
         render();
+        scrollChatToSourceIndex((scrollToNodeId && graph?.nodes?.[scrollToNodeId])
+            ? graph.nodes[scrollToNodeId].sourceIndex
+            : selected.sourceIndex);
         window.toastr?.success?.('Jumped to ' + selected.label);
     } finally {
         jumpInProgress = false;
@@ -1509,7 +1563,7 @@ async function generateFromPreviousAssistant(node) {
     // SillyTavern's own swipe implementation create the next slot so its
     // swipe_info/reasoning/media bookkeeping remains intact.
     if (node.parentId === null && node.sourceIndex === 0 && typeof liveContext?.swipe?.right === 'function') {
-        await jumpToSelected(node.id);
+        await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id });
         const currentChat = getChat();
         if (currentChat.length > 0) {
             await getLiveContext().swipe.right(null, { forceMesId: currentChat.length - 1 });
@@ -1522,7 +1576,7 @@ async function generateFromPreviousAssistant(node) {
     // Jumping to the parent truncates the visible continuation. The normal
     // generator then appends a fresh assistant reply, which syncGraph folds
     // into the existing same-parent depth group as a native-compatible swipe.
-    await jumpToSelected(parent.id);
+    await jumpToSelected(parent.id, { openLongestBranch: false, scrollToNodeId: parent.id });
     try {
         await getLiveContext().generate('normal');
     } finally {
@@ -2157,4 +2211,4 @@ export function refresh() {
     refreshMessageSwipeControls();
 }
 
-export { createGraph, getVariantContents, getActiveSwipeIndex };
+export { createGraph, getVariantContents, getActiveSwipeIndex, getLongestAvailablePath };

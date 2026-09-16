@@ -15,7 +15,7 @@ function loadApi() {
     });
     const source = fs.readFileSync(path.join(__dirname, '../modules/branching-chats.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction, isRepresentableVariant };', sandbox);
+    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction, getLongestAvailablePath, isRepresentableVariant };', sandbox);
     return sandbox.api;
 }
 
@@ -113,6 +113,24 @@ test('previous-message swipe navigation follows depth sibling rules', () => {
     assert.equal(api.getBranchSwipeAction(user1, users, 'left').type, 'jump');
     assert.equal(api.getBranchSwipeAction(user1, users, 'left').node.id, user2.id);
     assert.equal(api.getBranchSwipeAction(user1, [user1], 'right').type, 'none');
+});
+
+test('jump path follows the longest available continuation from a selected swipe', () => {
+    const api = loadApi();
+    const root = node('root', null, 0, 'A', 'user');
+    const target = node('target', 'root', 1, 'B2', 'assistant', 1);
+    const short = node('short', 'target', 2, 'C2', 'user');
+    const long = node('long', 'target', 2, 'C2-long', 'user');
+    const longest = node('longest', 'long', 3, 'D2', 'assistant');
+    const graph = {
+        nodes: { root, target, short, long, longest },
+        activePath: ['root', 'target', 'short'],
+    };
+
+    assert.deepEqual(
+        Array.from(api.getLongestAvailablePath(target, graph), (item) => item.id),
+        ['root', 'target', 'long', 'longest'],
+    );
 });
 
 test('a failed API connection cannot strand branch generation state', () => {
