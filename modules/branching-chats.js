@@ -195,7 +195,11 @@ function finishTreePan(event) {
 }
 
 function isGenerationInProgress() {
-    return generationActive || document.body?.dataset.generating === 'true';
+    // SillyTavern owns the live UI generation state. `generationActive` is a
+    // separate sync fence and can outlive a stopped/aborted request when an
+    // API or another extension omits GENERATION_ENDED. Do not let that stale
+    // fence disable a visible branch control after the core state is clear.
+    return document.body?.dataset.generating === 'true';
 }
 
 function canStartBranchGeneration(liveContext = getLiveContext()) {
@@ -1454,11 +1458,11 @@ function refreshMessageSwipeControls() {
             counter.className = 'stplus-branch-swipe-counter';
             const right = createBranchSwipeButton('right', node, false, 'Next swipe at this depth');
             controls.append(left, counter, right);
-            // Bind directly to the generated controls. SillyTavern can
-            // replace message containers and stop a document-level delegated
-            // listener from seeing the click, even though the button remains
-            // visible and enabled. Direct binding survives those redraws.
-            controls.addEventListener('click', handleBranchSwipeClick);
+            // Bind each generated control directly. SillyTavern can replace
+            // message containers during redraws, so a document-level
+            // delegated listener is not reliable for these buttons.
+            left.addEventListener('click', handleBranchSwipeClick);
+            right.addEventListener('click', handleBranchSwipeClick);
             messageElement.appendChild(controls);
         }
         const left = controls.querySelector('.stplus-branch-swipe-left');
@@ -1555,9 +1559,11 @@ async function handleBranchSwipe(button) {
 }
 
 function handleBranchSwipeClick(event) {
-    const button = event.target instanceof Element
-        ? event.target.closest('.stplus-branch-swipe-button')
-        : null;
+    const button = event.currentTarget instanceof HTMLButtonElement
+        ? event.currentTarget
+        : event.target instanceof Element
+            ? event.target.closest('.stplus-branch-swipe-button')
+            : null;
     if (!(button instanceof HTMLButtonElement) || button.disabled) return;
     event.preventDefault();
     event.stopPropagation();
