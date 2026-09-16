@@ -15,7 +15,7 @@ function loadApi() {
     });
     const source = fs.readFileSync(path.join(__dirname, '../modules/branching-chats.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds };', sandbox);
+    vm.runInContext(source + '\nthis.api = { pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction };', sandbox);
     return sandbox.api;
 }
 
@@ -94,4 +94,23 @@ test('deleting one native swipe removes only that swipe subtree', () => {
 
     assert.deepEqual(Object.keys(graph.nodes), ['s0']);
     assert.deepEqual(graph.activePath, []);
+});
+
+test('previous-message swipe navigation follows depth sibling rules', () => {
+    const api = loadApi();
+    const assistant1 = node('assistant-1', 'parent', 2, 'Reply 1', 'assistant', 0);
+    const assistant2 = node('assistant-2', 'parent', 2, 'Reply 2', 'assistant', 1);
+    const user1 = node('user-1', 'parent', 2, 'Choice 1', 'user', 0);
+    const user2 = node('user-2', 'parent', 2, 'Choice 2', 'user', 1);
+    const assistants = [assistant1, assistant2];
+    const users = [user1, user2];
+
+    assert.equal(api.getBranchSwipeAction(assistant1, assistants, 'right').type, 'jump');
+    assert.equal(api.getBranchSwipeAction(assistant1, assistants, 'right').node.id, assistant2.id);
+    assert.equal(api.getBranchSwipeAction(assistant2, assistants, 'right').type, 'generate');
+    assert.equal(api.getBranchSwipeAction(user2, users, 'right').type, 'jump');
+    assert.equal(api.getBranchSwipeAction(user2, users, 'right').node.id, user1.id);
+    assert.equal(api.getBranchSwipeAction(user1, users, 'left').type, 'jump');
+    assert.equal(api.getBranchSwipeAction(user1, users, 'left').node.id, user2.id);
+    assert.equal(api.getBranchSwipeAction(user1, [user1], 'right').type, 'none');
 });
