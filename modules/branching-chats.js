@@ -946,6 +946,7 @@ function updateNodeFromMessage(node, message, sourceIndex, swipeIndex, content, 
 function ensureNode(parentId, message, sourceIndex, swipeIndex, content, variantCount) {
     const key = getNodeKey(parentId, sourceIndex, swipeIndex, content);
     const persistedId = getMessageNodeId(message, swipeIndex);
+    
     const persistedNode = persistedId ? graph?.nodes?.[persistedId] : null;
     const normalizedParentId = parentId ?? null;
     if (persistedNode
@@ -1193,6 +1194,13 @@ async function jumpToSelected(nodeId = selectedNodeId) {
     try {
         const chatKeyBeforeReload = getChatKey();
         const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true;
+        // A branch jump replaces the rendered chat path. Tell the formatted
+        // editor to leave its contenteditable state before that replacement,
+        // rather than relying on whichever CHAT_* event a ST release emits
+        // during reload. This prevents activeEdit from retaining detached DOM.
+        window.dispatchEvent(new CustomEvent('stplus-chat-navigation', {
+            detail: { reason: 'branch-jump', chatKey: chatKeyBeforeReload },
+            }));
         const replacement = path.map((node) => clone(node.message) ?? { mes: node.content });
         // Alternate greetings are native first-message swipes in SillyTavern.
         // Preserve that structure even when jumping to a continuation below
