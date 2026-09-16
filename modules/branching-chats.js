@@ -1422,7 +1422,10 @@ function refreshMessageSwipeControls() {
         const siblings = getDepthSiblings(node);
         const index = getDepthSiblingIndex(node, siblings);
         const hasPrevious = siblings.length > 1;
-        const canGenerate = node.role !== 'user' && !isGenerationInProgress();
+        const branchGenerationAvailable = canStartBranchGeneration();
+        const canGenerate = node.role !== 'user'
+            && branchGenerationAvailable
+            && !isGenerationInProgress();
         const rightAction = getBranchSwipeAction(node, siblings, 'right');
         const canGoRight = (canGenerate && rightAction.type === 'generate')
             || rightAction.type === 'jump';
@@ -1449,9 +1452,11 @@ function refreshMessageSwipeControls() {
         if (right instanceof HTMLButtonElement) {
             right.dataset.nodeId = node.id;
             right.disabled = !canGoRight;
-            right.title = siblings.length > 1
-                ? (index < siblings.length - 1 ? 'Next swipe at this depth' : node.role === 'user' ? 'Cycle to first swipe at this depth' : 'Generate a new swipe at this depth')
-                : node.role === 'user' ? 'No alternate swipe at this depth' : 'Generate a new swipe at this depth';
+            right.title = node.role !== 'user' && !branchGenerationAvailable
+                ? 'Connect an API to generate a new swipe'
+                : siblings.length > 1
+                    ? (index < siblings.length - 1 ? 'Next swipe at this depth' : node.role === 'user' ? 'Cycle to first swipe at this depth' : 'Generate a new swipe at this depth')
+                    : node.role === 'user' ? 'No alternate swipe at this depth' : 'Generate a new swipe at this depth';
             right.setAttribute('aria-label', right.title);
         }
     });
