@@ -2092,6 +2092,11 @@ function bindEvents() {
     };
     on('GENERATION_STARTED', onGenerationStarted);
     on('GENERATION_ENDED', onGenerationEnded);
+    // Stopping a stream is a terminal generation lifecycle event too. Core
+    // emits GENERATION_STOPPED when the user presses Stop, and some API or
+    // extension paths do not follow it with GENERATION_ENDED. Without this
+    // reset, the branch controls stay blocked until a full page reload.
+    on('GENERATION_STOPPED', onGenerationEnded);
     on('CHAT_CHANGED', onChatChanged);
     on('CHAT_CREATED', onChatCreated);
     on('CHAT_LOADED', onChatLoaded);
