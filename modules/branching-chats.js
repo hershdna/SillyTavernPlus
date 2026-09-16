@@ -1074,7 +1074,10 @@ function syncGraph(force = false) {
     const chat = getChat();
     const signature = getChatSignature(chat);
     const shouldReconcileDeletion = deletionSyncPending;
-    if (!force && signature === lastChatSignature && !shouldReconcileDeletion) return;
+    if (!force && signature === lastChatSignature && !shouldReconcileDeletion) {
+        refreshMessageSwipeControls();
+        return;
+    }
     centerActiveNodePending = true;
     lastChatSignature = signature;
     if (!graph) graph = createGraph(chatKey);
@@ -1113,6 +1116,7 @@ function syncGraph(force = false) {
     if (!selectedNodeId || !graph.nodes[selectedNodeId]) selectedNodeId = activePath.at(-1) ?? null;
     schedulePersist();
     render({ centerActiveNode: true });
+    refreshMessageSwipeControls();
 }
 
 function getPathToNode(nodeId) {
@@ -1193,6 +1197,13 @@ async function jumpToSelected(nodeId = selectedNodeId) {
     try {
         const chatKeyBeforeReload = getChatKey();
         const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true;
+        // A branch jump replaces the rendered chat path. Tell the formatted
+        // editor to leave its contenteditable state before that replacement,
+        // rather than relying on whichever CHAT_* event a ST release emits
+        // during reload. This prevents activeEdit from retaining detached DOM.
+        window.dispatchEvent(new CustomEvent('stplus-chat-navigation', {
+            detail: { reason: 'branch-jump', chatKey: chatKeyBeforeReload },
+        }));
         const replacement = path.map((node) => clone(node.message) ?? { mes: node.content });
         // Alternate greetings are native first-message swipes in SillyTavern.
         // Preserve that structure even when jumping to a continuation below
@@ -1310,6 +1321,184 @@ function exportSelectedBranch() {
 
 function getCurrentNodeId() {
     return graph?.activePath?.at(-1) ?? null;
+}
+
+function getActiveChatNode(messageIndex, message = getChat()[messageIndex]) {
+    const activePathNodeId = graph?.activePath?.[messageIndex];
+    if (activePathNodeId && graph?.nodes?.[activePathNodeId]) {
+        return graph.nodes[activePathNodeId];
+    }
+    const swipeIndex = getActiveSwipeIndex(message);
+    const nodeId = getMessageNodeId(message, swipeIndex);
+    return nodeId && graph?.nodes?.[nodeId] ? graph.nodes[nodeId] : null;
+}
+
+function getDepthSiblings(node) {
+    if (!node || !graph?.nodes) return [];
+    return Object.values(graph.nodes)
+        .filter((candidate) => candidate.parentId === node.parentId
+            && candidate.sourceIndex === node.sourceIndex
+            && candidate.role === node.role)
+        .sort((a, b) => a.swipeIndex - b.swipeIndex
+            || a.createdAt - b.createdAt
+            || a.id.localeCompare(b.id));
+}
+
+function getDepthSiblingIndex(node, siblings = getDepthSiblings(node)) {
+    const index = siblings.findIndex((candidate) => candidate.id === node?.id);
+    return index >= 0 ? index : 0;
+}
+
+function createBranchSwipeButton(direction, node, enabled, title) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `stplus-branch-swipe-button stplus-branch-swipe-${direction} fa-solid fa-chevron-${direction === 'left' ? 'left' : 'right'}`;
+    button.dataset.stplusBranchSwipe = direction;
+    button.dataset.nodeId = node.id;
+    button.disabled = !enabled;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    return button;
+}
+
+function refreshMessageSwipeControls() {
+    const chatElement = document.querySelector('#chat');
+    const chat = getChat();
+    if (!(chatElement instanceof HTMLElement)) return;
+    if (!graph || !Array.isArray(chat) || chat.length === 0) {
+        chatElement.querySelectorAll('.stplus-branch-swipe-controls').forEach((controls) => controls.remove());
+        return;
+    }
+
+    const messageElements = [...chatElement.querySelectorAll(':scope > .mes[mesid]')];
+    const liveMessageIds = new Set();
+    messageElements.forEach((messageElement) => {
+        const messageIndex = Number(messageElement.getAttribute('mesid'));
+        if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= chat.length) return;
+        liveMessageIds.add(messageIndex);
+        let controls = messageElement.querySelector('.stplus-branch-swipe-controls');
+        // SillyTavern renders the native swipe controls in every message
+        // template, but CSS intentionally hides them except on the last
+        // message. These controls are the branch-aware equivalent for every
+        // earlier message and are deliberately kept outside .mes_block so
+        // formatted editing cannot change the rendered text layout.
+        if (messageIndex === chat.length - 1) {
+            controls?.remove();
+            return;
+        }
+
+        const node = getActiveChatNode(messageIndex, chat[messageIndex]);
+        if (!node) {
+            controls?.remove();
+            return;
+        }
+        const siblings = getDepthSiblings(node);
+        const index = getDepthSiblingIndex(node, siblings);
+        const hasPrevious = siblings.length > 1;
+        const canGenerate = node.role !== 'user' && !isGenerationInProgress();
+        const canGoRight = siblings.length > 1 || canGenerate;
+        if (!controls) {
+            controls = document.createElement('div');
+            controls.className = 'stplus-branch-swipe-controls';
+            const left = createBranchSwipeButton('left', node, false, 'Previous swipe at this depth');
+            const counter = document.createElement('span');
+            counter.className = 'stplus-branch-swipe-counter';
+            const right = createBranchSwipeButton('right', node, false, 'Next swipe at this depth');
+            controls.append(left, counter, right);
+            messageElement.appendChild(controls);
+        }
+        const left = controls.querySelector('.stplus-branch-swipe-left');
+        const counter = controls.querySelector('.stplus-branch-swipe-counter');
+        const right = controls.querySelector('.stplus-branch-swipe-right');
+        if (left instanceof HTMLButtonElement) {
+            left.dataset.nodeId = node.id;
+            left.disabled = !hasPrevious;
+            left.title = siblings.length > 1 ? 'Previous swipe at this depth' : 'No previous swipe at this depth';
+            left.setAttribute('aria-label', left.title);
+        }
+        if (counter) counter.textContent = `${index + 1}/${Math.max(1, siblings.length)}`;
+        if (right instanceof HTMLButtonElement) {
+            right.dataset.nodeId = node.id;
+            right.disabled = !canGoRight;
+            right.title = siblings.length > 1
+                ? (index < siblings.length - 1 ? 'Next swipe at this depth' : node.role === 'user' ? 'Cycle to first swipe at this depth' : 'Generate a new swipe at this depth')
+                : node.role === 'user' ? 'No alternate swipe at this depth' : 'Generate a new swipe at this depth';
+            right.setAttribute('aria-label', right.title);
+        }
+    });
+
+    // Remove controls left behind by a partial/virtualized chat redraw.
+    chatElement.querySelectorAll('.stplus-branch-swipe-controls').forEach((controls) => {
+        const messageElement = controls.closest('.mes[mesid]');
+        const messageIndex = Number(messageElement?.getAttribute('mesid'));
+        if (!messageElement || !liveMessageIds.has(messageIndex) || messageIndex === chat.length - 1) controls.remove();
+    });
+}
+
+let branchSwipeInProgress = false;
+
+async function generateFromPreviousAssistant(node) {
+    const liveContext = getLiveContext();
+    if (!node || node.role === 'user' || typeof liveContext?.generate !== 'function') return;
+
+    // An alternate greeting is already a native swipe slot. Let
+    // SillyTavern's own swipe implementation create the next slot so its
+    // swipe_info/reasoning/media bookkeeping remains intact.
+    if (node.parentId === null && node.sourceIndex === 0 && typeof liveContext?.swipe?.right === 'function') {
+        await jumpToSelected(node.id);
+        const currentChat = getChat();
+        if (currentChat.length > 0) {
+            await getLiveContext().swipe.right(null, { forceMesId: currentChat.length - 1 });
+        }
+        return;
+    }
+
+    const parent = graph?.nodes?.[node.parentId];
+    if (!parent) return;
+    // Jumping to the parent truncates the visible continuation. The normal
+    // generator then appends a fresh assistant reply, which syncGraph folds
+    // into the existing same-parent depth group as a native-compatible swipe.
+    await jumpToSelected(parent.id);
+    await getLiveContext().generate('normal');
+}
+
+async function handleBranchSwipe(button) {
+    if (branchSwipeInProgress || isGenerationInProgress()) return;
+    const node = graph?.nodes?.[button?.dataset?.nodeId];
+    if (!node) return;
+    const siblings = getDepthSiblings(node);
+    const index = getDepthSiblingIndex(node, siblings);
+    const direction = button.dataset.stplusBranchSwipe;
+    let target = null;
+    if (direction === 'left') {
+        target = siblings.length > 1 ? siblings[(index - 1 + siblings.length) % siblings.length] : null;
+    } else if (direction === 'right' && index < siblings.length - 1) {
+        target = siblings[index + 1];
+    } else if (direction === 'right' && node.role === 'user') {
+        target = siblings.length > 1 ? siblings[0] : null;
+    }
+
+    branchSwipeInProgress = true;
+    try {
+        if (target) {
+            await jumpToSelected(target.id);
+        } else if (direction === 'right' && node.role !== 'user') {
+            await generateFromPreviousAssistant(node);
+        }
+    } finally {
+        branchSwipeInProgress = false;
+        refreshMessageSwipeControls();
+    }
+}
+
+function handleBranchSwipeClick(event) {
+    const button = event.target instanceof Element
+        ? event.target.closest('.stplus-branch-swipe-button')
+        : null;
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void handleBranchSwipe(button);
 }
 
 function updateSelectionPresentation() {
@@ -1584,10 +1773,12 @@ function bindEvents() {
     const onGenerationStarted = () => {
         generationActive = true;
         window.clearTimeout(syncTimer);
+        refreshMessageSwipeControls();
     };
     const onGenerationEnded = () => {
         generationActive = false;
         scheduleSync(0);
+        refreshMessageSwipeControls();
     };
     const onSafeChatMutation = () => {
         if (!generationActive) scheduleSync(0);
@@ -1859,6 +2050,10 @@ function bindEvents() {
     on('MESSAGE_EDITED', onSafeChatMutation);
     on('MESSAGE_DELETED', onMessageDeleted);
     on('MESSAGE_SWIPE_DELETED', onSwipeDeleted);
+    // The native SillyTavern click handlers intentionally scope swipes to
+    // `.last_mes`. Branch controls use the same visual affordance on earlier
+    // messages and must intercept only their own buttons.
+    document.addEventListener('click', handleBranchSwipeClick, true);
     // MESSAGE_RECEIVED is deliberately not used: SillyTavern can emit it
     // while a streamed response is still being assembled.
     listenersBound = true;
@@ -1889,6 +2084,7 @@ export function refresh() {
     centerActiveNodePending = true;
     syncGraph();
     render();
+    refreshMessageSwipeControls();
 }
 
 export { createGraph, getVariantContents, getActiveSwipeIndex };

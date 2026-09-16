@@ -691,6 +691,63 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     margin: 0;
 }
 
+/* Branch-aware swipes for messages before the end of the active path. The
+   native ST controls are present in the message template but intentionally
+   hidden for non-last messages, so keep this affordance visually identical
+   in placement while giving it its own event target. */
+.stplus-branch-swipe-controls {
+    position: absolute;
+    right: 5px;
+    bottom: 0;
+    left: 20px;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 25px;
+    pointer-events: none;
+}
+
+.stplus-branch-swipe-button {
+    display: flex;
+    width: 25px;
+    height: 25px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: transparent;
+    border: 0;
+    opacity: 0.5;
+    cursor: pointer;
+    pointer-events: auto;
+    font-size: 20px;
+}
+
+.stplus-branch-swipe-button:hover:not(:disabled),
+.stplus-branch-swipe-button:focus-visible {
+    opacity: 0.9;
+}
+
+.stplus-branch-swipe-button:disabled {
+    opacity: 0.15;
+    cursor: default;
+}
+
+.stplus-branch-swipe-counter {
+    min-width: 40px;
+    color: var(--SmartThemeBodyColor, #eee);
+    opacity: 0.45;
+    font-family: var(--mainFontFamily);
+    font-size: 12px;
+    text-align: center;
+    pointer-events: none;
+}
+
+body[data-generating="true"] .stplus-branch-swipe-controls {
+    visibility: hidden;
+}
+
 .stplus-chat-history-window {
     position: fixed;
     z-index: 10009;

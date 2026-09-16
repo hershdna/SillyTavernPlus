@@ -606,13 +606,19 @@ function handleDoubleClick(event) {
 
 function bindLifecycleEvents() {
     if (listenersBound) return;
+    // Branch jumps replace the rendered chat DOM before SillyTavern's
+    // lifecycle notifications are guaranteed to reach third-party modules.
+    // Leave edit mode before that replacement so activeEdit never points at
+    // a detached message element.
+    window.addEventListener('stplus-chat-navigation', cancelEdit);
     const eventSource = context?.eventSource;
     const eventTypes = context?.eventTypes;
-    if (!eventSource || !eventTypes || typeof eventSource.on !== 'function') return;
-    ['CHAT_CHANGED', 'CHAT_LOADED', 'CHAT_CREATED', 'CHAT_DELETED'].forEach((name) => {
-        const eventName = eventTypes[name];
-        if (eventName) eventSource.on(eventName, cancelEdit);
-    });
+    if (eventSource && eventTypes && typeof eventSource.on === 'function') {
+        ['CHAT_CHANGED', 'CHAT_LOADED', 'CHAT_CREATED', 'CHAT_DELETED'].forEach((name) => {
+            const eventName = eventTypes[name];
+            if (eventName) eventSource.on(eventName, cancelEdit);
+        });
+    }
     listenersBound = true;
 }
 
