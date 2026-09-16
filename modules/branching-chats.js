@@ -704,13 +704,30 @@ function hasMeaningfulContent(content) {
     return String(content ?? '').trim().length > 0;
 }
 
+function hasMeaningfulSwipeInfo(message, swipeIndex) {
+    const info = message?.swipe_info?.[swipeIndex];
+    if (!info || typeof info !== 'object') return false;
+    // A stopped/partial native swipe can have no visible text while still
+    // carrying the generation/reasoning record that makes it a real swipe.
+    // Do not use send_date alone: transient placeholders commonly have that.
+    return hasMeaningfulContent(info.gen_started)
+        || hasMeaningfulContent(info.gen_finished)
+        || hasMeaningfulContent(info.extra?.reasoning)
+        || hasMeaningfulContent(info.extra?.reasoning_display_text);
+}
+
+function isRepresentableVariant(message, swipeIndex, content) {
+    return hasMeaningfulContent(content) || hasMeaningfulSwipeInfo(message, swipeIndex);
+}
+
 function hasMeaningfulNode(node) {
     return hasMeaningfulContent(node?.content)
         || hasMeaningfulContent(node?.message?.mes)
         || hasMeaningfulContent(node?.message?.reasoning)
         || hasMeaningfulContent(node?.message?.extra?.reasoning)
         || hasMeaningfulContent(node?.message?.extra?.reasoning_display_text)
-        || hasMeaningfulContent(node?.message?.extra?.display_text);
+        || hasMeaningfulContent(node?.message?.extra?.display_text)
+        || hasMeaningfulSwipeInfo(node?.message, node?.swipeIndex);
 }
 
 // Earlier versions observed MESSAGE_RECEIVED and DOM mutations while a
@@ -786,7 +803,7 @@ function getChatNodeIds(targetGraph, chat) {
     chat.forEach((message) => {
         const variants = getVariantContents(message);
         variants.forEach((content, swipeIndex) => {
-            if (!hasMeaningfulContent(content)) return;
+            if (!isRepresentableVariant(message, swipeIndex, content)) return;
             const nodeId = getMessageNodeId(message, swipeIndex);
             if (nodeId && targetGraph.nodes[nodeId]) liveIds.add(nodeId);
         });
@@ -1106,12 +1123,12 @@ function syncGraph(force = false) {
         mergeGeneratedSiblingIntoSwipe(message, parentId, sourceIndex);
         const variants = getVariantContents(message);
         const requestedSwipeIndex = Math.min(getActiveSwipeIndex(message), variants.length - 1);
-        const activeSwipeIndex = hasMeaningfulContent(variants[requestedSwipeIndex])
+        const activeSwipeIndex = isRepresentableVariant(message, requestedSwipeIndex, variants[requestedSwipeIndex])
             ? requestedSwipeIndex
-            : variants.findIndex(hasMeaningfulContent);
+            : variants.findIndex((content, swipeIndex) => isRepresentableVariant(message, swipeIndex, content));
         let activeNode = null;
         variants.forEach((content, swipeIndex) => {
-            if (!hasMeaningfulContent(content)) return;
+            if (!isRepresentableVariant(message, swipeIndex, content)) return;
             const node = ensureNode(parentId, message, sourceIndex, swipeIndex, content, variants.length);
             if (swipeIndex === activeSwipeIndex) activeNode = node;
         });

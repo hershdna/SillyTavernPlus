@@ -15,7 +15,7 @@ function loadApi() {
     });
     const source = fs.readFileSync(path.join(__dirname, '../modules/branching-chats.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction };', sandbox);
+    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction, isRepresentableVariant };', sandbox);
     return sandbox.api;
 }
 
@@ -121,4 +121,20 @@ test('a failed API connection cannot strand branch generation state', () => {
     assert.equal(api.canStartBranchGeneration({ onlineStatus: 'no_connection' }), false);
     assert.equal(api.canStartBranchGeneration({ onlineStatus: 'connected' }), true);
     assert.equal(api.canStartBranchGeneration({}), true);
+});
+
+test('metadata-backed empty native swipes remain navigable without reviving placeholders', () => {
+    const api = loadApi();
+    const message = {
+        swipes: ['', '', 'visible'],
+        swipe_info: [
+            { send_date: '2026-09-16T00:00:00Z', extra: { reasoning: 'stopped reasoning' } },
+            { send_date: '2026-09-16T00:00:00Z', extra: {} },
+            { send_date: '2026-09-16T00:00:00Z', extra: {} },
+        ],
+    };
+
+    assert.equal(api.isRepresentableVariant(message, 0, ''), true);
+    assert.equal(api.isRepresentableVariant(message, 1, ''), false);
+    assert.equal(api.isRepresentableVariant(message, 2, 'visible'), true);
 });
