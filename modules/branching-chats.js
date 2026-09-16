@@ -1624,6 +1624,44 @@ function handleBranchSwipeClick(event) {
     void handleBranchSwipe(button);
 }
 
+function hasAvailableContinuation(node) {
+    return Boolean(node && graph?.nodes && Object.values(graph.nodes).some((candidate) => candidate.parentId === node.id));
+}
+
+function reconcileNativeSwipe() {
+    if (isGenerationInProgress()) {
+        window.setTimeout(reconcileNativeSwipe, SWIPE_SYNC_DELAY);
+        return;
+    }
+    // A native swipe can be completed without GENERATION_ENDED. Clear the
+    // module's advisory fence once SillyTavern's own generation state is
+    // settled, then rebuild from the authoritative chat/swipe_id objects.
+    generationActive = false;
+    syncGraph(true);
+    const currentNodeId = getCurrentNodeId();
+    const currentNode = graph?.nodes?.[currentNodeId];
+    if (!currentNode || !hasAvailableContinuation(currentNode)) return;
+    // Native swiping only changes the selected message. If that swipe already
+    // has a stored continuation, open the longest continuation exactly as a
+    // tree jump does, while retaining the swiped message as the scroll target.
+    void jumpToSelected(currentNode.id, {
+        openLongestBranch: true,
+        scrollToNodeId: currentNode.id,
+    });
+}
+
+function scheduleNativeSwipeReconciliation() {
+    window.setTimeout(reconcileNativeSwipe, SWIPE_SYNC_DELAY);
+}
+
+function handleNativeSwipeClick(event) {
+    if (!(event.target instanceof Element)
+        || event.target.closest('.stplus-branch-swipe-button')) return;
+    const swipeControl = event.target.closest('#chat .swipe_left, #chat .swipe_right');
+    if (!swipeControl) return;
+    scheduleNativeSwipeReconciliation();
+}
+
 function updateSelectionPresentation() {
     if (!panel || !graph) return;
     const currentNodeId = getCurrentNodeId();
@@ -1927,10 +1965,11 @@ function bindEvents() {
         if (!generationActive) scheduleSync(0);
     };
     const onSwipe = () => {
-        // Swiping emits before the replacement response is finished. Give
-        // GENERATION_STARTED time to mark the stream active; GENERATION_ENDED
-        // will perform the immediate final sync and cancel this timer.
-        if (!generationActive) scheduleSync(SWIPE_SYNC_DELAY);
+        // The event fires after SillyTavern updates swipe_id, but not every
+        // release delivers a matching generation-ended event. Reconcile from
+        // the settled DOM/state boundary so native arrows and keyboard swipes
+        // cannot leave the tree on the previous swipe.
+        scheduleNativeSwipeReconciliation();
     };
     const onChatChanged = (chatId) => {
         // Generation state belongs to the chat that was being generated.
@@ -2178,6 +2217,10 @@ function bindEvents() {
     on('MESSAGE_EDITED', onSafeChatMutation);
     on('MESSAGE_DELETED', onMessageDeleted);
     on('MESSAGE_SWIPE_DELETED', onSwipeDeleted);
+    // SillyTavern's native swipe event is not exposed consistently across
+    // releases/API modes. The DOM click is the stable fallback for arrow
+    // swipes; branch-aware controls opt out so they do not reconcile twice.
+    document.addEventListener('click', handleNativeSwipeClick, true);
     // MESSAGE_RECEIVED is deliberately not used: SillyTavern can emit it
     // while a streamed response is still being assembled.
     listenersBound = true;
