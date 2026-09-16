@@ -606,6 +606,9 @@ function handleDoubleClick(event) {
 
 function bindLifecycleEvents() {
     if (listenersBound) return;
+        // Branch jumps replace the rendered chat DOM before SillyTavern lifecycle events.
+        // Cancel formatted editing before the message element is detached.
+        window.addEventListener('stplus-chat-navigation', cancelEdit);
     const eventSource = context?.eventSource;
     const eventTypes = context?.eventTypes;
     if (!eventSource || !eventTypes || typeof eventSource.on !== 'function') return;
