@@ -1211,6 +1211,57 @@ function scrollChatToSourceIndex(sourceIndex) {
     window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
 }
 
+function captureChatScrollAnchor(sourceIndex) {
+    if (!Number.isInteger(sourceIndex)) return null;
+    const chatElement = document.querySelector('#chat');
+    const message = [...document.querySelectorAll('#chat .mes[mesid]')]
+        .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
+    if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return null;
+    const chatRect = chatElement.getBoundingClientRect();
+    const messageRect = message.getBoundingClientRect();
+    return {
+        sourceIndex,
+        relativeTop: messageRect.top - chatRect.top,
+    };
+}
+
+function restoreChatScrollAnchor(anchor) {
+    if (!anchor || !Number.isInteger(anchor.sourceIndex)) return false;
+    const chatElement = document.querySelector('#chat');
+    const message = [...document.querySelectorAll('#chat .mes[mesid]')]
+        .find((element) => Number(element.getAttribute('mesid')) === anchor.sourceIndex);
+    if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return false;
+    const chatRect = chatElement.getBoundingClientRect();
+    const messageRect = message.getBoundingClientRect();
+    const delta = (messageRect.top - chatRect.top) - anchor.relativeTop;
+    if (Number.isFinite(delta) && Math.abs(delta) > 1) chatElement.scrollTop += delta;
+    return true;
+}
+
+function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null) {
+    if (!anchor) {
+        scrollChatToSourceIndex(fallbackSourceIndex);
+        return;
+    }
+    const restore = () => {
+        if (!restoreChatScrollAnchor(anchor)) scrollChatToSourceIndex(fallbackSourceIndex);
+    };
+    // Core can apply its own bottom scroll after the chat reload event. Keep
+    // the original message position through the subsequent redraw passes.
+    window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(restore));
+    window.setTimeout(restore, 100);
+    window.setTimeout(restore, 350);
+}
+
+async function navigateToSwipe(node, scrollAnchor = null) {
+    if (!node) return;
+    await jumpToSelected(node.id, {
+        openLongestBranch: true,
+        scrollToNodeId: node.id,
+        scrollAnchor,
+    });
+}
+
 function getSelectedNode() {
     return graph?.nodes?.[selectedNodeId] ?? null;
 }
@@ -1263,7 +1314,7 @@ function selectNode(nodeId) {
     updateSelectionPresentation();
 }
 
-async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = true, scrollToNodeId = null } = {}) {
+async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = true, scrollToNodeId = null, scrollAnchor = null } = {}) {
     if (nodeId && graph?.nodes?.[nodeId]) selectedNodeId = nodeId;
     if (jumpInProgress || !getChatKey()) return;
     const selected = getSelectedNode();
@@ -1330,9 +1381,10 @@ async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = tru
             scheduleActiveNodeCenter();
         }
         render();
-        scrollChatToSourceIndex((scrollToNodeId && graph?.nodes?.[scrollToNodeId])
+        const scrollSourceIndex = (scrollToNodeId && graph?.nodes?.[scrollToNodeId])
             ? graph.nodes[scrollToNodeId].sourceIndex
-            : selected.sourceIndex);
+            : selected.sourceIndex;
+        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex);
         window.toastr?.success?.('Jumped to ' + selected.label);
     } finally {
         jumpInProgress = false;
@@ -1550,6 +1602,7 @@ function refreshMessageSwipeControls() {
 }
 
 let branchSwipeInProgress = false;
+let pendingNativeSwipeScrollAnchor = null;
 
 async function generateFromPreviousAssistant(node) {
     const liveContext = getLiveContext();
@@ -1588,7 +1641,7 @@ async function generateFromPreviousAssistant(node) {
     }
 }
 
-async function handleBranchSwipe(button) {
+async function handleBranchSwipe(button, scrollAnchor = null) {
     if (branchSwipeInProgress || isGenerationInProgress()) return;
     const node = graph?.nodes?.[button?.dataset?.nodeId];
     if (!node) return;
@@ -1602,7 +1655,7 @@ async function handleBranchSwipe(button) {
     branchSwipeInProgress = true;
     try {
         if (action.type === 'jump' && action.node) {
-            await jumpToSelected(action.node.id);
+            await navigateToSwipe(action.node, scrollAnchor);
         } else if (action.type === 'generate') {
             await generateFromPreviousAssistant(node);
         }
@@ -1621,7 +1674,8 @@ function handleBranchSwipeClick(event) {
     if (!(button instanceof HTMLButtonElement) || button.disabled) return;
     event.preventDefault();
     event.stopPropagation();
-    void handleBranchSwipe(button);
+    const sourceIndex = Number(button.closest('.mes[mesid]')?.getAttribute('mesid'));
+    void handleBranchSwipe(button, captureChatScrollAnchor(sourceIndex));
 }
 
 function hasAvailableContinuation(node) {
@@ -1629,7 +1683,10 @@ function hasAvailableContinuation(node) {
 }
 
 function reconcileNativeSwipe() {
+    const scrollAnchor = pendingNativeSwipeScrollAnchor;
+    pendingNativeSwipeScrollAnchor = null;
     if (isGenerationInProgress()) {
+        pendingNativeSwipeScrollAnchor = scrollAnchor;
         window.setTimeout(reconcileNativeSwipe, SWIPE_SYNC_DELAY);
         return;
     }
@@ -1640,14 +1697,14 @@ function reconcileNativeSwipe() {
     syncGraph(true);
     const currentNodeId = getCurrentNodeId();
     const currentNode = graph?.nodes?.[currentNodeId];
-    if (!currentNode || !hasAvailableContinuation(currentNode)) return;
+    if (!currentNode || !hasAvailableContinuation(currentNode)) {
+        scheduleChatScrollRestore(scrollAnchor, currentNode?.sourceIndex ?? null);
+        return;
+    }
     // Native swiping only changes the selected message. If that swipe already
     // has a stored continuation, open the longest continuation exactly as a
     // tree jump does, while retaining the swiped message as the scroll target.
-    void jumpToSelected(currentNode.id, {
-        openLongestBranch: true,
-        scrollToNodeId: currentNode.id,
-    });
+    void navigateToSwipe(currentNode, scrollAnchor);
 }
 
 function scheduleNativeSwipeReconciliation() {
@@ -1659,6 +1716,8 @@ function handleNativeSwipeClick(event) {
         || event.target.closest('.stplus-branch-swipe-button')) return;
     const swipeControl = event.target.closest('#chat .swipe_left, #chat .swipe_right');
     if (!swipeControl) return;
+    const sourceIndex = Number(swipeControl.closest('.mes[mesid]')?.getAttribute('mesid'));
+    pendingNativeSwipeScrollAnchor = captureChatScrollAnchor(sourceIndex);
     scheduleNativeSwipeReconciliation();
 }
 
@@ -1725,7 +1784,7 @@ function handleNodeLayerDoubleClick(event) {
     event.preventDefault();
     event.stopPropagation();
     selectNode(nodeId);
-    void jumpToSelected(nodeId);
+    void jumpToSelected(nodeId, { scrollToNodeId: nodeId });
 }
 
 function createNodeButton(node, position, query) {

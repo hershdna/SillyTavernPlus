@@ -691,24 +691,21 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     margin: 0;
 }
 
-/* Branch-aware swipes for messages before the end of the active path. The
-   native ST controls are present in the message template but intentionally
-   hidden for non-last messages, so keep this affordance visually identical
-   in placement while giving it its own event target. */
+/* Branch-aware swipes for messages before the end of the active path. Mirror
+   SillyTavern's native layout: the previous arrow sits above the left edge,
+   while the next arrow has its counter directly underneath it on the right. */
 .stplus-branch-swipe-controls {
     position: absolute;
-    right: 5px;
+    right: 0;
     bottom: 0;
-    left: 20px;
+    left: 0;
     z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 25px;
+    height: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin) + 25px);
     pointer-events: none;
 }
 
 .stplus-branch-swipe-button {
+    position: absolute;
     display: flex;
     width: 25px;
     height: 25px;
@@ -724,6 +721,16 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     font-size: 20px;
 }
 
+.stplus-branch-swipe-left {
+    bottom: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin));
+    left: 0;
+}
+
+.stplus-branch-swipe-right {
+    right: 0;
+    bottom: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin));
+}
+
 .stplus-branch-swipe-button:hover:not(:disabled),
 .stplus-branch-swipe-button:focus-visible {
     opacity: 0.9;
@@ -735,7 +742,15 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
 }
 
 .stplus-branch-swipe-counter {
+    position: absolute;
+    right: 0;
+    bottom: var(--swipeCounterMargin);
+    display: flex;
+    height: var(--swipeCounterHeight);
     min-width: 40px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
     color: var(--SmartThemeBodyColor, #eee);
     opacity: 0.45;
     font-family: var(--mainFontFamily);
