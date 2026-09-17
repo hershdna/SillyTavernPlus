@@ -1208,6 +1208,18 @@ function restoreDocumentScroll(scrollPosition) {
     if (window.scrollX !== scrollPosition.x || window.scrollY !== scrollPosition.y) {
         window.scrollTo(scrollPosition.x, scrollPosition.y);
     }
+    // SillyTavern can update the document scroller directly during chat
+    // replacement. Keep both standards-mode and legacy body scrollers in the
+    // requested position so the top toolbar cannot be left above the viewport.
+    const documentScroller = document.scrollingElement;
+    if (documentScroller) {
+        documentScroller.scrollLeft = scrollPosition.x;
+        documentScroller.scrollTop = scrollPosition.y;
+    }
+    if (document.body && document.body !== documentScroller) {
+        document.body.scrollLeft = scrollPosition.x;
+        document.body.scrollTop = scrollPosition.y;
+    }
 }
 
 function scrollChatToSourceIndex(sourceIndex, documentScroll = null) {
@@ -1263,19 +1275,18 @@ function restoreChatScrollAnchor(anchor) {
 
 function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentScroll = null) {
     const targetDocumentScroll = anchor?.documentScroll ?? documentScroll;
-    if (!anchor) {
-        scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
-        return;
-    }
     const restore = () => {
         restoreDocumentScroll(targetDocumentScroll);
-        if (!restoreChatScrollAnchor(anchor)) scrollChatToSourceIndex(fallbackSourceIndex);
+        if (anchor) {
+            if (!restoreChatScrollAnchor(anchor)) scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
+        } else {
+            scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
+        }
     };
     // Core can apply its own bottom scroll after the chat reload event. Keep
     // the original message position through the subsequent redraw passes.
     window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(restore));
-    window.setTimeout(restore, 100);
-    window.setTimeout(restore, 350);
+    [100, 350, 700, 1200, 1800].forEach((delay) => window.setTimeout(restore, delay));
 }
 
 async function navigateToSwipe(node, scrollAnchor = null) {
