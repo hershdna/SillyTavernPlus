@@ -222,21 +222,41 @@ function getNativeAutoScrollOwner() {
         && NATIVE_AUTO_SCROLL_SETTING in candidate) ?? null;
 }
 
+function getNativeAutoScrollControl() {
+    const control = document.getElementById(NATIVE_AUTO_SCROLL_SETTING);
+    return control instanceof HTMLInputElement && control.type === 'checkbox' ? control : null;
+}
+
 function beginNativeAutoScrollLock() {
     if (nativeAutoScrollLock) {
         nativeAutoScrollLock.depth += 1;
         return true;
     }
     const owner = getNativeAutoScrollOwner();
-    if (!owner) return false;
+    if (owner) {
+        nativeAutoScrollLock = {
+            owner,
+            previous: owner[NATIVE_AUTO_SCROLL_SETTING],
+            depth: 1,
+            control: null,
+        };
+        // This is intentionally an in-memory change. Do not save it: the
+        // user's normal SillyTavern preference must be restored afterward.
+        owner[NATIVE_AUTO_SCROLL_SETTING] = false;
+        return true;
+    }
+    // Older SillyTavern builds do not expose powerUserSettings through
+    // getContext(). The settings checkbox is their stable public UI pathway;
+    // click it so the private core setting changes too, then click it back.
+    const control = getNativeAutoScrollControl();
+    if (!control) return false;
     nativeAutoScrollLock = {
-        owner,
-        previous: owner[NATIVE_AUTO_SCROLL_SETTING],
+        owner: null,
+        previous: control.checked,
         depth: 1,
+        control,
     };
-    // This is intentionally an in-memory change. Do not save it: the user's
-    // normal SillyTavern preference must be restored after the operation.
-    owner[NATIVE_AUTO_SCROLL_SETTING] = false;
+    if (control.checked) control.click();
     return true;
 }
 
@@ -244,11 +264,16 @@ function endNativeAutoScrollLock() {
     if (!nativeAutoScrollLock) return;
     nativeAutoScrollLock.depth -= 1;
     if (nativeAutoScrollLock.depth > 0) return;
-    const { owner, previous } = nativeAutoScrollLock;
+    const { owner, previous, control } = nativeAutoScrollLock;
     // If the user changed the setting while the lock was active, respect that
     // explicit change instead of overwriting it with the old value.
-    if (owner[NATIVE_AUTO_SCROLL_SETTING] === false) {
+    if (owner && owner[NATIVE_AUTO_SCROLL_SETTING] === false) {
         owner[NATIVE_AUTO_SCROLL_SETTING] = previous;
+    } else if (control && control.checked !== previous) {
+        // The checkbox event updates SillyTavern's private setting in older
+        // builds. Only restore when it still differs from the saved value;
+        // otherwise a user change made during the operation is preserved.
+        if (control.checked === false && previous === true) control.click();
     }
     nativeAutoScrollLock = null;
 }
