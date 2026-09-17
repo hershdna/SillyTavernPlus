@@ -59,8 +59,6 @@ let nativeSwipeReconcileTimer = null;
 let scrollRestoreSequence = 0;
 let nativeAutoScrollLock = null;
 let nativeSwipeScrollLockHeld = false;
-let nativeSwipeOperationId = 0;
-let pendingNativeSwipeOperation = null;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
 
@@ -252,25 +250,13 @@ function beginNativeAutoScrollLock() {
     // click it so the private core setting changes too, then click it back.
     const control = getNativeAutoScrollControl();
     if (!control) return false;
-    const lock = {
+    nativeAutoScrollLock = {
         owner: null,
         previous: control.checked,
         depth: 1,
         control,
-        userChanged: false,
-        programmaticMutation: false,
-        onChange: null,
     };
-    lock.onChange = () => {
-        if (!lock.programmaticMutation) lock.userChanged = true;
-    };
-    control.addEventListener('change', lock.onChange);
-    nativeAutoScrollLock = lock;
-    if (control.checked) {
-        lock.programmaticMutation = true;
-        control.click();
-        lock.programmaticMutation = false;
-    }
+    if (control.checked) control.click();
     return true;
 }
 
@@ -278,44 +264,24 @@ function endNativeAutoScrollLock() {
     if (!nativeAutoScrollLock) return;
     nativeAutoScrollLock.depth -= 1;
     if (nativeAutoScrollLock.depth > 0) return;
-    const lock = nativeAutoScrollLock;
-    const { owner, previous, control, userChanged, onChange } = lock;
+    const { owner, previous, control } = nativeAutoScrollLock;
     // If the user changed the setting while the lock was active, respect that
     // explicit change instead of overwriting it with the old value.
     if (owner && owner[NATIVE_AUTO_SCROLL_SETTING] === false) {
         owner[NATIVE_AUTO_SCROLL_SETTING] = previous;
-    } else if (control && control.checked !== previous && !userChanged) {
+    } else if (control && control.checked !== previous) {
         // The checkbox event updates SillyTavern's private setting in older
         // builds. Only restore when it still differs from the saved value;
         // otherwise a user change made during the operation is preserved.
-        if (control.checked === false && previous === true) {
-            lock.programmaticMutation = true;
-            control.click();
-            lock.programmaticMutation = false;
-        }
+        if (control.checked === false && previous === true) control.click();
     }
-    control?.removeEventListener('change', onChange);
     nativeAutoScrollLock = null;
 }
 
-function releaseNativeSwipeScrollLock(operationId = null) {
-    if (operationId !== null && operationId !== nativeSwipeOperationId) return;
+function releaseNativeSwipeScrollLock() {
     if (!nativeSwipeScrollLockHeld) return;
     nativeSwipeScrollLockHeld = false;
     endNativeAutoScrollLock();
-}
-
-function cancelNativeScrollOperations() {
-    scrollRestoreSequence += 1;
-    window.clearTimeout(nativeSwipeReconcileTimer);
-    nativeSwipeReconcileTimer = null;
-    nativeSwipeOperationId += 1;
-    pendingNativeSwipeOperation = null;
-    nativeSwipeScrollLockHeld = false;
-    // A chat transition invalidates every in-flight branch operation. Unwind
-    // all nested locks so a stale completion cannot disable auto-scroll in the
-    // newly opened chat.
-    while (nativeAutoScrollLock) endNativeAutoScrollLock();
 }
 
 function canStartBranchGeneration(liveContext = getLiveContext()) {
@@ -345,7 +311,6 @@ function startChatDomWatcher() {
         const currentChatKey = getChatKey();
         const currentChatIdentity = getChatIdentity();
         if (!currentChatKey || !currentChatIdentity) {
-            cancelNativeScrollOperations();
             graph = null;
             loadedChatKey = null;
             lastChatSignature = '';
@@ -1447,7 +1412,7 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     };
     const restore = () => {
         if (sequence !== scrollRestoreSequence) {
-            finish();
+            cleanup();
             return;
         }
         restoreDocumentScroll(targetDocumentScroll);
@@ -1473,7 +1438,7 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     };
     const restoreAfterMutation = () => {
         if (sequence !== scrollRestoreSequence) {
-            finish();
+            cleanup();
             return;
         }
         stableFrames = 0;
@@ -1579,14 +1544,6 @@ async function jumpToSelected(nodeId = selectedNodeId, {
 
     jumpInProgress = true;
     const ownsScrollLock = beginNativeAutoScrollLock();
-    let scrollRestoreScheduled = false;
-    let scrollLockReleased = false;
-    const releaseJumpScrollLock = () => {
-        if (scrollLockReleased) return;
-        scrollLockReleased = true;
-        if (ownsScrollLock) endNativeAutoScrollLock();
-        onScrollRestored?.();
-    };
     const jumpButton = panel?.querySelector('[data-action="jump"]');
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
     try {
@@ -1648,15 +1605,12 @@ async function jumpToSelected(nodeId = selectedNodeId, {
         const scrollSourceIndex = (scrollToNodeId && graph?.nodes?.[scrollToNodeId])
             ? graph.nodes[scrollToNodeId].sourceIndex
             : selected.sourceIndex;
-        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex, documentScroll, { onComplete: releaseJumpScrollLock });
-        scrollRestoreScheduled = true;
+        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex, documentScroll, { onComplete: onScrollRestored });
         window.toastr?.success?.('Jumped to ' + selected.label);
         return true;
     } finally {
         jumpInProgress = false;
-        // The restoration owns the lock after it has been scheduled. If the
-        // jump exits before scheduling one, release it here instead.
-        if (!scrollRestoreScheduled) releaseJumpScrollLock();
+        if (ownsScrollLock) endNativeAutoScrollLock();
         if (panel?.classList.contains('stplus-branching-window-open')) render();
     }
 }
@@ -1871,8 +1825,9 @@ function refreshMessageSwipeControls() {
 }
 
 let branchSwipeInProgress = false;
+let pendingNativeSwipeScrollAnchor = null;
 
-async function generateFromPreviousAssistant(node, scrollAnchor = null, onScrollRestored = null) {
+async function generateFromPreviousAssistant(node, scrollAnchor = null) {
     const liveContext = getLiveContext();
     if (!node || node.role === 'user' || typeof liveContext?.generate !== 'function') return;
     if (!canStartBranchGeneration(liveContext)) {
@@ -1888,12 +1843,7 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null, onScroll
         // anchor until MESSAGE_SWIPED reconciliation so generation cannot
         // pull the view back to the bottom after an early restore.
         await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id });
-        const operationId = ++nativeSwipeOperationId;
-        pendingNativeSwipeOperation = {
-            id: operationId,
-            chatIdentity: getChatIdentity(),
-            scrollAnchor,
-        };
+        pendingNativeSwipeScrollAnchor = scrollAnchor;
         if (!nativeSwipeScrollLockHeld) {
             nativeSwipeScrollLockHeld = beginNativeAutoScrollLock();
         }
@@ -1922,9 +1872,8 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null, onScroll
         // The promise has settled here, so do not leave the branch controls
         // permanently disabled.
         generationActive = false;
-        scheduleChatScrollRestore(anchor, node.sourceIndex, null, { onComplete: onScrollRestored });
+        scheduleChatScrollRestore(anchor, node.sourceIndex);
     }
-    return true;
 }
 
 async function handleBranchSwipe(button, scrollAnchor = null) {
@@ -1940,22 +1889,14 @@ async function handleBranchSwipe(button, scrollAnchor = null) {
 
     branchSwipeInProgress = true;
     const ownsScrollLock = beginNativeAutoScrollLock();
-    let scrollLockReleaseDeferred = false;
-    const releaseBranchScrollLock = () => {
-        if (ownsScrollLock) endNativeAutoScrollLock();
-    };
     try {
         if (action.type === 'jump' && action.node) {
-            const started = await navigateToSwipe(action.node, scrollAnchor, releaseBranchScrollLock);
-            scrollLockReleaseDeferred = started === true;
+            await navigateToSwipe(action.node, scrollAnchor);
         } else if (action.type === 'generate') {
-            const started = await generateFromPreviousAssistant(node, scrollAnchor, releaseBranchScrollLock);
-            // Native greeting swipes have their own reconciliation lock; the
-            // branch-operation lock can be released when swipe() returns.
-            scrollLockReleaseDeferred = started === true && !(node.parentId === null && node.sourceIndex === 0);
+            await generateFromPreviousAssistant(node, scrollAnchor);
         }
     } finally {
-        if (!scrollLockReleaseDeferred) releaseBranchScrollLock();
+        if (ownsScrollLock) endNativeAutoScrollLock();
         branchSwipeInProgress = false;
         refreshMessageSwipeControls();
     }
@@ -1979,16 +1920,10 @@ function hasAvailableContinuation(node) {
 }
 
 function reconcileNativeSwipe() {
-    const operation = pendingNativeSwipeOperation;
-    pendingNativeSwipeOperation = null;
-    const scrollAnchor = operation?.scrollAnchor ?? null;
-    const operationId = operation?.id ?? null;
-    if (operation?.chatIdentity && operation.chatIdentity !== getChatIdentity()) {
-        releaseNativeSwipeScrollLock(operationId);
-        return;
-    }
+    const scrollAnchor = pendingNativeSwipeScrollAnchor;
+    pendingNativeSwipeScrollAnchor = null;
     if (isGenerationInProgress()) {
-        pendingNativeSwipeOperation = operation;
+        pendingNativeSwipeScrollAnchor = scrollAnchor;
         window.setTimeout(reconcileNativeSwipe, SWIPE_SYNC_DELAY);
         return;
     }
@@ -2001,18 +1936,14 @@ function reconcileNativeSwipe() {
     const currentNode = graph?.nodes?.[currentNodeId];
     if (!currentNode || !hasAvailableContinuation(currentNode)) {
         scheduleChatScrollRestore(scrollAnchor, currentNode?.sourceIndex ?? null, null, {
-            onComplete: () => releaseNativeSwipeScrollLock(operationId),
+            onComplete: releaseNativeSwipeScrollLock,
         });
         return;
     }
     // Native swiping only changes the selected message. If that swipe already
     // has a stored continuation, open the longest continuation exactly as a
     // tree jump does, while retaining the swiped message as the scroll target.
-    void navigateToSwipe(currentNode, scrollAnchor, () => releaseNativeSwipeScrollLock(operationId))
-        .then((started) => {
-            if (!started) releaseNativeSwipeScrollLock(operationId);
-        })
-        .catch(() => releaseNativeSwipeScrollLock(operationId));
+    void navigateToSwipe(currentNode, scrollAnchor, releaseNativeSwipeScrollLock);
 }
 
 function scheduleNativeSwipeReconciliation() {
@@ -2029,14 +1960,8 @@ function handleNativeSwipeClick(event) {
     const swipeControl = event.target.closest('#chat .swipe_left, #chat .swipe_right');
     if (!swipeControl) return;
     const sourceIndex = Number(swipeControl.closest('.mes[mesid]')?.getAttribute('mesid'));
-    const scrollAnchor = captureChatScrollAnchor(sourceIndex, swipeControl);
-    const operationId = ++nativeSwipeOperationId;
-    pendingNativeSwipeOperation = {
-        id: operationId,
-        chatIdentity: getChatIdentity(),
-        scrollAnchor,
-    };
-    if (scrollAnchor && !nativeSwipeScrollLockHeld) {
+    pendingNativeSwipeScrollAnchor = captureChatScrollAnchor(sourceIndex, swipeControl);
+    if (pendingNativeSwipeScrollAnchor && !nativeSwipeScrollLockHeld) {
         nativeSwipeScrollLockHeld = beginNativeAutoScrollLock();
     }
     scheduleNativeSwipeReconciliation();
@@ -2370,11 +2295,6 @@ function bindEvents() {
         const eventChatKey = normalizeChatKey(chatId);
         noteLifecycleChatKey(eventChatKey);
         const currentChatKey = getChatKey();
-        const sameChatReloadInProgress = reloadChatPending
-            || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
-        const changedChatIdentity = !currentChatKey
-            || (eventChatKey !== null && currentChatKey !== eventChatKey);
-        if (!sameChatReloadInProgress && changedChatIdentity) cancelNativeScrollOperations();
         const wasOpen = panel?.classList.contains('stplus-branching-window-open') === true;
         if (currentChatKey) reopenAfterChatLoad = reopenAfterChatLoad || wasOpen;
         else reopenAfterChatLoad = false;
@@ -2464,7 +2384,6 @@ function bindEvents() {
             return;
         }
 
-        cancelNativeScrollOperations();
         newChatPending = true;
         deletionSyncPending = false;
         deletedSwipeSlotsPending = [];
@@ -2520,7 +2439,6 @@ function bindEvents() {
         }
         const isSameChatReload = reloadChatPending
             || (reloadTargetChatKey && currentChatKey === reloadTargetChatKey);
-        if (!isSameChatReload) cancelNativeScrollOperations();
         if (!isSameChatReload) {
             deletionSyncPending = false;
             deletedSwipeSlotsPending = [];
@@ -2550,7 +2468,6 @@ function bindEvents() {
             : deletedChat?.chatId ?? deletedChat?.chat_id ?? deletedChat?.id;
         const currentChatId = getChatKey();
         if (deletedChatId && currentChatId && String(deletedChatId) !== currentChatId) return;
-        cancelNativeScrollOperations();
         newChatPending = false;
         reloadTargetChatKey = null;
         chatLoadPending = false;
@@ -2625,13 +2542,11 @@ export function initialize(stContext, stSettings) {
 
 export function refresh() {
     if (!settings?.branchingChatsEnabled) {
-        cancelNativeScrollOperations();
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
         return;
     }
     if (!getChatKey()) {
-        cancelNativeScrollOperations();
         chatLoadPending = false;
         closeWindow();
         document.getElementById(MODULE_BUTTON_ID)?.remove();
