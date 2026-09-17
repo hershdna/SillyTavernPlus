@@ -1201,9 +1201,19 @@ function getLongestAvailablePath(startNode, targetGraph = graph) {
     return chooseLongest(startNode, ancestry);
 }
 
-function scrollChatToSourceIndex(sourceIndex) {
+function restoreDocumentScroll(scrollPosition) {
+    if (!scrollPosition
+        || !Number.isFinite(scrollPosition.x)
+        || !Number.isFinite(scrollPosition.y)) return;
+    if (window.scrollX !== scrollPosition.x || window.scrollY !== scrollPosition.y) {
+        window.scrollTo(scrollPosition.x, scrollPosition.y);
+    }
+}
+
+function scrollChatToSourceIndex(sourceIndex, documentScroll = null) {
     if (!Number.isInteger(sourceIndex) || typeof window.requestAnimationFrame !== 'function') return;
     const scroll = () => {
+        restoreDocumentScroll(documentScroll);
         const chatElement = document.querySelector('#chat');
         const message = [...document.querySelectorAll('#chat .mes[mesid]')]
             .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
@@ -1216,6 +1226,7 @@ function scrollChatToSourceIndex(sourceIndex) {
         const centeredOffset = (chatElement.clientHeight - messageRect.height) / 2;
         const delta = (messageRect.top - chatRect.top) - centeredOffset;
         if (Number.isFinite(delta)) chatElement.scrollTop += delta;
+        restoreDocumentScroll(documentScroll);
     };
     window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
 }
@@ -1231,11 +1242,13 @@ function captureChatScrollAnchor(sourceIndex) {
     return {
         sourceIndex,
         relativeTop: messageRect.top - chatRect.top,
+        documentScroll: { x: window.scrollX, y: window.scrollY },
     };
 }
 
 function restoreChatScrollAnchor(anchor) {
     if (!anchor || !Number.isInteger(anchor.sourceIndex)) return false;
+    restoreDocumentScroll(anchor.documentScroll);
     const chatElement = document.querySelector('#chat');
     const message = [...document.querySelectorAll('#chat .mes[mesid]')]
         .find((element) => Number(element.getAttribute('mesid')) === anchor.sourceIndex);
@@ -1244,15 +1257,18 @@ function restoreChatScrollAnchor(anchor) {
     const messageRect = message.getBoundingClientRect();
     const delta = (messageRect.top - chatRect.top) - anchor.relativeTop;
     if (Number.isFinite(delta) && Math.abs(delta) > 1) chatElement.scrollTop += delta;
+    restoreDocumentScroll(anchor.documentScroll);
     return true;
 }
 
-function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null) {
+function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentScroll = null) {
+    const targetDocumentScroll = anchor?.documentScroll ?? documentScroll;
     if (!anchor) {
-        scrollChatToSourceIndex(fallbackSourceIndex);
+        scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
         return;
     }
     const restore = () => {
+        restoreDocumentScroll(targetDocumentScroll);
         if (!restoreChatScrollAnchor(anchor)) scrollChatToSourceIndex(fallbackSourceIndex);
     };
     // Core can apply its own bottom scroll after the chat reload event. Keep
@@ -1337,6 +1353,7 @@ async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = tru
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
     try {
         const chatKeyBeforeReload = getChatKey();
+        const documentScroll = { x: window.scrollX, y: window.scrollY };
         const keepWindowOpen = panel?.classList.contains('stplus-branching-window-open') === true;
         // A branch jump replaces the rendered chat path. Tell the formatted
         // editor to leave its contenteditable state before that replacement,
@@ -1393,7 +1410,7 @@ async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = tru
         const scrollSourceIndex = (scrollToNodeId && graph?.nodes?.[scrollToNodeId])
             ? graph.nodes[scrollToNodeId].sourceIndex
             : selected.sourceIndex;
-        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex);
+        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex, documentScroll);
         window.toastr?.success?.('Jumped to ' + selected.label);
     } finally {
         jumpInProgress = false;
