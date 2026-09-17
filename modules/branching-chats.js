@@ -6,7 +6,7 @@ const NODE_ID_FIELD = 'stplusBranchingNodeId';
 const SCHEMA_VERSION = 3;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
-const CHAT_SCROLL_SETTLE_DELAY = 350;
+const NATIVE_AUTO_SCROLL_SETTING = 'auto_scroll_chat_to_bottom';
 const PERSIST_DELAY = 350;
 const CHAT_STATE_POLL_INTERVAL = 100;
 const MIN_TREE_ZOOM = 0.35;
@@ -57,6 +57,8 @@ let deletionSyncPending = false;
 let deletedSwipeSlotsPending = [];
 let nativeSwipeReconcileTimer = null;
 let scrollRestoreSequence = 0;
+let nativeAutoScrollLock = null;
+let nativeSwipeScrollLockHeld = false;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
 
@@ -203,6 +205,56 @@ function isGenerationInProgress() {
     // API or another extension omits GENERATION_ENDED. Do not let that stale
     // fence disable a visible branch control after the core state is clear.
     return document.body?.dataset.generating === 'true';
+}
+
+function getNativeAutoScrollOwner() {
+    const liveContext = getLiveContext();
+    const candidates = [
+        liveContext?.power_user,
+        liveContext?.settings?.power_user,
+        globalThis.power_user,
+        globalThis.SillyTavern?.power_user,
+    ];
+    return candidates.find((candidate) => candidate
+        && typeof candidate === 'object'
+        && NATIVE_AUTO_SCROLL_SETTING in candidate) ?? null;
+}
+
+function beginNativeAutoScrollLock() {
+    if (nativeAutoScrollLock) {
+        nativeAutoScrollLock.depth += 1;
+        return true;
+    }
+    const owner = getNativeAutoScrollOwner();
+    if (!owner) return false;
+    nativeAutoScrollLock = {
+        owner,
+        previous: owner[NATIVE_AUTO_SCROLL_SETTING],
+        depth: 1,
+    };
+    // This is intentionally an in-memory change. Do not save it: the user's
+    // normal SillyTavern preference must be restored after the operation.
+    owner[NATIVE_AUTO_SCROLL_SETTING] = false;
+    return true;
+}
+
+function endNativeAutoScrollLock() {
+    if (!nativeAutoScrollLock) return;
+    nativeAutoScrollLock.depth -= 1;
+    if (nativeAutoScrollLock.depth > 0) return;
+    const { owner, previous } = nativeAutoScrollLock;
+    // If the user changed the setting while the lock was active, respect that
+    // explicit change instead of overwriting it with the old value.
+    if (owner[NATIVE_AUTO_SCROLL_SETTING] === false) {
+        owner[NATIVE_AUTO_SCROLL_SETTING] = previous;
+    }
+    nativeAutoScrollLock = null;
+}
+
+function releaseNativeSwipeScrollLock() {
+    if (!nativeSwipeScrollLockHeld) return;
+    nativeSwipeScrollLockHeld = false;
+    endNativeAutoScrollLock();
 }
 
 function canStartBranchGeneration(liveContext = getLiveContext()) {
@@ -1299,28 +1351,37 @@ function restoreChatScrollAnchor(anchor) {
     return true;
 }
 
-function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentScroll = null) {
+function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentScroll = null, { onComplete = null } = {}) {
     const targetDocumentScroll = anchor?.documentScroll ?? documentScroll;
     const sequence = ++scrollRestoreSequence;
     let attempts = 0;
     let retryTimer = null;
-    let quietTimer = null;
     let maxTimer = null;
+    let frame = 0;
+    let stableFrames = 0;
     let observer = null;
     let scrollListener = null;
     const cleanup = () => {
         if (retryTimer) window.clearTimeout(retryTimer);
-        if (quietTimer) window.clearTimeout(quietTimer);
         if (maxTimer) window.clearTimeout(maxTimer);
+        if (frame) window.cancelAnimationFrame(frame);
         observer?.disconnect();
         if (scrollListener) {
             document.querySelector('#chat')?.removeEventListener('scroll', scrollListener);
         }
         retryTimer = null;
-        quietTimer = null;
         maxTimer = null;
+        frame = 0;
         observer = null;
         scrollListener = null;
+    };
+    const finish = () => {
+        cleanup();
+        try {
+            onComplete?.();
+        } catch (error) {
+            console.warn('[SillyTavernPlus] Scroll completion callback failed:', error);
+        }
     };
     const restore = () => {
         if (sequence !== scrollRestoreSequence) {
@@ -1331,48 +1392,60 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
         const restored = anchor
             ? restoreChatScrollAnchor(anchor)
             : scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
-        if (restored || attempts >= 8) {
-            cleanup();
+        if (restored) {
+            // Keep the observer alive for a few frames. This covers the final
+            // message-formatting pass without waiting for a quiet period or
+            // allowing native auto-scroll to win a race.
+            stableFrames += 1;
+            if (stableFrames >= 3) finish();
+            else frame = window.requestAnimationFrame(restore);
+            return;
+        }
+        stableFrames = 0;
+        if (attempts >= 8) {
+            finish();
             return;
         }
         attempts += 1;
         retryTimer = window.setTimeout(restore, 80);
     };
-    const waitForQuietChat = () => {
+    const restoreAfterMutation = () => {
         if (sequence !== scrollRestoreSequence) {
             cleanup();
             return;
         }
-        if (quietTimer) window.clearTimeout(quietTimer);
-        quietTimer = window.setTimeout(restore, CHAT_SCROLL_SETTLE_DELAY);
+        stableFrames = 0;
+        if (frame) window.cancelAnimationFrame(frame);
+        frame = window.requestAnimationFrame(restore);
     };
     const begin = () => {
         const chatElement = document.querySelector('#chat');
         if (chatElement instanceof HTMLElement && typeof MutationObserver === 'function') {
-            observer = new MutationObserver(waitForQuietChat);
+            observer = new MutationObserver(restoreAfterMutation);
             observer.observe(chatElement, { childList: true, subtree: true, characterData: true });
-            scrollListener = waitForQuietChat;
+            scrollListener = restoreAfterMutation;
             chatElement.addEventListener('scroll', scrollListener, { passive: true });
-            // Core can finish a redraw without another mutation. The quiet
-            // timer handles the normal case; the ceiling prevents a missing
-            // lifecycle signal from leaving the anchor pending forever.
+            // The ceiling is only a safety net for a missing target/lifecycle
+            // signal. Normal restoration is immediate and event-driven.
             maxTimer = window.setTimeout(restore, 2000);
-            waitForQuietChat();
+            restore();
             return;
         }
-        retryTimer = window.setTimeout(restore, 320);
+        frame = window.requestAnimationFrame(restore);
     };
-    // Start after the first replacement frame so the observer sees the final
-    // core redraw rather than racing the initial chat insertion.
+    // Start after the first replacement frame, but do not wait for a quiet
+    // period: native auto-scroll is disabled for the operation that requested
+    // this restore, so the anchor can be maintained continuously.
     window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(begin));
 }
 
-async function navigateToSwipe(node, scrollAnchor = null) {
+async function navigateToSwipe(node, scrollAnchor = null, onScrollRestored = null) {
     if (!node) return;
     await jumpToSelected(node.id, {
         openLongestBranch: true,
         scrollToNodeId: node.id,
         scrollAnchor,
+        onScrollRestored,
     });
 }
 
@@ -1428,7 +1501,12 @@ function selectNode(nodeId) {
     updateSelectionPresentation();
 }
 
-async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = true, scrollToNodeId = null, scrollAnchor = null } = {}) {
+async function jumpToSelected(nodeId = selectedNodeId, {
+    openLongestBranch = true,
+    scrollToNodeId = null,
+    scrollAnchor = null,
+    onScrollRestored = null,
+} = {}) {
     if (nodeId && graph?.nodes?.[nodeId]) selectedNodeId = nodeId;
     if (jumpInProgress || !getChatKey()) return;
     const selected = getSelectedNode();
@@ -1438,6 +1516,7 @@ async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = tru
     if (!selected || path.length === 0 || !Array.isArray(chat)) return;
 
     jumpInProgress = true;
+    const ownsScrollLock = beginNativeAutoScrollLock();
     const jumpButton = panel?.querySelector('[data-action="jump"]');
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
     try {
@@ -1499,10 +1578,12 @@ async function jumpToSelected(nodeId = selectedNodeId, { openLongestBranch = tru
         const scrollSourceIndex = (scrollToNodeId && graph?.nodes?.[scrollToNodeId])
             ? graph.nodes[scrollToNodeId].sourceIndex
             : selected.sourceIndex;
-        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex, documentScroll);
+        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex, documentScroll, { onComplete: onScrollRestored });
         window.toastr?.success?.('Jumped to ' + selected.label);
+        return true;
     } finally {
         jumpInProgress = false;
+        if (ownsScrollLock) endNativeAutoScrollLock();
         if (panel?.classList.contains('stplus-branching-window-open')) render();
     }
 }
@@ -1736,6 +1817,9 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null) {
         // pull the view back to the bottom after an early restore.
         await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id });
         pendingNativeSwipeScrollAnchor = scrollAnchor;
+        if (!nativeSwipeScrollLockHeld) {
+            nativeSwipeScrollLockHeld = beginNativeAutoScrollLock();
+        }
         const currentChat = getChat();
         if (currentChat.length > 0) {
             await getLiveContext().swipe.right(null, { forceMesId: currentChat.length - 1 });
@@ -1777,6 +1861,7 @@ async function handleBranchSwipe(button, scrollAnchor = null) {
     const action = getBranchSwipeAction(node, siblings, direction);
 
     branchSwipeInProgress = true;
+    const ownsScrollLock = beginNativeAutoScrollLock();
     try {
         if (action.type === 'jump' && action.node) {
             await navigateToSwipe(action.node, scrollAnchor);
@@ -1784,6 +1869,7 @@ async function handleBranchSwipe(button, scrollAnchor = null) {
             await generateFromPreviousAssistant(node, scrollAnchor);
         }
     } finally {
+        if (ownsScrollLock) endNativeAutoScrollLock();
         branchSwipeInProgress = false;
         refreshMessageSwipeControls();
     }
@@ -1822,13 +1908,15 @@ function reconcileNativeSwipe() {
     const currentNodeId = getCurrentNodeId();
     const currentNode = graph?.nodes?.[currentNodeId];
     if (!currentNode || !hasAvailableContinuation(currentNode)) {
-        scheduleChatScrollRestore(scrollAnchor, currentNode?.sourceIndex ?? null);
+        scheduleChatScrollRestore(scrollAnchor, currentNode?.sourceIndex ?? null, null, {
+            onComplete: releaseNativeSwipeScrollLock,
+        });
         return;
     }
     // Native swiping only changes the selected message. If that swipe already
     // has a stored continuation, open the longest continuation exactly as a
     // tree jump does, while retaining the swiped message as the scroll target.
-    void navigateToSwipe(currentNode, scrollAnchor);
+    void navigateToSwipe(currentNode, scrollAnchor, releaseNativeSwipeScrollLock);
 }
 
 function scheduleNativeSwipeReconciliation() {
@@ -1846,6 +1934,9 @@ function handleNativeSwipeClick(event) {
     if (!swipeControl) return;
     const sourceIndex = Number(swipeControl.closest('.mes[mesid]')?.getAttribute('mesid'));
     pendingNativeSwipeScrollAnchor = captureChatScrollAnchor(sourceIndex, swipeControl);
+    if (pendingNativeSwipeScrollAnchor && !nativeSwipeScrollLockHeld) {
+        nativeSwipeScrollLockHeld = beginNativeAutoScrollLock();
+    }
     scheduleNativeSwipeReconciliation();
 }
 
