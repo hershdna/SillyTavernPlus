@@ -458,11 +458,22 @@ function getActionInsertionPoint(messageElement) {
     return { block, after: reasoning ?? header ?? null };
 }
 
-function syncMessageSwipe(message, text) {
+function syncMessageSwipe(message, text = message?.mes) {
     if (!Array.isArray(message?.swipes) || message.swipes.length === 0) return;
     const swipeId = Number.parseInt(message.swipe_id, 10);
     const index = Number.isInteger(swipeId) && swipeId >= 0 && swipeId < message.swipes.length ? swipeId : 0;
-    message.swipes[index] = text;
+    if (typeof text === 'string') message.swipes[index] = text;
+
+    // SillyTavern stores display overrides (translations and other rendered
+    // text) in the active swipe's swipe_info metadata. Updating only
+    // message.extra.display_text keeps the current DOM correct, but the old
+    // override is restored when the chat is reopened or the swipe is loaded.
+    const swipeInfo = Array.isArray(message.swipe_info) ? message.swipe_info[index] : null;
+    if (swipeInfo && typeof swipeInfo === 'object') {
+        swipeInfo.extra = typeof structuredClone === 'function'
+            ? structuredClone(message.extra ?? {})
+            : JSON.parse(JSON.stringify(message.extra ?? {}));
+    }
 }
 
 async function emitMessageEvent(name, messageId) {
@@ -480,6 +491,13 @@ async function saveChat() {
         if (typeof context?.saveChatConditional === 'function') await context.saveChatConditional();
         else if (typeof context?.saveMetadata === 'function') await context.saveMetadata();
         else context?.saveChatDebounced?.();
+
+        // The native editor may still have a save in flight when this edit is
+        // confirmed. The immediate conditional save normally waits for it,
+        // but a later native event can update the active swipe metadata after
+        // that wait. Queue one final debounced save so the serialized chat
+        // reflects the post-event state as well.
+        context?.saveMetadataDebounced?.();
     } catch (error) {
         console.warn('[SillyTavernPlus] Could not save visible message edit.', error);
     }
@@ -510,9 +528,15 @@ async function confirmEdit() {
 
     if (edit.sourceKey === 'display_text') {
         message.extra.display_text = text;
+        syncMessageSwipe(message);
     } else {
         message.mes = text;
         syncMessageSwipe(message, text);
+    }
+    // Match SillyTavern's native editor. This tells swipe synchronization and
+    // the chat saver that even a greeting-only chat has been modified.
+    if (context?.chatMetadata && typeof context.chatMetadata === 'object') {
+        context.chatMetadata.tainted = true;
     }
     removeEditUi(edit, false);
     await emitMessageEvent('MESSAGE_EDITED', edit.messageId);
