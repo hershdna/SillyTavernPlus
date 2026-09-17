@@ -210,8 +210,10 @@ function isGenerationInProgress() {
 function getNativeAutoScrollOwner() {
     const liveContext = getLiveContext();
     const candidates = [
+        liveContext?.powerUserSettings,
         liveContext?.power_user,
         liveContext?.settings?.power_user,
+        context?.powerUserSettings,
         globalThis.power_user,
         globalThis.SillyTavern?.power_user,
     ];
