@@ -6,6 +6,7 @@ const NODE_ID_FIELD = 'stplusBranchingNodeId';
 const SCHEMA_VERSION = 3;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
+const CHAT_SCROLL_SETTLE_DELAY = 350;
 const PERSIST_DELAY = 350;
 const CHAT_STATE_POLL_INTERVAL = 100;
 const MIN_TREE_ZOOM = 0.35;
@@ -1306,15 +1307,20 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     let quietTimer = null;
     let maxTimer = null;
     let observer = null;
+    let scrollListener = null;
     const cleanup = () => {
         if (retryTimer) window.clearTimeout(retryTimer);
         if (quietTimer) window.clearTimeout(quietTimer);
         if (maxTimer) window.clearTimeout(maxTimer);
         observer?.disconnect();
+        if (scrollListener) {
+            document.querySelector('#chat')?.removeEventListener('scroll', scrollListener);
+        }
         retryTimer = null;
         quietTimer = null;
         maxTimer = null;
         observer = null;
+        scrollListener = null;
     };
     const restore = () => {
         if (sequence !== scrollRestoreSequence) {
@@ -1338,13 +1344,15 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
             return;
         }
         if (quietTimer) window.clearTimeout(quietTimer);
-        quietTimer = window.setTimeout(restore, 180);
+        quietTimer = window.setTimeout(restore, CHAT_SCROLL_SETTLE_DELAY);
     };
     const begin = () => {
         const chatElement = document.querySelector('#chat');
         if (chatElement instanceof HTMLElement && typeof MutationObserver === 'function') {
             observer = new MutationObserver(waitForQuietChat);
             observer.observe(chatElement, { childList: true, subtree: true, characterData: true });
+            scrollListener = waitForQuietChat;
+            chatElement.addEventListener('scroll', scrollListener, { passive: true });
             // Core can finish a redraw without another mutation. The quiet
             // timer handles the normal case; the ceiling prevents a missing
             // lifecycle signal from leaving the anchor pending forever.
