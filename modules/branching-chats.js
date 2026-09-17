@@ -1303,23 +1303,60 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     const sequence = ++scrollRestoreSequence;
     let attempts = 0;
     let retryTimer = null;
+    let quietTimer = null;
+    let maxTimer = null;
+    let observer = null;
+    const cleanup = () => {
+        if (retryTimer) window.clearTimeout(retryTimer);
+        if (quietTimer) window.clearTimeout(quietTimer);
+        if (maxTimer) window.clearTimeout(maxTimer);
+        observer?.disconnect();
+        retryTimer = null;
+        quietTimer = null;
+        maxTimer = null;
+        observer = null;
+    };
     const restore = () => {
-        if (sequence !== scrollRestoreSequence) return;
+        if (sequence !== scrollRestoreSequence) {
+            cleanup();
+            return;
+        }
         restoreDocumentScroll(targetDocumentScroll);
         const restored = anchor
             ? restoreChatScrollAnchor(anchor)
             : scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
         if (restored || attempts >= 8) {
-            if (retryTimer) window.clearTimeout(retryTimer);
+            cleanup();
             return;
         }
         attempts += 1;
         retryTimer = window.setTimeout(restore, 80);
     };
-    // Wait for the replacement message/control to exist, then restore once.
-    // Repeated unconditional writes fight SillyTavern's own scroll handling
-    // and are visible as rapid back-and-forth movement during stream end.
-    window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(restore));
+    const waitForQuietChat = () => {
+        if (sequence !== scrollRestoreSequence) {
+            cleanup();
+            return;
+        }
+        if (quietTimer) window.clearTimeout(quietTimer);
+        quietTimer = window.setTimeout(restore, 180);
+    };
+    const begin = () => {
+        const chatElement = document.querySelector('#chat');
+        if (chatElement instanceof HTMLElement && typeof MutationObserver === 'function') {
+            observer = new MutationObserver(waitForQuietChat);
+            observer.observe(chatElement, { childList: true, subtree: true, characterData: true });
+            // Core can finish a redraw without another mutation. The quiet
+            // timer handles the normal case; the ceiling prevents a missing
+            // lifecycle signal from leaving the anchor pending forever.
+            maxTimer = window.setTimeout(restore, 2000);
+            waitForQuietChat();
+            return;
+        }
+        retryTimer = window.setTimeout(restore, 320);
+    };
+    // Start after the first replacement frame so the observer sees the final
+    // core redraw rather than racing the initial chat insertion.
+    window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(begin));
 }
 
 async function navigateToSwipe(node, scrollAnchor = null) {
@@ -1686,7 +1723,10 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null) {
     // SillyTavern's own swipe implementation create the next slot so its
     // swipe_info/reasoning/media bookkeeping remains intact.
     if (node.parentId === null && node.sourceIndex === 0 && typeof liveContext?.swipe?.right === 'function') {
-        await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id, scrollAnchor });
+        // The native swipe itself may stream/redraw the message. Defer the
+        // anchor until MESSAGE_SWIPED reconciliation so generation cannot
+        // pull the view back to the bottom after an early restore.
+        await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id });
         pendingNativeSwipeScrollAnchor = scrollAnchor;
         const currentChat = getChat();
         if (currentChat.length > 0) {
@@ -1701,7 +1741,10 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null) {
     // Jumping to the parent truncates the visible continuation. The normal
     // generator then appends a fresh assistant reply, which syncGraph folds
     // into the existing same-parent depth group as a native-compatible swipe.
-    await jumpToSelected(parent.id, { openLongestBranch: false, scrollToNodeId: parent.id, scrollAnchor: anchor });
+    // Do not restore before the new response starts streaming. SillyTavern's
+    // generation redraw otherwise wins once, then the final restore wins
+    // again, producing the visible jump-to-bottom/jump-back oscillation.
+    await jumpToSelected(parent.id, { openLongestBranch: false, scrollToNodeId: parent.id });
     try {
         await getLiveContext().generate('normal');
     } finally {
