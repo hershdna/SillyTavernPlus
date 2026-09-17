@@ -54,6 +54,8 @@ let centerActiveNodeFrame = 0;
 let treePanState = null;
 let deletionSyncPending = false;
 let deletedSwipeSlotsPending = [];
+let nativeSwipeReconcileTimer = null;
+let scrollRestoreSequence = 0;
 const objectIdentityTokens = new WeakMap();
 let nextObjectIdentityToken = 1;
 
@@ -1223,37 +1225,50 @@ function restoreDocumentScroll(scrollPosition) {
 }
 
 function scrollChatToSourceIndex(sourceIndex, documentScroll = null) {
-    if (!Number.isInteger(sourceIndex) || typeof window.requestAnimationFrame !== 'function') return;
-    const scroll = () => {
-        restoreDocumentScroll(documentScroll);
-        const chatElement = document.querySelector('#chat');
-        const message = [...document.querySelectorAll('#chat .mes[mesid]')]
-            .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
-        if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return;
-        // Scroll only the chat pane. Element.scrollIntoView() can also scroll
-        // the document when a chat message is temporarily outside the pane,
-        // which moves the top toolbar offscreen after a branch jump/swipe.
-        const chatRect = chatElement.getBoundingClientRect();
-        const messageRect = message.getBoundingClientRect();
-        const centeredOffset = (chatElement.clientHeight - messageRect.height) / 2;
-        const delta = (messageRect.top - chatRect.top) - centeredOffset;
-        if (Number.isFinite(delta)) chatElement.scrollTop += delta;
-        restoreDocumentScroll(documentScroll);
-    };
-    window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
+    if (!Number.isInteger(sourceIndex)) return false;
+    restoreDocumentScroll(documentScroll);
+    const chatElement = document.querySelector('#chat');
+    const message = [...document.querySelectorAll('#chat .mes[mesid]')]
+        .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
+    if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return false;
+    // Scroll only the chat pane. Element.scrollIntoView() can also scroll
+    // the document when a chat message is temporarily outside the pane,
+    // which moves the top toolbar offscreen after a branch jump/swipe.
+    const chatRect = chatElement.getBoundingClientRect();
+    const messageRect = message.getBoundingClientRect();
+    const centeredOffset = (chatElement.clientHeight - messageRect.height) / 2;
+    const delta = (messageRect.top - chatRect.top) - centeredOffset;
+    if (Number.isFinite(delta)) chatElement.scrollTop += delta;
+    restoreDocumentScroll(documentScroll);
+    return true;
 }
 
-function captureChatScrollAnchor(sourceIndex) {
+function captureChatScrollAnchor(sourceIndex, anchorElement = null) {
     if (!Number.isInteger(sourceIndex)) return null;
     const chatElement = document.querySelector('#chat');
     const message = [...document.querySelectorAll('#chat .mes[mesid]')]
         .find((element) => Number(element.getAttribute('mesid')) === sourceIndex);
     if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return null;
     const chatRect = chatElement.getBoundingClientRect();
-    const messageRect = message.getBoundingClientRect();
+    const target = anchorElement instanceof HTMLElement && message.contains(anchorElement)
+        ? anchorElement
+        : message;
+    const targetRect = target.getBoundingClientRect();
+    const anchorType = target.matches('.stplus-branch-swipe-button')
+        ? 'branch'
+        : target.matches('.swipe_left, .swipe_right')
+            ? 'native'
+            : 'message';
+    const direction = target.matches('.stplus-branch-swipe-left, .swipe_left')
+        ? 'left'
+        : target.matches('.stplus-branch-swipe-right, .swipe_right')
+            ? 'right'
+            : null;
     return {
         sourceIndex,
-        relativeTop: messageRect.top - chatRect.top,
+        relativeTop: targetRect.top - chatRect.top,
+        anchorType,
+        direction,
         documentScroll: { x: window.scrollX, y: window.scrollY },
     };
 }
@@ -1265,9 +1280,19 @@ function restoreChatScrollAnchor(anchor) {
     const message = [...document.querySelectorAll('#chat .mes[mesid]')]
         .find((element) => Number(element.getAttribute('mesid')) === anchor.sourceIndex);
     if (!(chatElement instanceof HTMLElement) || !(message instanceof HTMLElement)) return false;
+    const selector = anchor.anchorType === 'branch' && anchor.direction
+        ? `.stplus-branch-swipe-${anchor.direction}`
+        : anchor.anchorType === 'native' && anchor.direction
+            ? `.swipe_${anchor.direction}`
+            : null;
+    const target = selector ? message.querySelector(selector) : message;
+    // The message can be inserted a frame before its swipe controls. Keep
+    // retrying until the exact clicked control exists instead of silently
+    // falling back to the message top and losing the user's anchor.
+    if (selector && !(target instanceof HTMLElement)) return false;
     const chatRect = chatElement.getBoundingClientRect();
-    const messageRect = message.getBoundingClientRect();
-    const delta = (messageRect.top - chatRect.top) - anchor.relativeTop;
+    const targetRect = (target instanceof HTMLElement ? target : message).getBoundingClientRect();
+    const delta = (targetRect.top - chatRect.top) - anchor.relativeTop;
     if (Number.isFinite(delta) && Math.abs(delta) > 1) chatElement.scrollTop += delta;
     restoreDocumentScroll(anchor.documentScroll);
     return true;
@@ -1275,18 +1300,26 @@ function restoreChatScrollAnchor(anchor) {
 
 function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentScroll = null) {
     const targetDocumentScroll = anchor?.documentScroll ?? documentScroll;
+    const sequence = ++scrollRestoreSequence;
+    let attempts = 0;
+    let retryTimer = null;
     const restore = () => {
+        if (sequence !== scrollRestoreSequence) return;
         restoreDocumentScroll(targetDocumentScroll);
-        if (anchor) {
-            if (!restoreChatScrollAnchor(anchor)) scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
-        } else {
-            scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
+        const restored = anchor
+            ? restoreChatScrollAnchor(anchor)
+            : scrollChatToSourceIndex(fallbackSourceIndex, targetDocumentScroll);
+        if (restored || attempts >= 8) {
+            if (retryTimer) window.clearTimeout(retryTimer);
+            return;
         }
+        attempts += 1;
+        retryTimer = window.setTimeout(restore, 80);
     };
-    // Core can apply its own bottom scroll after the chat reload event. Keep
-    // the original message position through the subsequent redraw passes.
+    // Wait for the replacement message/control to exist, then restore once.
+    // Repeated unconditional writes fight SillyTavern's own scroll handling
+    // and are visible as rapid back-and-forth movement during stream end.
     window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(restore));
-    [100, 350, 700, 1200, 1800].forEach((delay) => window.setTimeout(restore, delay));
 }
 
 async function navigateToSwipe(node, scrollAnchor = null) {
@@ -1641,7 +1674,7 @@ function refreshMessageSwipeControls() {
 let branchSwipeInProgress = false;
 let pendingNativeSwipeScrollAnchor = null;
 
-async function generateFromPreviousAssistant(node) {
+async function generateFromPreviousAssistant(node, scrollAnchor = null) {
     const liveContext = getLiveContext();
     if (!node || node.role === 'user' || typeof liveContext?.generate !== 'function') return;
     if (!canStartBranchGeneration(liveContext)) {
@@ -1653,7 +1686,8 @@ async function generateFromPreviousAssistant(node) {
     // SillyTavern's own swipe implementation create the next slot so its
     // swipe_info/reasoning/media bookkeeping remains intact.
     if (node.parentId === null && node.sourceIndex === 0 && typeof liveContext?.swipe?.right === 'function') {
-        await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id });
+        await jumpToSelected(node.id, { openLongestBranch: false, scrollToNodeId: node.id, scrollAnchor });
+        pendingNativeSwipeScrollAnchor = scrollAnchor;
         const currentChat = getChat();
         if (currentChat.length > 0) {
             await getLiveContext().swipe.right(null, { forceMesId: currentChat.length - 1 });
@@ -1663,10 +1697,11 @@ async function generateFromPreviousAssistant(node) {
 
     const parent = graph?.nodes?.[node.parentId];
     if (!parent) return;
+    const anchor = scrollAnchor ?? captureChatScrollAnchor(node.sourceIndex);
     // Jumping to the parent truncates the visible continuation. The normal
     // generator then appends a fresh assistant reply, which syncGraph folds
     // into the existing same-parent depth group as a native-compatible swipe.
-    await jumpToSelected(parent.id, { openLongestBranch: false, scrollToNodeId: parent.id });
+    await jumpToSelected(parent.id, { openLongestBranch: false, scrollToNodeId: parent.id, scrollAnchor: anchor });
     try {
         await getLiveContext().generate('normal');
     } finally {
@@ -1675,6 +1710,7 @@ async function generateFromPreviousAssistant(node) {
         // The promise has settled here, so do not leave the branch controls
         // permanently disabled.
         generationActive = false;
+        scheduleChatScrollRestore(anchor, node.sourceIndex);
     }
 }
 
@@ -1694,7 +1730,7 @@ async function handleBranchSwipe(button, scrollAnchor = null) {
         if (action.type === 'jump' && action.node) {
             await navigateToSwipe(action.node, scrollAnchor);
         } else if (action.type === 'generate') {
-            await generateFromPreviousAssistant(node);
+            await generateFromPreviousAssistant(node, scrollAnchor);
         }
     } finally {
         branchSwipeInProgress = false;
@@ -1712,7 +1748,7 @@ function handleBranchSwipeClick(event) {
     event.preventDefault();
     event.stopPropagation();
     const sourceIndex = Number(button.closest('.mes[mesid]')?.getAttribute('mesid'));
-    void handleBranchSwipe(button, captureChatScrollAnchor(sourceIndex));
+    void handleBranchSwipe(button, captureChatScrollAnchor(sourceIndex, button));
 }
 
 function hasAvailableContinuation(node) {
@@ -1745,7 +1781,11 @@ function reconcileNativeSwipe() {
 }
 
 function scheduleNativeSwipeReconciliation() {
-    window.setTimeout(reconcileNativeSwipe, SWIPE_SYNC_DELAY);
+    window.clearTimeout(nativeSwipeReconcileTimer);
+    nativeSwipeReconcileTimer = window.setTimeout(() => {
+        nativeSwipeReconcileTimer = null;
+        reconcileNativeSwipe();
+    }, SWIPE_SYNC_DELAY);
 }
 
 function handleNativeSwipeClick(event) {
@@ -1754,7 +1794,7 @@ function handleNativeSwipeClick(event) {
     const swipeControl = event.target.closest('#chat .swipe_left, #chat .swipe_right');
     if (!swipeControl) return;
     const sourceIndex = Number(swipeControl.closest('.mes[mesid]')?.getAttribute('mesid'));
-    pendingNativeSwipeScrollAnchor = captureChatScrollAnchor(sourceIndex);
+    pendingNativeSwipeScrollAnchor = captureChatScrollAnchor(sourceIndex, swipeControl);
     scheduleNativeSwipeReconciliation();
 }
 
