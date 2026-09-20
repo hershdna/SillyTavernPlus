@@ -152,6 +152,23 @@ test('branch metadata IDs and summary anchor use the same path', async () => {
     assert.equal(f.api.getSnapshot().stale, true);
 });
 
+test('bookmark boundary retains summary when a later swipe changes the active branch', async () => {
+    const f = fixture();
+    f.chat.push(message('c'));
+    await f.api.generateSummary();
+    const record = f.metadata.stplusChatHistory.records.at(-1);
+    // Simulate a record created before the visible bookmark was edited: its
+    // stored arrays still include messages after the bookmark. The bookmark,
+    // not that obsolete suffix, defines what survives a later branch/swipe.
+    record.anchorMessageId = 'b';
+    record.anchorFingerprint = record.sourceFingerprints[1];
+    f.metadata.stplusBranchingChats = { activePath: ['a', 'b', 'alternate-c'] };
+    const snapshot = f.api.getSnapshot();
+    assert.equal(snapshot.stale, false);
+    assert.equal(snapshot.anchorIndex, 1);
+    assert.equal(snapshot.newMessages.length, 1);
+});
+
 test('editing a previously summarized message invalidates the summary', async () => {
     const f = fixture(); await f.edit('Summary');
     f.chat[0].mes = 'Changed earlier event';
