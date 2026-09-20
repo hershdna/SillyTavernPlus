@@ -31,7 +31,8 @@ const MOVING_UI_WINDOW_SELECTOR = [
     '.popup',
     '[data-dragged]',
 ].join(',');
-const RESETTABLE_STYLES = ['top', 'left', 'right', 'bottom', 'height', 'width', 'margin'];
+const RESETTABLE_STYLES = ['top', 'left', 'right', 'bottom', 'height', 'width', 'margin', 'transform'];
+const RESET_VIEWPORT_RATIO = 0.8;
 
 let context = null;
 let panel = null;
@@ -106,10 +107,55 @@ export function resetWindowGeometry(panelToReset, movingUIState = null) {
     });
     panelToReset.removeAttribute('data-dragged');
 
+    const geometry = getResetGeometry(panelToReset);
+    panelToReset.style.width = `${geometry.width}px`;
+    panelToReset.style.height = `${geometry.height}px`;
+    setCenteredViewportPosition(panelToReset, geometry.left, geometry.top);
+
     if (movingUIState && typeof movingUIState === 'object') {
         delete movingUIState[panelToReset.id];
     }
     return true;
+}
+
+export function getResetGeometry(panelToReset, viewportWidth = window.innerWidth, viewportHeight = window.innerHeight) {
+    const safeViewportWidth = Number.isFinite(Number(viewportWidth)) && Number(viewportWidth) > 0
+        ? Number(viewportWidth)
+        : 1;
+    const safeViewportHeight = Number.isFinite(Number(viewportHeight)) && Number(viewportHeight) > 0
+        ? Number(viewportHeight)
+        : 1;
+    const maxWidth = Math.max(1, Math.floor(safeViewportWidth * RESET_VIEWPORT_RATIO));
+    const maxHeight = Math.max(1, Math.floor(safeViewportHeight * RESET_VIEWPORT_RATIO));
+    const rect = typeof panelToReset?.getBoundingClientRect === 'function'
+        ? panelToReset.getBoundingClientRect()
+        : {};
+    const currentWidth = Number(rect.width);
+    const currentHeight = Number(rect.height);
+    const width = Math.min(maxWidth, Math.max(1, Number.isFinite(currentWidth) && currentWidth > 0 ? Math.round(currentWidth) : maxWidth));
+    const height = Math.min(maxHeight, Math.max(1, Number.isFinite(currentHeight) && currentHeight > 0 ? Math.round(currentHeight) : maxHeight));
+    return {
+        width,
+        height,
+        left: Math.max(0, Math.round((safeViewportWidth - width) / 2)),
+        top: Math.max(0, Math.round((safeViewportHeight - height) / 2)),
+    };
+}
+
+function setCenteredViewportPosition(panelToReset, left, top) {
+    const position = typeof getComputedStyle === 'function'
+        ? getComputedStyle(panelToReset).position
+        : panelToReset.style.position;
+    const offsetParent = panelToReset.offsetParent;
+    if (position !== 'fixed' && offsetParent && typeof offsetParent.getBoundingClientRect === 'function') {
+        const parentRect = offsetParent.getBoundingClientRect();
+        left -= parentRect.left - (offsetParent.clientLeft ?? 0) + (offsetParent.scrollLeft ?? 0);
+        top -= parentRect.top - (offsetParent.clientTop ?? 0) + (offsetParent.scrollTop ?? 0);
+    }
+    panelToReset.style.left = `${Math.max(0, Math.round(left))}px`;
+    panelToReset.style.top = `${Math.max(0, Math.round(top))}px`;
+    panelToReset.style.right = 'unset';
+    panelToReset.style.bottom = 'unset';
 }
 
 function closeWindow() {
