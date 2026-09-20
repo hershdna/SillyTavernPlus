@@ -49,22 +49,6 @@ function createCheckbox(id, labelText, description, onChange) {
     return row;
 }
 
-function createSettingsAction(labelText, onClick) {
-    const row = document.createElement('div');
-    row.className = 'stplus-settings-action';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'menu_button stplus-settings-action-button';
-    button.textContent = labelText;
-    button.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClick?.();
-    });
-    row.append(button);
-    return row;
-}
-
 function createSettingsSection(titleText) {
     const section = document.createElement('section');
     section.className = 'stplus-settings-section';
@@ -87,7 +71,7 @@ function installNativeMovingUiManagerButton() {
         button.title = 'Manage open MovingUI windows';
         button.setAttribute('role', 'button');
         button.setAttribute('tabindex', '0');
-        button.innerHTML = '<i class="fa-solid fa-window-restore margin-r5" aria-hidden="true"></i><span>Manage</span>';
+        button.innerHTML = '<i class="fa-solid fa-window-restore margin-r5" aria-hidden="true"></i><span>Manage open MovingUI windows</span>';
         const openManager = (event) => {
             event.preventDefault();
             event.stopPropagation();
