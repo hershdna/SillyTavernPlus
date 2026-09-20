@@ -3,6 +3,7 @@ const ACTIONS_CLASS = 'stplus-visible-edit-actions';
 const ACTION_HOST_CLASS = 'stplus-visible-edit-action-host';
 const NATIVE_ACTIONS_CLASS = 'stplus-native-edit-actions';
 const EDIT_MODE_TOGGLE_CLASS = 'stplus-edit-mode-toggle';
+const RELOCATED_MESSAGE_MENU_CLASS = 'stplus-relocated-message-menu';
 const EDIT_MODE_STORAGE_KEY = 'stplus-formatted-edit-mode';
 
 let context = null;
@@ -14,6 +15,7 @@ let forcingVanillaEdit = false;
 let nativeEditObserver = null;
 let nativeEditRelocationScheduled = false;
 const nativeEditActionParents = new WeakMap();
+const relocatedMessageMenuParents = new WeakMap();
 
 function isEnabled() {
     return settings?.formattedMessageEditEnabled !== false;
@@ -505,6 +507,7 @@ function removeEditUi(edit, restoreContent) {
         restoreAttributes(edit);
         messageText.classList.remove('stplus-visible-edit-editor');
     }
+    restoreRelocatedMessageMenu(messageElement);
     messageElement?.classList.remove(EDITING_CLASS);
     actions?.remove();
 }
@@ -688,6 +691,41 @@ function getActionInsertionPoint(messageElement) {
     return { block, after: reasoning ?? header ?? null };
 }
 
+function getMessageMenu(messageElement) {
+    return Array.from(messageElement.querySelectorAll('.mes_buttons'))
+        .find((menu) => !menu.closest(`.${ACTIONS_CLASS}`));
+}
+
+function relocateMessageMenu(messageElement, actionRow) {
+    if (!(messageElement instanceof HTMLElement) || !(actionRow instanceof HTMLElement)) return;
+    const menu = getMessageMenu(messageElement);
+    if (!(menu instanceof HTMLElement) || actionRow.contains(menu)) return;
+
+    if (!relocatedMessageMenuParents.has(menu)) {
+        relocatedMessageMenuParents.set(menu, {
+            parent: menu.parentNode,
+            nextSibling: menu.nextSibling,
+        });
+    }
+    menu.classList.add(RELOCATED_MESSAGE_MENU_CLASS);
+    actionRow.append(menu);
+}
+
+function restoreRelocatedMessageMenu(messageElement) {
+    if (!(messageElement instanceof HTMLElement)) return;
+    for (const menu of messageElement.querySelectorAll(`.${RELOCATED_MESSAGE_MENU_CLASS}`)) {
+        const original = relocatedMessageMenuParents.get(menu);
+        if (original?.parent instanceof HTMLElement && original.parent.isConnected) {
+            const nextSibling = original.nextSibling?.parentNode === original.parent
+                ? original.nextSibling
+                : null;
+            original.parent.insertBefore(menu, nextSibling);
+        }
+        menu.classList.remove(RELOCATED_MESSAGE_MENU_CLASS);
+        relocatedMessageMenuParents.delete(menu);
+    }
+}
+
 function removeNativeEditActionRow(messageElement) {
     if (!(messageElement instanceof HTMLElement)) return;
 
@@ -710,6 +748,7 @@ function removeNativeEditActionRow(messageElement) {
         nativeEditActionParents.delete(action);
     }
 
+    restoreRelocatedMessageMenu(messageElement);
     actionRow.remove();
 }
 
@@ -758,6 +797,7 @@ function relocateNativeEditActions(messageElement) {
         action.classList.add('stplus-visible-edit-action');
         if (action.parentElement !== actionRow) actionRow.append(action);
     }
+    relocateMessageMenu(messageElement, actionRow);
 }
 
 function scheduleNativeEditActionRelocation() {
@@ -941,6 +981,7 @@ function beginEdit(messageElement, messageText, event) {
     const insertionPoint = getActionInsertionPoint(messageElement);
     if (insertionPoint.after) insertionPoint.after.after(actions);
     else insertionPoint.block.prepend(actions);
+    relocateMessageMenu(messageElement, actions);
     activeEdit = edit;
     bindEditorGuards(edit);
 

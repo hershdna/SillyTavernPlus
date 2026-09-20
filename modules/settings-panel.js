@@ -4,6 +4,7 @@ const SETTINGS_BUTTON_ID = 'stplus-module-manager-button';
 const LEGACY_SETTINGS_BUTTON_ID = 'stplus-settings-button';
 const SETTINGS_WINDOW_ID = 'stplus-settings-window';
 const RESIZE_HANDLE_CLASS = 'stplus-settings-resize-handle';
+const NATIVE_MOVINGUI_MANAGER_ID = 'stplus-native-movingui-window-manager-button';
 
 let settings = null;
 let callbacks = null;
@@ -72,6 +73,35 @@ function createSettingsSection(titleText) {
     title.textContent = titleText;
     section.appendChild(title);
     return section;
+}
+
+function installNativeMovingUiManagerButton() {
+    const movingUiReset = document.getElementById('movingUIreset');
+    if (!(movingUiReset instanceof HTMLElement) || !(movingUiReset.parentElement instanceof HTMLElement)) return;
+
+    let button = document.getElementById(NATIVE_MOVINGUI_MANAGER_ID);
+    if (!(button instanceof HTMLElement)) {
+        button = document.createElement('div');
+        button.id = NATIVE_MOVINGUI_MANAGER_ID;
+        button.className = 'menu_button margin0';
+        button.title = 'Manage open MovingUI windows';
+        button.setAttribute('role', 'button');
+        button.setAttribute('tabindex', '0');
+        button.innerHTML = '<i class="fa-solid fa-window-restore margin-r5" aria-hidden="true"></i><span>Manage</span>';
+        const openManager = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            callbacks?.onMovingUiWindowManager?.();
+        };
+        button.addEventListener('click', openManager);
+        button.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            openManager(event);
+        });
+    }
+    if (button.parentElement !== movingUiReset.parentElement) {
+        movingUiReset.after(button);
+    }
 }
 
 function addResizeHandles(panel) {
@@ -320,12 +350,6 @@ function createSettingsWindow() {
             callbacks?.onMovingUiUnboundedResizeChanged?.();
         },
     ));
-    const movingUiManagerAction = createSettingsAction(
-        'Manage open MovingUI windows',
-        () => callbacks?.onMovingUiWindowManager?.(),
-    );
-    movingUiManagerAction.querySelector('button').id = 'stplus-movingui-window-manager-button';
-    movingUiSection.append(movingUiManagerAction);
     body.append(movingUiSection);
 
     panel.append(header, body);
@@ -368,6 +392,7 @@ export function initialize(stSettings, stCallbacks) {
 
 export function refresh() {
     installSettingsButton();
+    installNativeMovingUiManagerButton();
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');

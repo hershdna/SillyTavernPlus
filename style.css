@@ -282,6 +282,7 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     top: 16vh;
     width: min(620px, calc(100vw - 24px));
     max-height: min(620px, calc(100vh - 32px));
+    z-index: 10050 !important;
 }
 
 .stplus-movingui-window-manager-open {
@@ -514,6 +515,28 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     display: flex;
     justify-content: center;
     align-items: center;
+}
+
+/* The native message menu and edit controls share one relocated row below
+ * reasoning. Override the native absolute positioning only while relocated. */
+.stplus-visible-edit-actions > .mes_buttons {
+    position: static !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    width: auto;
+    margin: 0 0 0 auto;
+    visibility: visible !important;
+}
+
+.stplus-visible-edit-actions > .mes_buttons .menu_button {
+    position: static !important;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    margin: 0;
+    padding: 0;
 }
 
 .stplus-native-edit-actions .mes_edit_cancel {
