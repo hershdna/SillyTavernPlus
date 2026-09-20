@@ -1092,16 +1092,56 @@ body[data-generating="true"] .stplus-branch-swipe-controls {
     position: relative;
 }
 
-#user_avatar_block .stplus-persona-combine-checkbox {
+#user_avatar_block .stplus-persona-combine-controls {
     position: absolute;
     z-index: 3;
     top: 8px;
     right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 3px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #202020) 88%, transparent);
+}
+
+#user_avatar_block .stplus-persona-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    margin: 0;
+    cursor: pointer;
+}
+
+#user_avatar_block .stplus-persona-combine-checkbox,
+#user_avatar_block .stplus-persona-primary-checkbox {
     width: 18px;
     height: 18px;
     margin: 0;
     cursor: pointer;
+}
+
+#user_avatar_block .stplus-persona-combine-checkbox {
     accent-color: var(--SmartThemeQuoteColor, #d88b36);
+}
+
+#user_avatar_block .stplus-persona-primary-checkbox {
+    accent-color: var(--SmartThemeEmColor, #6ca9e8);
+}
+
+#user_avatar_block .stplus-persona-control-marker {
+    width: 10px;
+    color: var(--SmartThemeBodyColor, #eee);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    pointer-events: none;
+}
+
+#user_avatar_block .avatar-container[data-stplus-persona-combine="1"] .character_name_block {
+    box-sizing: border-box;
+    padding-right: 78px;
 }
 
 #user_avatar_block .avatar-container.stplus-persona-combine-selected {

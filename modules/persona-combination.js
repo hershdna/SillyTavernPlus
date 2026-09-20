@@ -10,6 +10,8 @@ import { save } from './settings-store.js';
 const PERSONA_LIST_SELECTOR = '#user_avatar_block';
 const TOOLBAR_BUTTON_ID = 'stplus-persona-combination-toggle';
 const CHECKBOX_CLASS = 'stplus-persona-combine-checkbox';
+const PRIMARY_CHECKBOX_CLASS = 'stplus-persona-primary-checkbox';
+const CONTROLS_CLASS = 'stplus-persona-combine-controls';
 const DECORATED_ATTRIBUTE = 'data-stplus-persona-combine';
 
 let context = null;
@@ -33,6 +35,12 @@ export function combinePersonaDescriptions(ids, descriptions) {
         .join('\n');
 }
 
+export function orderPersonaIds(ids, primaryId) {
+    const unique = [...new Set(ids)];
+    if (!primaryId || !unique.includes(primaryId)) return unique;
+    return [primaryId, ...unique.filter((id) => id !== primaryId)];
+}
+
 function isEnabled() {
     return settings?.personaCombinationEnabled !== false;
 }
@@ -45,8 +53,18 @@ function getSelectedIds() {
     return [...new Set(selected.filter((id) => typeof id === 'string' && id in available))];
 }
 
-function persistSelection(ids) {
+function getPrimaryId(selected = getSelectedIds()) {
+    const primary = settings?.personaCombinationPrimary;
+    return typeof primary === 'string' && selected.includes(primary) ? primary : null;
+}
+
+function getOrderedSelectedIds() {
+    return orderPersonaIds(getSelectedIds(), getPrimaryId());
+}
+
+function persistSelection(ids, primary = getPrimaryId(ids)) {
     settings.personaCombinationSelected = [...ids];
+    settings.personaCombinationPrimary = typeof primary === 'string' && ids.includes(primary) ? primary : null;
     save();
 }
 
@@ -114,7 +132,7 @@ async function restoreFallback() {
     save();
 }
 
-async function applySelection(ids = getSelectedIds()) {
+async function applySelection(ids = getOrderedSelectedIds()) {
     if (!isEnabled()) {
         await restoreFallback();
         return;
@@ -179,8 +197,8 @@ function updateToolbar() {
             const allIds = Object.keys(power_user.personas ?? {});
             const selected = getSelectedIds();
             const next = allIds.length > 0 && allIds.every((id) => selected.includes(id)) ? [] : allIds;
-            persistSelection(next);
-            await applySelection(next);
+            persistSelection(next, getPrimaryId(next) ?? next[0] ?? null);
+            await applySelection(orderPersonaIds(next, getPrimaryId(next)));
             decoratePersonaList();
             updateToolbar();
         });
@@ -204,33 +222,79 @@ function updateToolbar() {
 
 function decoratePersonaList() {
     const selected = new Set(getSelectedIds());
+    const primary = getPrimaryId([...selected]);
     for (const card of getPersonaCards()) {
         const avatarId = card.getAttribute('data-avatar-id');
         if (!avatarId) continue;
-        let checkbox = card.querySelector(`.${CHECKBOX_CLASS}`);
-        if (!(checkbox instanceof HTMLInputElement)) {
-            checkbox = document.createElement('input');
+        let controls = card.querySelector(`.${CONTROLS_CLASS}`);
+        if (!(controls instanceof HTMLElement)) {
+            const legacyCheckbox = [...card.children].find((element) => element.classList?.contains(CHECKBOX_CLASS));
+            controls = document.createElement('div');
+            controls.className = CONTROLS_CLASS;
+            controls.title = 'Persona combination controls';
+            controls.addEventListener('click', (event) => event.stopPropagation());
+
+            const includeLabel = document.createElement('label');
+            includeLabel.className = 'stplus-persona-control stplus-persona-include-control';
+            includeLabel.title = 'Include this persona in the combined prompt';
+            const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = CHECKBOX_CLASS;
             checkbox.dataset.avatarId = avatarId;
-            checkbox.addEventListener('click', (event) => {
-                event.stopPropagation();
-            });
             checkbox.addEventListener('change', async (event) => {
                 event.stopPropagation();
                 const ids = new Set(getSelectedIds());
                 if (checkbox.checked) ids.add(avatarId);
                 else ids.delete(avatarId);
                 const next = [...ids];
-                persistSelection(next);
-                await applySelection(next);
+                const nextPrimary = getPrimaryId(next) === avatarId && !checkbox.checked ? null : getPrimaryId();
+                persistSelection(next, nextPrimary);
+                await applySelection(orderPersonaIds(next, nextPrimary));
                 decoratePersonaList();
                 updateToolbar();
             });
-            card.appendChild(checkbox);
+            const includeMarker = document.createElement('span');
+            includeMarker.className = 'stplus-persona-control-marker';
+            includeMarker.textContent = 'C';
+            includeMarker.setAttribute('aria-hidden', 'true');
+            includeLabel.append(checkbox, includeMarker);
+
+            const primaryLabel = document.createElement('label');
+            primaryLabel.className = 'stplus-persona-control stplus-persona-primary-control';
+            primaryLabel.title = 'Use this as the primary persona (first in the combined prompt)';
+            const primaryCheckbox = document.createElement('input');
+            primaryCheckbox.type = 'checkbox';
+            primaryCheckbox.className = PRIMARY_CHECKBOX_CLASS;
+            primaryCheckbox.dataset.avatarId = avatarId;
+            primaryCheckbox.addEventListener('change', async (event) => {
+                event.stopPropagation();
+                const ids = new Set(getSelectedIds());
+                if (primaryCheckbox.checked) ids.add(avatarId);
+                const next = [...ids];
+                const nextPrimary = primaryCheckbox.checked ? avatarId : null;
+                persistSelection(next, nextPrimary);
+                await applySelection(orderPersonaIds(next, nextPrimary));
+                decoratePersonaList();
+                updateToolbar();
+            });
+            const primaryMarker = document.createElement('span');
+            primaryMarker.className = 'stplus-persona-control-marker';
+            primaryMarker.textContent = 'P';
+            primaryMarker.setAttribute('aria-hidden', 'true');
+            primaryLabel.append(primaryCheckbox, primaryMarker);
+
+            controls.append(includeLabel, primaryLabel);
+            card.appendChild(controls);
+            legacyCheckbox?.remove();
         }
+
+        const checkbox = controls.querySelector(`.${CHECKBOX_CLASS}`);
+        const primaryCheckbox = controls.querySelector(`.${PRIMARY_CHECKBOX_CLASS}`);
+        if (!(checkbox instanceof HTMLInputElement) || !(primaryCheckbox instanceof HTMLInputElement)) continue;
         checkbox.checked = selected.has(avatarId);
+        primaryCheckbox.checked = primary === avatarId;
         checkbox.setAttribute('aria-label', `Include ${power_user.personas?.[avatarId] ?? avatarId} in combined persona`);
+        primaryCheckbox.setAttribute('aria-label', `Make ${power_user.personas?.[avatarId] ?? avatarId} the primary persona`);
         card.setAttribute(DECORATED_ATTRIBUTE, '1');
         card.classList.toggle('stplus-persona-combine-selected', selected.has(avatarId));
     }
@@ -238,7 +302,7 @@ function decoratePersonaList() {
 }
 
 function removeDecorations() {
-    document.querySelectorAll(`.${CHECKBOX_CLASS}`).forEach((element) => element.remove());
+    document.querySelectorAll(`.${CONTROLS_CLASS}`).forEach((element) => element.remove());
     document.querySelectorAll(`[${DECORATED_ATTRIBUTE}]`).forEach((element) => {
         element.classList.remove('stplus-persona-combine-selected');
         element.removeAttribute(DECORATED_ATTRIBUTE);
@@ -308,6 +372,6 @@ export function refresh() {
         return;
     }
     decoratePersonaList();
-    const ids = getSelectedIds();
+    const ids = getOrderedSelectedIds();
     if (ids.length && !applying && !isPersonaEditorFocused()) void applySelection(ids);
 }
