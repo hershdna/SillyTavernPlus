@@ -13,6 +13,7 @@ let editMode = 'vanilla';
 let forcingVanillaEdit = false;
 let nativeEditObserver = null;
 let nativeEditRelocationScheduled = false;
+const nativeEditActionParents = new WeakMap();
 
 function isEnabled() {
     return settings?.formattedMessageEditEnabled !== false;
@@ -698,13 +699,15 @@ function removeNativeEditActionRow(messageElement) {
     // removing our row; otherwise cancel/confirm would disappear permanently
     // after the first edit in a session.
     const actionBlock = actionRow.closest('.mes_block');
-    const nativeActions = actionBlock?.querySelector('.mes_edit_buttons')
+    const fallbackNativeActions = actionBlock?.querySelector('.mes_edit_buttons')
         ?? messageElement.querySelector('.mes_edit_buttons');
-    if (nativeActions instanceof HTMLElement) {
-        for (const action of actionRow.querySelectorAll('.mes_edit_done, .mes_edit_cancel')) {
-            action.classList.remove('stplus-visible-edit-action');
+    for (const action of actionRow.querySelectorAll('.mes_edit_done, .mes_edit_cancel')) {
+        const nativeActions = nativeEditActionParents.get(action) ?? fallbackNativeActions;
+        if (nativeActions instanceof HTMLElement) {
             nativeActions.append(action);
         }
+        action.classList.remove('stplus-visible-edit-action');
+        nativeEditActionParents.delete(action);
     }
 
     actionRow.remove();
@@ -738,6 +741,10 @@ function relocateNativeEditActions(messageElement) {
         actionRow.dataset.stplusOwned = '1';
         actionRow.addEventListener('click', (event) => {
             if (!(event.target instanceof Element) || !event.target.closest('.mes_edit_done, .mes_edit_cancel')) return;
+            // Restore the controls before SillyTavern's delegated handler runs.
+            // This keeps the native editor's reusable controls attached even if
+            // its handler synchronously rebuilds the message.
+            removeNativeEditActionRow(messageElement);
             window.setTimeout(() => removeNativeEditActionRow(messageElement), 0);
         }, true);
         const insertionPoint = getActionInsertionPoint(messageElement);
@@ -747,6 +754,7 @@ function relocateNativeEditActions(messageElement) {
 
     for (const action of [confirm, cancel]) {
         if (!(action instanceof HTMLElement)) continue;
+        nativeEditActionParents.set(action, nativeActions);
         action.classList.add('stplus-visible-edit-action');
         if (action.parentElement !== actionRow) actionRow.append(action);
     }
