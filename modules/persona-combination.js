@@ -19,7 +19,6 @@ let refreshScheduled = false;
 let applying = false;
 let appliedSignature = '';
 let fallbackState = null;
-let cardClickHandlerInstalled = false;
 
 /**
  * Combine persona descriptions without changing their internal formatting.
@@ -72,6 +71,22 @@ function setCombinedPersonaState(ids) {
     power_user.persona_description_role = first.role ?? 0;
     power_user.persona_description_lorebook = first.lorebook ?? '';
     setPersonaDescription();
+    restoreVisiblePersonaDescription();
+}
+
+function restoreVisiblePersonaDescription() {
+    const editor = document.getElementById('persona_description');
+    const descriptor = power_user.persona_descriptions?.[user_avatar];
+    if (!(editor instanceof HTMLTextAreaElement) || !descriptor) return;
+    // Keep the native editor focused on the persona the user just clicked.
+    // The combined value remains in power_user.persona_description for prompt
+    // injection, but must not replace the description shown in the editor.
+    editor.value = descriptor.description ?? '';
+}
+
+function isPersonaEditorFocused() {
+    const editor = document.getElementById('persona_description');
+    return editor instanceof HTMLTextAreaElement && document.activeElement === editor;
 }
 
 async function restoreFallback() {
@@ -109,10 +124,21 @@ async function applySelection(ids = getSelectedIds()) {
         return;
     }
 
+    // Native persona editing updates the live description while the textarea
+    // is focused. Never refresh the combined state over a character the user
+    // is currently typing, especially whitespace-only edits.
+    if (isPersonaEditorFocused()) return;
+
     captureFallback();
     const signature = ids.join('\u0000');
     const description = combinePersonaDescriptions(ids, power_user.persona_descriptions);
-    if (signature === appliedSignature && power_user.persona_description === description) return;
+    if (signature === appliedSignature) {
+        if (power_user.persona_description !== description) {
+            setCombinedPersonaState(ids);
+            restoreVisiblePersonaDescription();
+        }
+        return;
+    }
 
     applying = true;
     try {
@@ -220,18 +246,6 @@ function removeDecorations() {
     document.getElementById(TOOLBAR_BUTTON_ID)?.remove();
 }
 
-function handlePersonaCardClick(event) {
-    if (!isEnabled()) return;
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(`.${CHECKBOX_CLASS}`)) return;
-    const card = target?.closest('.avatar-container[data-avatar-id]');
-    const list = document.querySelector(PERSONA_LIST_SELECTOR);
-    if (!(card instanceof HTMLElement) || !(list instanceof HTMLElement) || !list.contains(card)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation?.();
-}
-
 function scheduleRefresh() {
     if (refreshScheduled) return;
     refreshScheduled = true;
@@ -243,7 +257,7 @@ function scheduleRefresh() {
             return;
         }
         decoratePersonaList();
-        if (!applying && getSelectedIds().length) void applySelection();
+        if (!applying && !isPersonaEditorFocused() && getSelectedIds().length) void applySelection();
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
     else window.setTimeout(run, 0);
@@ -282,10 +296,6 @@ export function initialize(stContext, stSettings) {
             subtree: true,
         });
     }
-    if (!cardClickHandlerInstalled) {
-        document.addEventListener('click', handlePersonaCardClick, true);
-        cardClickHandlerInstalled = true;
-    }
     registerLifecycleEvents();
     refresh();
 }
@@ -299,5 +309,5 @@ export function refresh() {
     }
     decoratePersonaList();
     const ids = getSelectedIds();
-    if (ids.length && !applying) void applySelection(ids);
+    if (ids.length && !applying && !isPersonaEditorFocused()) void applySelection(ids);
 }
