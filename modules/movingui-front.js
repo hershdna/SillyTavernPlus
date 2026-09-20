@@ -15,6 +15,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#summaryExtensionPopout',
     '#gallery',
     '#movingDivs > *',
+    '.stplus-settings-window',
     '#top-settings-holder .drawer-content',
     '#top-bar .drawer-content',
     '#options',
@@ -22,6 +23,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#character_popup',
     '#select_chat_popup',
     '.stplus-branching-window',
+    '.stplus-chat-history-window',
     '#rawPromptPopup',
     '.popup .popper-modal',
     '.ui-dialog',
@@ -32,8 +34,6 @@ const MOVINGUI_PANEL_SELECTOR = [
 ].join(',');
 
 const MAIN_TEXT_PANEL_SELECTOR = '#sheld';
-const EXCLUDED_PANEL_SELECTOR = '.stplus-settings-window';
-
 let context = null;
 let settings = null;
 let listenersBound = false;
@@ -50,8 +50,6 @@ function isMovingUiEnvironmentActive() {
 function isEligiblePanel(panel) {
     return panel instanceof HTMLElement
         && panel.isConnected
-        && !panel.matches(EXCLUDED_PANEL_SELECTOR)
-        && !panel.closest(EXCLUDED_PANEL_SELECTOR)
         && getComputedStyle(panel).position !== 'static';
 }
 
