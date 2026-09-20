@@ -929,11 +929,21 @@ async function loadGraphSidecar(targetGraph) {
 }
 
 async function saveCurrentChat(liveContext = getLiveContext()) {
-    // Current SillyTavern exposes saveChat; older builds may only expose
-    // saveMetadata. Both persist the complete chat, so choose one API only.
-    if (typeof liveContext?.saveChat === 'function') return liveContext.saveChat();
-    if (typeof liveContext?.saveMetadata === 'function') return liveContext.saveMetadata();
-    return undefined;
+    const enqueue = (operation) => {
+        const previous = globalThis.stplusChatSaveQueue instanceof Promise
+            ? globalThis.stplusChatSaveQueue
+            : Promise.resolve();
+        const next = previous.catch(() => {}).then(operation);
+        globalThis.stplusChatSaveQueue = next.catch(() => {});
+        return next;
+    };
+    return enqueue(async () => {
+        // Current SillyTavern exposes saveChat; older builds may only expose
+        // saveMetadata. Both persist the complete chat, so choose one API only.
+        if (typeof liveContext?.saveChat === 'function') return liveContext.saveChat();
+        if (typeof liveContext?.saveMetadata === 'function') return liveContext.saveMetadata();
+        return undefined;
+    });
 }
 
 function schedulePersist() {

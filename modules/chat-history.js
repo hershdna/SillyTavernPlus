@@ -25,6 +25,15 @@ let generation = null;
 let reasoningView = null;
 let reasoningViewLoading = false;
 
+function enqueueChatSave(operation) {
+    const previous = globalThis.stplusChatSaveQueue instanceof Promise
+        ? globalThis.stplusChatSaveQueue
+        : Promise.resolve();
+    const next = previous.catch(() => {}).then(operation);
+    globalThis.stplusChatSaveQueue = next.catch(() => {});
+    return next;
+}
+
 function stripBookmarks(text) {
     // Reserved tags (including malformed tags) never reach the model.
     return String(text ?? '').replace(/\[\[history:[^\r\n]*?(?:\]\]|$)/gm, '').trim();
@@ -221,23 +230,25 @@ function readState() {
 }
 
 async function saveMetadata() {
-    const live = getLiveContext();
-    // Prefer the same complete-chat save path used by the working branch
-    // module. It serializes the current chat_metadata object on all supported
-    // SillyTavern builds, including profile-backed Chat Completion sessions.
-    if (typeof live?.saveChat === 'function') {
-        await live.saveChat();
-        return;
-    }
-    if (typeof live?.saveMetadata === 'function') {
-        await live.saveMetadata();
-        return;
-    }
-    if (typeof live?.saveChatDebounced === 'function') {
-        live.saveChatDebounced();
-        return;
-    }
-    throw new Error('SillyTavern does not expose a chat save method.');
+    return enqueueChatSave(async () => {
+        const live = getLiveContext();
+        // Prefer the same complete-chat save path used by the working branch
+        // module. It serializes the current chat_metadata object on all supported
+        // SillyTavern builds, including profile-backed Chat Completion sessions.
+        if (typeof live?.saveChat === 'function') {
+            await live.saveChat();
+            return;
+        }
+        if (typeof live?.saveMetadata === 'function') {
+            await live.saveMetadata();
+            return;
+        }
+        if (typeof live?.saveChatDebounced === 'function') {
+            live.saveChatDebounced();
+            return;
+        }
+        throw new Error('SillyTavern does not expose a chat save method.');
+    });
 }
 
 async function writeState(state) {
@@ -266,6 +277,15 @@ function isPrefix(prefix, path) {
         && prefix.every((id, index) => id === path[index]);
 }
 
+function getRecordCoveragePath(record) {
+    if (!Array.isArray(record?.pathIds)) return [];
+    if (record.anchorMessageId) {
+        const anchorIndex = record.pathIds.indexOf(record.anchorMessageId);
+        if (anchorIndex >= 0) return record.pathIds.slice(0, anchorIndex + 1);
+    }
+    return record.pathIds.slice();
+}
+
 function getSnapshot() {
     const chat = getChat();
     const pathIds = getActivePathIds(chat);
@@ -273,7 +293,7 @@ function getSnapshot() {
     messages.forEach((message, index) => { message.id = pathIds[index]; });
     const state = readState();
     const matching = state.records.slice().reverse()
-        .filter((record) => !record.archived && isPrefix(record.pathIds, pathIds))
+        .filter((record) => !record.archived && isPrefix(getRecordCoveragePath(record), pathIds))
         .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
             || (b.pathIds?.length ?? 0) - (a.pathIds?.length ?? 0));
     const matchingRecord = matching[0] ?? null;
@@ -286,9 +306,13 @@ function getSnapshot() {
     const anchorIndex = record ? pathIds.indexOf(record.anchorMessageId) : -1;
     const anchorStillMatches = anchorIndex >= 0
         && (!record.anchorFingerprint || record.anchorFingerprint === messages[anchorIndex]?.fingerprint);
-    const sourcesStillMatch = !record?.sourceFingerprints || record.sourceFingerprints.every(
-        (fingerprint, index) => fingerprint === messages[index]?.fingerprint,
-    );
+    const anchorPathIndex = record?.pathIds?.indexOf(record.anchorMessageId) ?? -1;
+    const coverageLength = anchorPathIndex >= 0
+        ? anchorPathIndex + 1
+        : record?.sourceFingerprints?.length ?? 0;
+    const sourcesStillMatch = !record?.sourceFingerprints || record.sourceFingerprints
+        .slice(0, coverageLength)
+        .every((fingerprint, index) => fingerprint === messages[index]?.fingerprint);
     const unbookmarked = record?.bookmarkFormat === 1 && !record.anchorMessageId;
     // Keep-and-use records are explicitly approved for this exact chat/path
     // and source snapshot. Honor that decision while calculating the view as
@@ -816,6 +840,20 @@ function scheduleRefresh() {
     }, 80);
 }
 
+let swipeRefreshTimer = null;
+
+function scheduleSwipeRefresh() {
+    scheduleRefresh();
+    window.clearTimeout(swipeRefreshTimer);
+    // The branch module reconciles native swipes after SillyTavern finishes
+    // updating swipe_id and its activePath. Refresh again after that fence so
+    // bookmark-based retention is evaluated against the settled branch.
+    swipeRefreshTimer = window.setTimeout(() => {
+        swipeRefreshTimer = null;
+        refresh();
+    }, 650);
+}
+
 function bindEvents() {
     if (listenersBound) return;
     const live = getLiveContext();
@@ -824,11 +862,12 @@ function bindEvents() {
     if (!source?.on || !types) return;
     const names = [
         'APP_READY', 'CHAT_CHANGED', 'CHAT_CREATED', 'CHAT_LOADED', 'CHAT_DELETED',
-        'MESSAGE_EDITED', 'MESSAGE_DELETED', 'MESSAGE_SWIPED', 'MESSAGE_UPDATED',
+        'MESSAGE_EDITED', 'MESSAGE_DELETED', 'MESSAGE_UPDATED',
         'MESSAGE_SENT', 'MESSAGE_RECEIVED', 'CHARACTER_MESSAGE_RENDERED', 'USER_MESSAGE_RENDERED',
         'GENERATION_ENDED', 'SETTINGS_UPDATED',
     ];
     names.map((name) => types[name]).filter(Boolean).forEach((eventName) => source.on(eventName, scheduleRefresh));
+    if (types.MESSAGE_SWIPED) source.on(types.MESSAGE_SWIPED, scheduleSwipeRefresh);
     listenersBound = true;
 }
 
