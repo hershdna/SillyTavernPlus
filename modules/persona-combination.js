@@ -1,7 +1,6 @@
 import { power_user } from '/scripts/power-user.js';
 import {
     persona_description_positions,
-    setPersonaDescription,
     setUserAvatar,
     user_avatar,
 } from '/scripts/personas.js';
@@ -9,6 +8,7 @@ import { save } from './settings-store.js';
 
 const PERSONA_LIST_SELECTOR = '#user_avatar_block';
 const TOOLBAR_BUTTON_ID = 'stplus-persona-combination-toggle';
+const COMBINATION_PROMPT_KEY = 'stplus_persona_combination';
 const CHECKBOX_CLASS = 'stplus-persona-combine-checkbox';
 const PRIMARY_CHECKBOX_CLASS = 'stplus-persona-primary-checkbox';
 const CONTROLS_CLASS = 'stplus-persona-combine-controls';
@@ -19,8 +19,6 @@ let settings = null;
 let personaObserver = null;
 let refreshScheduled = false;
 let applying = false;
-let appliedSignature = '';
-let fallbackState = null;
 
 /**
  * Combine persona descriptions without changing their internal formatting.
@@ -55,7 +53,9 @@ function getSelectedIds() {
 
 function getPrimaryId(selected = getSelectedIds()) {
     const primary = settings?.personaCombinationPrimary;
-    return typeof primary === 'string' && selected.includes(primary) ? primary : null;
+    if (typeof primary === 'string' && selected.includes(primary)) return primary;
+    if (typeof user_avatar === 'string' && selected.includes(user_avatar)) return user_avatar;
+    return selected[0] ?? null;
 }
 
 function getOrderedSelectedIds() {
@@ -68,104 +68,63 @@ function persistSelection(ids, primary = getPrimaryId(ids)) {
     save();
 }
 
-function cloneDescriptor(descriptor) {
-    if (!descriptor || typeof descriptor !== 'object') return null;
-    return { ...descriptor };
+function clearCombinationPrompt() {
+    context?.setExtensionPrompt?.(COMBINATION_PROMPT_KEY, '', 0, 0);
 }
 
-function captureFallback() {
-    if (fallbackState || !user_avatar) return;
-    fallbackState = {
-        avatar: user_avatar,
-        descriptor: cloneDescriptor(power_user.persona_descriptions?.[user_avatar]),
-    };
-}
-
-function setCombinedPersonaState(ids) {
-    const first = power_user.persona_descriptions?.[ids[0]] ?? {};
-    power_user.persona_description = combinePersonaDescriptions(ids, power_user.persona_descriptions);
-    power_user.persona_description_position = first.position ?? persona_description_positions.IN_PROMPT;
-    power_user.persona_description_depth = first.depth ?? 2;
-    power_user.persona_description_role = first.role ?? 0;
-    power_user.persona_description_lorebook = first.lorebook ?? '';
-    setPersonaDescription();
-    restoreVisiblePersonaDescription();
-}
-
-function restoreVisiblePersonaDescription() {
-    const editor = document.getElementById('persona_description');
-    const descriptor = power_user.persona_descriptions?.[user_avatar];
-    if (!(editor instanceof HTMLTextAreaElement) || !descriptor) return;
-    // Keep the native editor focused on the persona the user just clicked.
-    // The combined value remains in power_user.persona_description for prompt
-    // injection, but must not replace the description shown in the editor.
-    editor.value = descriptor.description ?? '';
-}
-
-function isPersonaEditorFocused() {
-    const editor = document.getElementById('persona_description');
-    return editor instanceof HTMLTextAreaElement && document.activeElement === editor;
-}
-
-async function restoreFallback() {
-    if (!fallbackState) return;
-    const state = fallbackState;
-    fallbackState = null;
-    appliedSignature = '';
-
-    if (user_avatar !== state.avatar) {
-        await setUserAvatar(state.avatar, { toastPersonaNameChange: false, navigateToCurrent: false });
+/**
+ * Leave SillyTavern's native persona state untouched. The native primary
+ * persona is injected by SillyTavern exactly as usual; this module only adds
+ * the other selected descriptions after it through an extension prompt.
+ */
+function setCombinationPrompt(ids) {
+    const primaryId = ids[0];
+    const extras = combinePersonaDescriptions(ids.slice(1), power_user.persona_descriptions);
+    const primary = power_user.persona_descriptions?.[primaryId];
+    if (!extras || !primary || primary.position === persona_description_positions.NONE) {
+        clearCombinationPrompt();
+        return;
     }
 
-    if (state.descriptor) {
-        power_user.persona_descriptions[state.avatar] = {
-            ...(power_user.persona_descriptions[state.avatar] ?? {}),
-            ...state.descriptor,
-        };
-        power_user.persona_description = state.descriptor.description ?? '';
-        power_user.persona_description_position = state.descriptor.position ?? persona_description_positions.IN_PROMPT;
-        power_user.persona_description_depth = state.descriptor.depth ?? 2;
-        power_user.persona_description_role = state.descriptor.role ?? 0;
-        power_user.persona_description_lorebook = state.descriptor.lorebook ?? '';
-        setPersonaDescription();
+    if (primary.position === persona_description_positions.AT_DEPTH) {
+        context?.setExtensionPrompt?.(
+            COMBINATION_PROMPT_KEY,
+            extras,
+            1,
+            primary.depth ?? 2,
+            false,
+            primary.role ?? 0,
+        );
+        return;
     }
-    save();
+
+    // For native in-prompt and author-note placements, SillyTavern's native
+    // persona prompt is created first. A regular in-prompt extension is then
+    // appended without changing the native persona's position, depth, role,
+    // lorebook, editor value, or other native behavior.
+    context?.setExtensionPrompt?.(COMBINATION_PROMPT_KEY, extras, 0, 0);
 }
 
 async function applySelection(ids = getOrderedSelectedIds()) {
     if (!isEnabled()) {
-        await restoreFallback();
+        clearCombinationPrompt();
         return;
     }
     if (!ids.length) {
-        await restoreFallback();
+        clearCombinationPrompt();
         return;
     }
 
-    // Native persona editing updates the live description while the textarea
-    // is focused. Never refresh the combined state over a character the user
-    // is currently typing, especially whitespace-only edits.
-    if (isPersonaEditorFocused()) return;
-
-    captureFallback();
-    const signature = ids.join('\u0000');
-    const description = combinePersonaDescriptions(ids, power_user.persona_descriptions);
-    if (signature === appliedSignature) {
-        if (power_user.persona_description !== description) {
-            setCombinedPersonaState(ids);
-            restoreVisiblePersonaDescription();
-        }
-        return;
-    }
-
+    const ordered = orderPersonaIds(ids, getPrimaryId(ids));
+    const primaryId = ordered[0];
     applying = true;
     try {
-        if (user_avatar !== ids[0]) {
-            await setUserAvatar(ids[0], { toastPersonaNameChange: false, navigateToCurrent: false });
+        // Selecting a primary uses the native persona switch, so all native
+        // current-persona behavior remains authoritative.
+        if (user_avatar !== primaryId) {
+            await setUserAvatar(primaryId, { toastPersonaNameChange: false, navigateToCurrent: false });
         }
-        setCombinedPersonaState(ids);
-        appliedSignature = signature;
-        save();
+        setCombinationPrompt(ordered);
     } finally {
         applying = false;
     }
@@ -198,7 +157,7 @@ function updateToolbar() {
             const selected = getSelectedIds();
             const next = allIds.length > 0 && allIds.every((id) => selected.includes(id)) ? [] : allIds;
             persistSelection(next, getPrimaryId(next) ?? next[0] ?? null);
-            await applySelection(orderPersonaIds(next, getPrimaryId(next)));
+            await applySelection(next);
             decoratePersonaList();
             updateToolbar();
         });
@@ -249,7 +208,7 @@ function decoratePersonaList() {
                 const next = [...ids];
                 const nextPrimary = getPrimaryId(next) === avatarId && !checkbox.checked ? null : getPrimaryId();
                 persistSelection(next, nextPrimary);
-                await applySelection(orderPersonaIds(next, nextPrimary));
+                await applySelection(next);
                 decoratePersonaList();
                 updateToolbar();
             });
@@ -273,7 +232,7 @@ function decoratePersonaList() {
                 const next = [...ids];
                 const nextPrimary = primaryCheckbox.checked ? avatarId : null;
                 persistSelection(next, nextPrimary);
-                await applySelection(orderPersonaIds(next, nextPrimary));
+                await applySelection(next);
                 decoratePersonaList();
                 updateToolbar();
             });
@@ -317,11 +276,11 @@ function scheduleRefresh() {
         refreshScheduled = false;
         if (!isEnabled()) {
             removeDecorations();
-            if (!applying) void restoreFallback();
+            if (!applying) clearCombinationPrompt();
             return;
         }
         decoratePersonaList();
-        if (!applying && !isPersonaEditorFocused() && getSelectedIds().length) void applySelection();
+        if (!applying) void applySelection();
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
     else window.setTimeout(run, 0);
@@ -331,7 +290,19 @@ function registerLifecycleEvents() {
     const events = ['CHAT_CHANGED', 'PERSONA_CHANGED', 'PERSONA_UPDATED', 'PERSONA_CREATED', 'PERSONA_RENAMED', 'PERSONA_DELETED'];
     for (const name of events) {
         const event = context?.eventTypes?.[name];
-        if (event && context?.eventSource?.on) context.eventSource.on(event, scheduleRefresh);
+        if (event && context?.eventSource?.on) {
+            context.eventSource.on(event, () => {
+                // A native persona click is authoritative. Keep the selected
+                // native persona as primary instead of switching it back to a
+                // stale combination setting during the refresh.
+                if (name === 'PERSONA_CHANGED' && !applying && user_avatar && power_user.personas?.[user_avatar]) {
+                    const selected = new Set(getSelectedIds());
+                    selected.add(user_avatar);
+                    persistSelection([...selected], user_avatar);
+                }
+                scheduleRefresh();
+            });
+        }
     }
 }
 
@@ -368,10 +339,11 @@ export function refresh() {
     if (!settings) return;
     if (!isEnabled()) {
         removeDecorations();
-        if (!applying) void restoreFallback();
+        if (!applying) clearCombinationPrompt();
         return;
     }
     decoratePersonaList();
     const ids = getOrderedSelectedIds();
-    if (ids.length && !applying && !isPersonaEditorFocused()) void applySelection(ids);
+    if (ids.length && !applying) void applySelection(ids);
+    else if (!ids.length) clearCombinationPrompt();
 }
