@@ -258,11 +258,25 @@ export function initialize(stContext, stSettings) {
     settings = stSettings;
     if (!personaObserver && document.body) {
         personaObserver = new MutationObserver((mutations) => {
-            if (mutations.some((mutation) => mutation.target instanceof Element && mutation.target.closest(PERSONA_LIST_SELECTOR))) {
+            const personaMutation = mutations.some((mutation) => {
+                const target = mutation.target instanceof Element ? mutation.target : null;
+                if (target?.closest(`${PERSONA_LIST_SELECTOR}, #persona-management-button`)) return true;
+                return [...mutation.addedNodes, ...mutation.removedNodes].some((node) => {
+                    if (!(node instanceof Element)) return false;
+                    return node.matches(`${PERSONA_LIST_SELECTOR}, #persona-management-button`)
+                        || Boolean(node.querySelector(`${PERSONA_LIST_SELECTOR}, #persona-management-button`));
+                });
+            });
+            if (personaMutation) {
                 scheduleRefresh();
             }
         });
-        personaObserver.observe(document.body, { childList: true, subtree: true });
+        personaObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'],
+            childList: true,
+            subtree: true,
+        });
     }
     if (!cardClickHandlerInstalled) {
         document.addEventListener('click', handlePersonaCardClick, true);
