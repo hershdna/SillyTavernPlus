@@ -165,7 +165,11 @@ function updateToolbar() {
     const allSelected = allIds.length > 0 && allIds.every((id) => selected.includes(id));
     button.title = allSelected ? 'Clear all persona selections' : 'Select all personas';
     button.setAttribute('aria-label', button.title);
-    button.innerHTML = `<i class="fa-solid ${allSelected ? 'fa-square-xmark' : 'fa-check-double'}" aria-hidden="true"></i>`;
+    const iconClass = allSelected ? 'fa-square-xmark' : 'fa-check-double';
+    if (button.dataset.stplusIcon !== iconClass) {
+        button.innerHTML = `<i class="fa-solid ${iconClass}" aria-hidden="true"></i>`;
+        button.dataset.stplusIcon = iconClass;
+    }
 
     const gridToggle = document.getElementById('persona_grid_toggle');
     const host = gridToggle?.parentElement ?? list.parentElement;
