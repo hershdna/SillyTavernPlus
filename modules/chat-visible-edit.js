@@ -301,8 +301,11 @@ function collectFormattedText(root) {
     for (const node of nodes) {
         const nodeText = node.nodeValue ?? '';
         const nodeMarks = getFormattingMarks(node);
-        for (const character of nodeText) {
-            text.push(character);
+        // Keep one mark entry per UTF-16 code unit. The source mapper and
+        // string slicing APIs use UTF-16 offsets, while `for...of` would
+        // collapse emoji and other astral characters into one entry.
+        for (let offset = 0; offset < nodeText.length; offset++) {
+            text.push(nodeText[offset]);
             marks.push(new Set(nodeMarks));
         }
     }

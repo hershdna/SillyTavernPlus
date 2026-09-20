@@ -54,3 +54,17 @@ test('formatted editor identifies marks that were added to existing visible text
         { mark: 'strong', start: 5, end: 14 },
     ]);
 });
+
+test('formatted mark offsets stay aligned after emoji text', () => {
+    const api = loadApi();
+    const text = 'A 🕯️ B';
+    const original = { text, marks: Array.from({ length: text.length }, () => new Set()) };
+    const current = {
+        text,
+        marks: Array.from({ length: text.length }, (_, index) => index >= 6 ? new Set(['strong']) : new Set()),
+    };
+
+    assert.deepEqual(JSON.parse(JSON.stringify(api.getAddedFormattingRanges(original, current))), [
+        { mark: 'strong', start: 6, end: text.length },
+    ]);
+});
