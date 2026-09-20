@@ -517,6 +517,20 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     align-items: center;
 }
 
+/* SillyTavern keeps copy/delete/move/confirm/cancel in one .mes_edit_buttons
+ * container. Move that complete native group below thinking while preserving
+ * its original delegated handlers and button order. */
+.stplus-visible-edit-actions > .mes_edit_buttons.stplus-relocated-native-edit-buttons {
+    position: static !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    width: auto;
+    margin: 0;
+    visibility: visible !important;
+}
+
 /* The native message menu and edit controls share one relocated row below
  * reasoning. Override the native absolute positioning only while relocated. */
 .stplus-visible-edit-actions > .mes_buttons {
