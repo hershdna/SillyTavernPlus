@@ -688,7 +688,25 @@ function getActionInsertionPoint(messageElement) {
 }
 
 function removeNativeEditActionRow(messageElement) {
-    messageElement?.querySelector(`.${NATIVE_ACTIONS_CLASS}`)?.remove();
+    if (!(messageElement instanceof HTMLElement)) return;
+
+    const actionRow = messageElement.querySelector(`.${NATIVE_ACTIONS_CLASS}`);
+    if (!(actionRow instanceof HTMLElement)) return;
+
+    // The native editor reuses the same action elements on the next edit.
+    // Return the relocated controls to SillyTavern's original container before
+    // removing our row; otherwise cancel/confirm would disappear permanently
+    // after the first edit in a session.
+    const nativeActions = Array.from(messageElement.querySelectorAll('.mes_edit_buttons'))
+        .find((candidate) => candidate !== actionRow);
+    if (nativeActions instanceof HTMLElement) {
+        for (const action of actionRow.querySelectorAll('.mes_edit_done, .mes_edit_cancel')) {
+            action.classList.remove('stplus-visible-edit-action');
+            nativeActions.append(action);
+        }
+    }
+
+    actionRow.remove();
 }
 
 function relocateNativeEditActions(messageElement) {
