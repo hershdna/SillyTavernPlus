@@ -149,8 +149,8 @@ function setCenteredViewportPosition(panelToReset, left, top) {
     const offsetParent = panelToReset.offsetParent;
     if (position !== 'fixed' && offsetParent && typeof offsetParent.getBoundingClientRect === 'function') {
         const parentRect = offsetParent.getBoundingClientRect();
-        left -= parentRect.left - (offsetParent.clientLeft ?? 0) + (offsetParent.scrollLeft ?? 0);
-        top -= parentRect.top - (offsetParent.clientTop ?? 0) + (offsetParent.scrollTop ?? 0);
+        left -= parentRect.left + (offsetParent.clientLeft ?? 0) - (offsetParent.scrollLeft ?? 0);
+        top -= parentRect.top + (offsetParent.clientTop ?? 0) - (offsetParent.scrollTop ?? 0);
     }
     panelToReset.style.left = `${Math.max(0, Math.round(left))}px`;
     panelToReset.style.top = `${Math.max(0, Math.round(top))}px`;
