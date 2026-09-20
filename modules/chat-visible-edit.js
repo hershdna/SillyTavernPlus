@@ -687,17 +687,23 @@ function getActionInsertionPoint(messageElement) {
     return { block, after: reasoning ?? header ?? null };
 }
 
+function removeNativeEditActionRow(messageElement) {
+    messageElement?.querySelector(`.${NATIVE_ACTIONS_CLASS}`)?.remove();
+}
+
 function relocateNativeEditActions(messageElement) {
     if (!(messageElement instanceof HTMLElement)) return;
 
     const row = messageElement.querySelector(`.${NATIVE_ACTIONS_CLASS}`);
     const isEditing = messageElement.querySelector('.edit_textarea') instanceof HTMLElement;
     const nativeActions = messageElement.querySelector('.mes_edit_buttons');
+    const nativeEditorVisible = nativeActions instanceof HTMLElement
+        && getComputedStyle(nativeActions).display !== 'none';
 
     // Native SillyTavern removes the textarea when confirm/cancel finishes.
     // Remove our detached row at the same time so it cannot linger after the
     // native editor closes or another message becomes active.
-    if (!isEditing) {
+    if (!isEditing && !nativeEditorVisible) {
         row?.remove();
         return;
     }
@@ -710,6 +716,10 @@ function relocateNativeEditActions(messageElement) {
     if (!row) {
         actionRow.className = `${ACTIONS_CLASS} ${ACTION_HOST_CLASS} ${NATIVE_ACTIONS_CLASS}`;
         actionRow.dataset.stplusOwned = '1';
+        actionRow.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element) || !event.target.closest('.mes_edit_done, .mes_edit_cancel')) return;
+            window.setTimeout(() => removeNativeEditActionRow(messageElement), 0);
+        }, true);
         const insertionPoint = getActionInsertionPoint(messageElement);
         if (insertionPoint.after) insertionPoint.after.after(actionRow);
         else insertionPoint.block.prepend(actionRow);
