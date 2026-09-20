@@ -278,6 +278,56 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     display: block;
 }
 
+.stplus-movingui-manager-window {
+    top: 16vh;
+    width: min(620px, calc(100vw - 24px));
+    max-height: min(620px, calc(100vh - 32px));
+}
+
+.stplus-movingui-window-manager-open {
+    display: flex;
+    flex-direction: column;
+}
+
+.stplus-movingui-manager-body {
+    min-height: 120px;
+}
+
+.stplus-movingui-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stplus-movingui-manager-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 36px;
+    padding: 5px 6px 5px 10px;
+    background: var(--SmartThemeBlurTintColor, #202124);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+}
+
+.stplus-movingui-manager-window-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stplus-movingui-manager-reset {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+}
+
+.stplus-movingui-manager-empty {
+    margin: 8px 0 0;
+    opacity: 0.75;
+}
+
 .stplus-settings-window-header {
     position: sticky;
     top: 0;
@@ -289,6 +339,17 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     padding: 5px 8px 5px 12px;
     background: inherit;
     border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-settings-action {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+}
+
+.stplus-settings-action-button {
+    width: 100%;
+    text-align: left;
 }
 
 .stplus-settings-window-header h3 {

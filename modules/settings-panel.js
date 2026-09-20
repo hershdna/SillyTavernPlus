@@ -48,6 +48,22 @@ function createCheckbox(id, labelText, description, onChange) {
     return row;
 }
 
+function createSettingsAction(labelText, onClick) {
+    const row = document.createElement('div');
+    row.className = 'stplus-settings-action';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'menu_button stplus-settings-action-button';
+    button.textContent = labelText;
+    button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick?.();
+    });
+    row.append(button);
+    return row;
+}
+
 function createSettingsSection(titleText) {
     const section = document.createElement('section');
     section.className = 'stplus-settings-section';
@@ -295,6 +311,12 @@ function createSettingsWindow() {
             callbacks?.onMovingUiUnboundedResizeChanged?.();
         },
     ));
+    const movingUiManagerAction = createSettingsAction(
+        'Manage open MovingUI windows',
+        () => callbacks?.onMovingUiWindowManager?.(),
+    );
+    movingUiManagerAction.querySelector('button').id = 'stplus-movingui-window-manager-button';
+    movingUiSection.append(movingUiManagerAction);
     body.append(movingUiSection);
 
     panel.append(header, body);

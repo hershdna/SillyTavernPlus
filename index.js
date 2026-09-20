@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.103';
+    const MODULE_CACHE_VERSION = '0.5.104';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -26,7 +26,7 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, settingsPanel, movingUiResize, movingUiDrag, movingUiFront] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
@@ -37,6 +37,7 @@
                 loadModule('movingui-resize'),
                 loadModule('movingui-drag'),
                 loadModule('movingui-front'),
+                loadModule('movingui-window-manager'),
             ]);
             const settings = settingsStore.initializeSettings(context);
 
@@ -48,6 +49,7 @@
             movingUiResize.initialize(context, settings);
             movingUiDrag.initialize(context, settings);
             movingUiFront.initialize(context, settings);
+            movingUiWindowManager.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
                 onBranchingChatsChanged: () => branchingChats.refresh(),
@@ -59,6 +61,7 @@
                 onMovingUiBringToFrontChanged: () => movingUiFront.refresh(),
                 onMovingUiOpenOnTopChanged: () => movingUiFront.refresh(),
                 onMovingUiUnboundedResizeChanged: () => movingUiResize.refresh(),
+                onMovingUiWindowManager: () => movingUiWindowManager.open(),
             });
 
             let scanScheduled = false;
@@ -75,6 +78,7 @@
                 movingUiResize.refresh();
                 movingUiDrag.refresh();
                 movingUiFront.refresh();
+                movingUiWindowManager.refresh();
             };
             const scheduleScan = () => {
                 if (scanScheduled) return;
