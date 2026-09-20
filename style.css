@@ -897,9 +897,12 @@ body[data-generating="true"] .stplus-branch-swipe-controls {
     left: 50%;
     display: none;
     width: min(760px, calc(100vw - 24px));
-    height: min(720px, calc(100vh - 48px));
+    /* Leave room for the top offset. The old 100vh calculation could put
+       the bottom resize handle below the viewport on short windows. */
+    height: min(720px, calc(92vh - 16px));
+    max-height: calc(92vh - 16px);
     min-width: 360px;
-    min-height: 320px;
+    min-height: min(320px, calc(92vh - 16px));
     box-sizing: border-box;
     overflow: hidden;
     color: var(--SmartThemeBodyColor, #eee);
@@ -959,7 +962,10 @@ body[data-generating="true"] .stplus-branch-swipe-controls {
 }
 
 .stplus-chat-history-summary {
-    flex: 1 1 180px;
+    /* Keep the textarea's native vertical resize grip authoritative instead
+       of letting flex-grow immediately overwrite its manual height. */
+    flex: 0 1 auto;
+    height: 180px;
     min-height: 140px;
     width: 100%;
     box-sizing: border-box;
