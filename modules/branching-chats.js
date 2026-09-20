@@ -3,7 +3,8 @@ const WINDOW_ID = 'stplus-branching-chats-window';
 const METADATA_KEY = 'stplusBranchingChats';
 const GRAPH_BACKUP_STORAGE_PREFIX = 'stplus-branching-backup:';
 const NODE_ID_FIELD = 'stplusBranchingNodeId';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
+const SIDECAR_SCHEMA_VERSION = 1;
 const SYNC_DELAY = 80;
 const SWIPE_SYNC_DELAY = 500;
 const NATIVE_AUTO_SCROLL_SETTING = 'auto_scroll_chat_to_bottom';
@@ -462,6 +463,29 @@ function newId() {
     return `stplus-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function stableHash(value) {
+    let hash = 2166136261;
+    for (const character of String(value ?? '')) {
+        hash ^= character.codePointAt(0);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+function getSidecarName(chatId = getChatKey(), integrity = getChatIntegrity()) {
+    return `stplus-tree-${stableHash(`${chatId ?? ''}|${integrity ?? ''}`)}.json`;
+}
+
+function ensureSidecarDescriptor(targetGraph) {
+    if (!targetGraph || typeof targetGraph !== 'object') return null;
+    if (!targetGraph.sidecar || typeof targetGraph.sidecar !== 'object') targetGraph.sidecar = {};
+    if (typeof targetGraph.sidecar.name !== 'string' || !targetGraph.sidecar.name) {
+        targetGraph.sidecar.name = getSidecarName(targetGraph.chatId, targetGraph.chatIntegrity);
+    }
+    targetGraph.sidecar.schemaVersion = SIDECAR_SCHEMA_VERSION;
+    return targetGraph.sidecar;
+}
+
 function getChat() {
     const liveContext = getLiveContext();
     return Array.isArray(liveContext?.chat) ? liveContext.chat : [];
@@ -630,11 +654,16 @@ function readBackupGraph(currentChatId) {
             schemaVersion: SCHEMA_VERSION,
             chatId: typeof stored.chatId === 'string' ? stored.chatId : currentChatId,
             chatIntegrity: typeof stored.chatIntegrity === 'string' ? stored.chatIntegrity : currentIntegrity,
+            sidecar: stored.sidecar && typeof stored.sidecar === 'object' ? clone(stored.sidecar) : null,
+            messageRecords: stored.messageRecords && typeof stored.messageRecords === 'object'
+                ? stored.messageRecords
+                : {},
             nodes: stored.nodes && typeof stored.nodes === 'object'
                 ? Object.fromEntries(Object.entries(stored.nodes).filter(([, node]) => node && typeof node === 'object'))
                 : {},
             activePath: Array.isArray(stored.activePath) ? stored.activePath.filter((id) => typeof id === 'string') : [],
         };
+        hydrateGraph(backup);
         normalizeGraph(backup);
         pruneEmptyNodes(backup);
         normalizeGraph(backup);
@@ -647,6 +676,11 @@ function readBackupGraph(currentChatId) {
 function mergeStoredGraphs(primary, backup) {
     if (!primary || !backup) return primary;
     const merged = clone(primary) ?? primary;
+    merged.messageRecords = {
+        ...(backup.messageRecords ?? {}),
+        ...(merged.messageRecords ?? {}),
+    };
+    if (!merged.sidecar && backup.sidecar) merged.sidecar = clone(backup.sidecar);
     const existingKeys = new Set(Object.values(merged.nodes ?? {}).map((node) => node?.key).filter(Boolean));
     for (const [id, node] of Object.entries(backup.nodes ?? {})) {
         if (merged.nodes[id] || existingKeys.has(node?.key)) continue;
@@ -656,12 +690,23 @@ function mergeStoredGraphs(primary, backup) {
     if ((!Array.isArray(merged.activePath) || merged.activePath.length === 0) && Array.isArray(backup.activePath)) {
         merged.activePath = [...backup.activePath];
     }
+    hydrateGraph(merged);
     normalizeGraph(merged);
     return merged;
 }
 
 function createGraph(chatId = null) {
-    return { schemaVersion: SCHEMA_VERSION, chatId, chatIntegrity: getChatIntegrity(), nodes: {}, activePath: [] };
+    const targetGraph = {
+        schemaVersion: SCHEMA_VERSION,
+        chatId,
+        chatIntegrity: getChatIntegrity(),
+        sidecar: null,
+        messageRecords: {},
+        nodes: {},
+        activePath: [],
+    };
+    ensureSidecarDescriptor(targetGraph);
+    return targetGraph;
 }
 
 function readStoredGraph(currentChatId = getChatKey()) {
@@ -688,9 +733,14 @@ function readStoredGraph(currentChatId = getChatKey()) {
         schemaVersion: SCHEMA_VERSION,
         chatId: typeof stored.chatId === 'string' ? stored.chatId : null,
         chatIntegrity: typeof stored.chatIntegrity === 'string' ? stored.chatIntegrity : null,
+        sidecar: stored.sidecar && typeof stored.sidecar === 'object' ? clone(stored.sidecar) : null,
+        messageRecords: stored.messageRecords && typeof stored.messageRecords === 'object'
+            ? stored.messageRecords
+            : {},
         nodes: Object.fromEntries(Object.entries(storedNodes).filter(([, node]) => node && typeof node === 'object')),
         activePath: Array.isArray(stored.activePath) ? stored.activePath.filter((id) => typeof id === 'string') : [],
     };
+    hydrateGraph(targetGraph);
     normalizeGraph(targetGraph);
     pruneEmptyNodes(targetGraph);
     normalizeGraph(targetGraph);
@@ -699,14 +749,112 @@ function readStoredGraph(currentChatId = getChatKey()) {
     return mergeStoredGraphs(targetGraph, readBackupGraph(currentChatId));
 }
 
+function getNodeMessageRef(node) {
+    if (typeof node?.messageRef === 'string' && node.messageRef) return node.messageRef;
+    return `${node?.parentId ?? 'root'}|${Number(node?.sourceIndex) || 0}|${node?.role ?? 'assistant'}`;
+}
+
+function createMessageRecord(node) {
+    const source = clone(node?.message) ?? {};
+    const swipes = Array.isArray(source.swipes) ? source.swipes.map((value) => String(value ?? '')) : [];
+    const swipeInfo = Array.isArray(source.swipe_info) ? clone(source.swipe_info) : [];
+    delete source.swipes;
+    delete source.swipe_id;
+    delete source.swipe_info;
+    source.mes = String(node?.content ?? source.mes ?? '');
+    return { base: source, swipes, swipeInfo };
+}
+
+function mergeMessageRecord(target, node) {
+    const incoming = createMessageRecord(node);
+    if (!target || typeof target !== 'object') return incoming;
+    if (!target.base || typeof target.base !== 'object') target.base = incoming.base;
+    if (!Array.isArray(target.swipes)) target.swipes = [];
+    if (!Array.isArray(target.swipeInfo)) target.swipeInfo = [];
+    incoming.swipes.forEach((value, index) => {
+        if (target.swipes[index] === undefined || target.swipes[index] === null) target.swipes[index] = value;
+    });
+    if (String(node?.content ?? '').length > 0 || target.swipes[node.swipeIndex] === undefined) {
+        target.swipes[node.swipeIndex] = String(node?.content ?? '');
+    }
+    incoming.swipeInfo.forEach((value, index) => {
+        if (target.swipeInfo[index] === undefined) target.swipeInfo[index] = value;
+    });
+    return target;
+}
+
+function compactGraph(targetGraph, { includeRecords = true } = {}) {
+    const compact = {
+        schemaVersion: SCHEMA_VERSION,
+        chatId: targetGraph?.chatId ?? null,
+        chatIntegrity: targetGraph?.chatIntegrity ?? null,
+        sidecar: clone(targetGraph?.sidecar) ?? null,
+        messageRecords: includeRecords ? {} : undefined,
+        nodes: {},
+        activePath: Array.isArray(targetGraph?.activePath) ? [...targetGraph.activePath] : [],
+    };
+    ensureSidecarDescriptor(compact);
+    Object.values(targetGraph?.nodes ?? {}).forEach((sourceNode) => {
+        const messageRef = getNodeMessageRef(sourceNode);
+        const node = clone(sourceNode) ?? {};
+        delete node.message;
+        node.messageRef = messageRef;
+        compact.nodes[node.id] = node;
+        if (includeRecords) {
+            compact.messageRecords[messageRef] = mergeMessageRecord(
+                compact.messageRecords[messageRef],
+                { ...sourceNode, messageRef },
+            );
+        }
+    });
+    if (!includeRecords) delete compact.messageRecords;
+    return compact;
+}
+
+function hydrateGraph(targetGraph) {
+    if (!targetGraph || typeof targetGraph !== 'object') return targetGraph;
+    const records = targetGraph.messageRecords && typeof targetGraph.messageRecords === 'object'
+        ? targetGraph.messageRecords
+        : {};
+    Object.values(targetGraph.nodes ?? {}).forEach((node) => {
+        const messageRef = getNodeMessageRef(node);
+        node.messageRef = messageRef;
+        const record = records[messageRef];
+        if (!record || typeof record !== 'object') {
+            node.message = node.message && typeof node.message === 'object'
+                ? node.message
+                : {
+                    mes: String(node.content ?? ''),
+                    name: node.name,
+                    is_user: node.role === 'user',
+                    role: node.role,
+                };
+            return;
+        }
+        const message = clone(record.base) ?? {};
+        if (Array.isArray(record.swipes) && record.swipes.length > 0) {
+            message.swipes = record.swipes.map((value) => String(value ?? ''));
+            message.swipe_id = node.swipeIndex;
+            if (Array.isArray(record.swipeInfo)) message.swipe_info = clone(record.swipeInfo);
+        }
+        message.mes = String(node.content ?? message.mes ?? '');
+        node.message = message;
+    });
+    return targetGraph;
+}
+
 function writeStoredGraph() {
     if (!graph || !getChatKey()) return;
-    const payload = clone(graph);
+    graph.chatId = getChatKey();
+    graph.chatIntegrity = getChatIntegrity();
+    ensureSidecarDescriptor(graph);
+    const payload = compactGraph(graph, { includeRecords: false });
+    const recoveryPayload = compactGraph(graph, { includeRecords: true });
     // Keep a browser-local recovery mirror keyed by chat ID + integrity before
     // the asynchronous server save begins. This never crosses chats.
     try {
         const storageKey = getGraphBackupStorageKey();
-        if (storageKey) window.localStorage?.setItem(storageKey, JSON.stringify(payload));
+        if (storageKey) window.localStorage?.setItem(storageKey, JSON.stringify(recoveryPayload));
     } catch {
         // Private browsing/storage quotas must not prevent normal chat saves.
     }
@@ -716,6 +864,68 @@ function writeStoredGraph() {
     } else if (liveContext?.chatMetadata && typeof liveContext.chatMetadata === 'object') {
         liveContext.chatMetadata[METADATA_KEY] = payload;
     }
+}
+
+function encodeBase64Utf8(value) {
+    const bytes = new TextEncoder().encode(String(value));
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return btoa(binary);
+}
+
+async function getNativeRequestHeaders() {
+    try {
+        // Third-party modules are loaded as ESM without a direct static import
+        // of SillyTavern's script module. Resolve it lazily so the extension's
+        // standalone test harness and older ST builds remain compatible.
+        const nativeScript = await import('/script.js');
+        return nativeScript.getRequestHeaders?.() ?? {};
+    } catch {
+        return {};
+    }
+}
+
+async function saveGraphSidecar(targetGraph) {
+    if (!targetGraph || !getChatKey()) return false;
+    const descriptor = ensureSidecarDescriptor(targetGraph);
+    const payload = compactGraph(targetGraph, { includeRecords: true });
+    const response = await fetch('/api/files/upload', {
+        method: 'POST',
+        headers: { ...await getNativeRequestHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: descriptor.name, data: encodeBase64Utf8(JSON.stringify(payload)) }),
+    });
+    if (!response.ok) throw new Error(`Sidecar upload failed (${response.status})`);
+    let result = null;
+    try { result = await response.json(); } catch { /* older servers return an empty body */ }
+    if (result?.path) descriptor.path = result.path;
+    descriptor.updatedAt = Date.now();
+    return true;
+}
+
+async function loadGraphSidecar(targetGraph) {
+    if (!targetGraph || Object.keys(targetGraph.messageRecords ?? {}).length > 0) return targetGraph;
+    const descriptor = targetGraph.sidecar;
+    const path = descriptor?.path
+        || (descriptor?.name ? `/user/files/${encodeURIComponent(descriptor.name)}` : null);
+    if (!path) return targetGraph;
+    try {
+        const response = await fetch(path, { cache: 'no-store', headers: await getNativeRequestHeaders() });
+        if (!response.ok) return targetGraph;
+        const payload = await response.json();
+        if (!payload || typeof payload !== 'object') return targetGraph;
+        if (payload.chatId && targetGraph.chatId && payload.chatId !== targetGraph.chatId) return targetGraph;
+        if (payload.chatIntegrity && targetGraph.chatIntegrity && payload.chatIntegrity !== targetGraph.chatIntegrity) return targetGraph;
+        if (payload.messageRecords && typeof payload.messageRecords === 'object') {
+            targetGraph.messageRecords = payload.messageRecords;
+            hydrateGraph(targetGraph);
+            normalizeGraph(targetGraph);
+        }
+    } catch (error) {
+        console.warn('[SillyTavernPlus] Chat tree sidecar load failed; using available recovery data.', error);
+    }
+    return targetGraph;
 }
 
 async function saveCurrentChat(liveContext = getLiveContext()) {
@@ -740,6 +950,16 @@ function schedulePersist() {
                 || !chatKeyAtSchedule
                 || getChatKey() !== chatKeyAtSchedule
                 || !graph) return;
+            // The native chat metadata now contains only the compact graph
+            // index. Keep the complete normalized records in a separate,
+            // user-scoped sidecar before saving the chat pointer. If the
+            // upload is unavailable, the compact metadata/local mirror still
+            // preserves the tree and avoids reintroducing the old payload.
+            try {
+                await saveGraphSidecar(graph);
+            } catch (error) {
+                console.warn('[SillyTavernPlus] Chat tree sidecar save failed; using compact chat metadata fallback.', error);
+            }
             writeStoredGraph();
             const liveContext = getLiveContext();
             // SillyTavern's metadata save is a full chat save. One serialized
@@ -2408,7 +2628,7 @@ function bindEvents() {
         }
     };
 
-    const onChatLoaded = (detail) => {
+    const onChatLoaded = async (detail) => {
         // CHAT_LOADED replaces the chat object and metadata. Clear transient
         // state from the previous chat before the authoritative rebuild below.
         generationActive = false;
@@ -2447,6 +2667,14 @@ function bindEvents() {
         }
         lastChatSignature = '';
         installButton();
+        const loadIdentity = getChatIdentity();
+        if (!graph) graph = readStoredGraph(currentChatKey);
+        // The chat header carries only the compact index. Load the normalized
+        // message/swipe records before the first authoritative render when
+        // the browser-local recovery mirror is unavailable.
+        await loadGraphSidecar(graph);
+        if (getChatIdentity() !== loadIdentity || getChatKey() !== currentChatKey) return;
+        loadedChatKey = loadIdentity;
         // Build the new graph now, while the chat file and metadata are
         // authoritative. This runs even if the branch window is hidden.
         syncGraph(true);
@@ -2559,4 +2787,12 @@ export function refresh() {
     refreshMessageSwipeControls();
 }
 
-export { createGraph, getVariantContents, getActiveSwipeIndex, getLongestAvailablePath };
+export {
+    createGraph,
+    getVariantContents,
+    getActiveSwipeIndex,
+    getLongestAvailablePath,
+    compactGraph,
+    hydrateGraph,
+    getSidecarName,
+};
