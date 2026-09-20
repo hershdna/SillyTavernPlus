@@ -697,8 +697,9 @@ function removeNativeEditActionRow(messageElement) {
     // Return the relocated controls to SillyTavern's original container before
     // removing our row; otherwise cancel/confirm would disappear permanently
     // after the first edit in a session.
-    const nativeActions = Array.from(messageElement.querySelectorAll('.mes_edit_buttons'))
-        .find((candidate) => candidate !== actionRow);
+    const actionBlock = actionRow.closest('.mes_block');
+    const nativeActions = actionBlock?.querySelector('.mes_edit_buttons')
+        ?? messageElement.querySelector('.mes_edit_buttons');
     if (nativeActions instanceof HTMLElement) {
         for (const action of actionRow.querySelectorAll('.mes_edit_done, .mes_edit_cancel')) {
             action.classList.remove('stplus-visible-edit-action');
@@ -714,7 +715,8 @@ function relocateNativeEditActions(messageElement) {
 
     const row = messageElement.querySelector(`.${NATIVE_ACTIONS_CLASS}`);
     const isEditing = messageElement.querySelector('.edit_textarea') instanceof HTMLElement;
-    const nativeActions = messageElement.querySelector('.mes_edit_buttons');
+    const actionBlock = messageElement.querySelector('.mes_block') ?? messageElement;
+    const nativeActions = actionBlock.querySelector('.mes_edit_buttons');
     const nativeEditorVisible = nativeActions instanceof HTMLElement
         && getComputedStyle(nativeActions).display !== 'none';
 
@@ -722,7 +724,7 @@ function relocateNativeEditActions(messageElement) {
     // Remove our detached row at the same time so it cannot linger after the
     // native editor closes or another message becomes active.
     if (!isEditing && !nativeEditorVisible) {
-        row?.remove();
+        removeNativeEditActionRow(messageElement);
         return;
     }
 
