@@ -8,7 +8,7 @@ function loadApi() {
     const sandbox = vm.createContext({ console, structuredClone, window: {}, document: {} });
     const source = fs.readFileSync(path.join(__dirname, '../modules/chat-visible-edit.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { syncMessageSwipe, applyFormattingMarkup, getAddedFormattingRanges };', sandbox);
+    vm.runInContext(source + '\nthis.api = { syncMessageSwipe, applyFormattingMarkup, getAddedFormattingRanges, getSourceBoundary };', sandbox);
     return sandbox.api;
 }
 
@@ -67,4 +67,17 @@ test('formatted mark offsets stay aligned after emoji text', () => {
     assert.deepEqual(JSON.parse(JSON.stringify(api.getAddedFormattingRanges(original, current))), [
         { mark: 'strong', start: 6, end: text.length },
     ]);
+});
+
+test('source boundaries prefer the next text segment for formatting starts', () => {
+    const api = loadApi();
+    const sourceMap = {
+        segments: [
+            { renderedStart: 0, renderedEnd: 5, sourceStart: 0, sourceEnd: 5 },
+            { renderedStart: 5, renderedEnd: 9, sourceStart: 7, sourceEnd: 11 },
+        ],
+    };
+
+    assert.equal(api.getSourceBoundary(sourceMap, 5), 7);
+    assert.equal(api.getSourceBoundary(sourceMap, 5, true), 5);
 });

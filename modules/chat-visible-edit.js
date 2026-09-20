@@ -175,8 +175,17 @@ function buildRenderedSourceMap(source, root) {
 }
 
 function getSourceBoundary(sourceMap, renderedOffset, preferEnd = false) {
-    for (const segment of sourceMap.segments) {
+    for (let index = 0; index < sourceMap.segments.length; index++) {
+        const segment = sourceMap.segments[index];
         if (renderedOffset < segment.renderedStart || renderedOffset > segment.renderedEnd) continue;
+        // At a boundary between rendered text nodes, a start belongs after
+        // the source whitespace separating those nodes. An end belongs before
+        // it. Choosing the first segment for both cases moves newly added
+        // markup across paragraph/newline boundaries after reload.
+        if (!preferEnd && renderedOffset === segment.renderedEnd) {
+            const next = sourceMap.segments[index + 1];
+            if (next?.renderedStart === renderedOffset && next.sourceStart !== null) continue;
+        }
         const offset = renderedOffset - segment.renderedStart;
         if (segment.sourceOffsets) return segment.sourceOffsets[offset];
         return segment.sourceStart + offset;
