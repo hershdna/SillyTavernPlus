@@ -1,6 +1,7 @@
 const EDITING_CLASS = 'stplus-visible-editing';
 const ACTIONS_CLASS = 'stplus-visible-edit-actions';
 const ACTION_HOST_CLASS = 'stplus-visible-edit-action-host';
+const NATIVE_ACTIONS_CLASS = 'stplus-native-edit-actions';
 const EDIT_MODE_TOGGLE_CLASS = 'stplus-edit-mode-toggle';
 const EDIT_MODE_STORAGE_KEY = 'stplus-formatted-edit-mode';
 
@@ -10,6 +11,8 @@ let activeEdit = null;
 let listenersBound = false;
 let editMode = 'vanilla';
 let forcingVanillaEdit = false;
+let nativeEditObserver = null;
+let nativeEditRelocationScheduled = false;
 
 function isEnabled() {
     return settings?.formattedMessageEditEnabled !== false;
@@ -670,6 +673,7 @@ function openVanillaEdit(messageElement) {
     } finally {
         forcingVanillaEdit = false;
     }
+    scheduleNativeEditActionRelocation();
 }
 
 function getActionInsertionPoint(messageElement) {
@@ -681,6 +685,58 @@ function getActionInsertionPoint(messageElement) {
     const reasoning = Array.from(block.children).find((child) => child.classList.contains('mes_reasoning_details'));
     const header = Array.from(block.children).find((child) => child.classList.contains('ch_name'));
     return { block, after: reasoning ?? header ?? null };
+}
+
+function relocateNativeEditActions(messageElement) {
+    if (!(messageElement instanceof HTMLElement)) return;
+
+    const row = messageElement.querySelector(`.${NATIVE_ACTIONS_CLASS}`);
+    const isEditing = messageElement.querySelector('.edit_textarea') instanceof HTMLElement;
+    const nativeActions = messageElement.querySelector('.mes_edit_buttons');
+
+    // Native SillyTavern removes the textarea when confirm/cancel finishes.
+    // Remove our detached row at the same time so it cannot linger after the
+    // native editor closes or another message becomes active.
+    if (!isEditing) {
+        row?.remove();
+        return;
+    }
+
+    const confirm = nativeActions?.querySelector('.mes_edit_done');
+    const cancel = nativeActions?.querySelector('.mes_edit_cancel');
+    if (!(confirm instanceof HTMLElement) && !(cancel instanceof HTMLElement)) return;
+
+    const actionRow = row ?? document.createElement('div');
+    if (!row) {
+        actionRow.className = `${ACTIONS_CLASS} ${ACTION_HOST_CLASS} ${NATIVE_ACTIONS_CLASS}`;
+        actionRow.dataset.stplusOwned = '1';
+        const insertionPoint = getActionInsertionPoint(messageElement);
+        if (insertionPoint.after) insertionPoint.after.after(actionRow);
+        else insertionPoint.block.prepend(actionRow);
+    }
+
+    for (const action of [confirm, cancel]) {
+        if (!(action instanceof HTMLElement)) continue;
+        action.classList.add('stplus-visible-edit-action');
+        if (action.parentElement !== actionRow) actionRow.append(action);
+    }
+}
+
+function scheduleNativeEditActionRelocation() {
+    if (nativeEditRelocationScheduled) return;
+    nativeEditRelocationScheduled = true;
+    const run = () => {
+        nativeEditRelocationScheduled = false;
+        document.querySelectorAll('.mes').forEach(relocateNativeEditActions);
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else window.setTimeout(run, 0);
+}
+
+function installNativeEditActionObserver() {
+    if (nativeEditObserver || typeof MutationObserver !== 'function') return;
+    nativeEditObserver = new MutationObserver(() => scheduleNativeEditActionRelocation());
+    nativeEditObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 function syncMessageSwipe(message, text = message?.mes) {
@@ -863,7 +919,12 @@ function handleNativeEditClick(event) {
     const messageElement = nativeEdit.closest('.mes');
     const messageText = messageElement?.querySelector('.mes_text');
     if (!(messageElement instanceof HTMLElement) || !(messageText instanceof HTMLElement)) return;
-    if (editMode !== 'formatted') return;
+    if (editMode !== 'formatted') {
+        // Native editing creates its textarea and action buttons during the
+        // click handler. Relocate them on the next frame after creation.
+        scheduleNativeEditActionRelocation();
+        return;
+    }
     event.preventDefault();
     event.stopImmediatePropagation();
     beginEdit(messageElement, messageText, event);
@@ -915,10 +976,13 @@ export function initialize(stContext, stSettings) {
     document.addEventListener('click', handleNativeEditClick, true);
     document.addEventListener('dblclick', handleDoubleClick, true);
     installEditModeToggles();
+    installNativeEditActionObserver();
+    scheduleNativeEditActionRelocation();
     bindLifecycleEvents();
 }
 
 export function refresh() {
     if (!isEnabled()) cancelEdit();
     installEditModeToggles();
+    scheduleNativeEditActionRelocation();
 }

@@ -501,6 +501,33 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     margin: 0;
 }
 
+/* Native vanilla-edit controls are moved into the same row as formatted-edit
+ * controls, while retaining SillyTavern's original classes and handlers. */
+.stplus-native-edit-actions .menu_button {
+    opacity: 0.5;
+    padding: 0;
+    font-size: 1rem;
+    height: 2rem;
+    margin-top: 0;
+    margin-bottom: 0;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.stplus-native-edit-actions .mes_edit_cancel {
+    background-color: var(--crimson70a, rgba(180, 30, 50, 0.7));
+}
+
+.stplus-native-edit-actions .mes_edit_done {
+    background-color: var(--okGreen70a, rgba(30, 160, 80, 0.7));
+}
+
+.stplus-native-edit-actions .menu_button:hover {
+    opacity: 1;
+}
+
 .stplus-wi-reasoning-setting {
     flex: 0 0 100%;
     width: 100%;
