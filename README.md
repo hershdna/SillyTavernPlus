@@ -33,7 +33,7 @@ SillyTavern’s native **Branch** message action remains unchanged and continues
 
 ## Chat History
 
-Open the book icon in the top toolbar while a chat is open. **Generate summary** uses the selected SillyTavern API and your summary instructions. **Update summary** sends the previous summary as context alongside only messages after its bookmark; it does not add an OOC exchange to the chat. Requests use SillyTavern's raw prompt builders, so the ordinary full chat prompt is not included a second time.
+Open the book icon in the top toolbar while a chat is open. **Generate summary** uses the selected SillyTavern API and your summary instructions. **Update summary** sends the previous summary as context alongside only messages after its bookmark, then combines the prior summary with the incremental result before saving the new checkpoint; it does not add an OOC exchange to the chat. Requests use SillyTavern's raw prompt builders, so the ordinary full chat prompt is not included a second time.
 
 Edit the summary directly and choose **Save edited summary**. Editing an existing summary keeps its original bookmark. Configure the injection header, depth, and injection checkbox in the same window. Summaries and their source checkpoints live in the chat's `stplusChatHistory` metadata in its JSONL file; ordinary vanilla message rows remain unchanged. Generation uses tokens from the configured API.
 
