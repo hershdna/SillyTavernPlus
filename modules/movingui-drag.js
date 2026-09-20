@@ -42,6 +42,7 @@ const SAVED_MOVINGUI_STYLE_PROPERTIES = [
     'width',
     'height',
     'margin',
+    'transform',
 ];
 const DIMENSIONAL_MOVINGUI_STYLE_PROPERTIES = new Set([
     'top',
@@ -88,13 +89,44 @@ export function applySavedMovingUiState(panel) {
             // unit explicit. Ignore legacy NaN coordinates rather than
             // allowing them to poison an otherwise valid preset.
             if (!Number.isFinite(numericValue)) continue;
+            // A failed resize can leave a legacy ST+ record with a collapsed
+            // width/height. Ignore those values so the panel's CSS defaults
+            // can restore a usable size; zero is still valid for coordinates.
+            if ((property === 'width' || property === 'height') && numericValue <= 0) continue;
             panel.style[property] = `${numericValue}px`;
         } else {
             panel.style[property] = String(rawValue);
         }
         applied = true;
     }
+    // Older saves recorded pixel left/top after a drag or resize but did not
+    // record that the panel's centered transform had been cleared. Treat that
+    // geometry as an explicitly positioned panel so it cannot reopen shifted
+    // off-screen by translateX(-50%).
+    if (!Object.hasOwn(savedState, 'transform')
+        && (Object.hasOwn(savedState, 'left') || Object.hasOwn(savedState, 'top'))) {
+        panel.style.transform = 'none';
+        applied = true;
+    }
+    if (applied && panel.matches('.stplus-chat-history-window')) clampChatHistoryPanel(panel);
     return applied;
+}
+
+function clampChatHistoryPanel(panel) {
+    const rect = panel.getBoundingClientRect();
+    // The panel is created hidden. Do not turn its CSS-sized geometry into
+    // inline 0px dimensions while applying saved state before it opens.
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const margin = 8;
+    const maxWidth = Math.max(1, window.innerWidth - margin * 2);
+    const maxHeight = Math.max(1, window.innerHeight - margin * 2);
+    const width = Math.min(rect.width, maxWidth);
+    const height = Math.min(rect.height, maxHeight);
+    const left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin);
+    const top = Math.min(Math.max(rect.top, margin), window.innerHeight - height - margin);
+    setPanelViewportPosition(panel, left, top);
+    panel.style.width = `${Math.round(width)}px`;
+    panel.style.height = `${Math.round(height)}px`;
 }
 
 export function refreshSavedMovingUiState() {
@@ -168,6 +200,7 @@ function saveMovingUiState(panel) {
         right: 'unset',
         bottom: 'unset',
         margin: 'unset',
+        transform: panel.style.transform || 'none',
     };
     panel.dataset.dragged = 'true';
     context.saveSettingsDebounced?.();

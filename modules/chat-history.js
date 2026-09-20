@@ -1,4 +1,5 @@
 import { generateHistory, createHistoryReasoningView } from './history-generation.js?v=0.5.88';
+import { refreshSavedMovingUiState } from './movingui-drag.js?v=0.5.132';
 
 const MODULE_BUTTON_ID = 'stplus-chat-history-button';
 const WINDOW_ID = 'stplus-chat-history-window';
@@ -345,14 +346,21 @@ function buildSummaryPrompt(snapshot, previousSummary, messages) {
 }
 
 function combineSummaryText(previousSummary, newSummary) {
-    const previous = stripBookmarks(previousSummary);
+    // Keep prior bookmark tags visible in the editor. They are intentionally
+    // removed only when building model context or injection text; the last
+    // tag still controls the next incremental range.
+    const previous = String(previousSummary ?? '').trim();
+    const previousText = stripBookmarks(previous);
     const current = stripBookmarks(newSummary);
-    if (!previous) return current;
-    if (!current || current === previous) return previous;
+    if (!previousText) return current;
+    if (!current || current === previousText) return previous;
     // Be tolerant of providers that ignore the incremental-only instruction
     // and return the previous context plus the new material themselves.
-    if (current.startsWith(previous)) return current;
-    if (previous.startsWith(current)) return previous;
+    if (current.startsWith(previousText)) {
+        const suffix = current.slice(previousText.length).trim();
+        return suffix ? `${previous}\n\n${suffix}` : previous;
+    }
+    if (previousText.startsWith(current)) return previous;
     return `${previous}\n\n${current}`;
 }
 
@@ -789,6 +797,10 @@ function installButton() {
         button.addEventListener('click', () => {
             if (!getChatKey()) return;
             createWindow().classList.add('stplus-chat-history-window-open');
+            // Saved geometry is applied while the panel is hidden during
+            // discovery. Reapply once visible so viewport clamping measures
+            // the real CSS-sized window and keeps every resize handle usable.
+            refreshSavedMovingUiState();
             render();
         });
     }

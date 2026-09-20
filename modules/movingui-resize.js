@@ -47,6 +47,13 @@ function isMovingUiActive() {
         && document.body?.classList.contains('movingUI');
 }
 
+function isUnboundedPanel(panel) {
+    // Chat History must always retain reachable resize handles. Other
+    // MovingUI panels keep the user's existing unbounded-resize preference.
+    return settings?.movingUiUnboundedResizeEnabled === true
+        && !panel.matches('.stplus-chat-history-window');
+}
+
 function getCandidatePanels() {
     const panels = new Set();
     document.querySelectorAll(MOVINGUI_PANEL_SELECTOR).forEach((panel) => {
@@ -65,7 +72,7 @@ function applyResizeConstraints(panel) {
             maxHeight: panel.style.maxHeight,
         });
     }
-    if (settings?.movingUiUnboundedResizeEnabled !== true) return;
+    if (!isUnboundedPanel(panel)) return;
     panel.style.maxWidth = 'none';
     panel.style.maxHeight = 'none';
 }
@@ -98,6 +105,7 @@ function saveMovingUiState(panel) {
         width: Math.round(rect.width),
         height: Math.round(rect.height),
         margin: 'unset',
+        transform: panel.style.transform || 'none',
     };
     panel.dataset.dragged = 'true';
     context.saveSettingsDebounced?.();
@@ -141,7 +149,7 @@ function addResizeHandles(panel) {
         let top = startTop;
         let width = startWidth;
         let height = startHeight;
-        const unbounded = settings?.movingUiUnboundedResizeEnabled === true;
+        const unbounded = isUnboundedPanel(panel);
 
         if (corner.includes('e')) {
             width = unbounded
