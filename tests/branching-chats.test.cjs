@@ -14,8 +14,9 @@ function loadApi() {
         document: {},
     });
     const source = fs.readFileSync(path.join(__dirname, '../modules/branching-chats.js'), 'utf8')
+        .replace(/export\s*\{[\s\S]*?\};\s*$/m, '')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction, getLongestAvailablePath, isRepresentableVariant };', sandbox);
+    vm.runInContext(source + '\nthis.api = { canStartBranchGeneration, pruneDeletedGraphNodes, reconcileDeletedGraph, getChatNodeIds, getBranchSwipeAction, getLongestAvailablePath, isRepresentableVariant, compactGraph, hydrateGraph, getSidecarName };', sandbox);
     return sandbox.api;
 }
 
@@ -155,4 +156,59 @@ test('metadata-backed empty native swipes remain navigable without reviving plac
     assert.equal(api.isRepresentableVariant(message, 0, ''), true);
     assert.equal(api.isRepresentableVariant(message, 1, ''), false);
     assert.equal(api.isRepresentableVariant(message, 2, 'visible'), true);
+});
+
+test('sidecar compaction stores each swipe set once and removes message snapshots from nodes', () => {
+    const api = loadApi();
+    const swipes = ['first', 'second', 'third'];
+    const swipeInfo = swipes.map((_, index) => ({ extra: { index } }));
+    const graph = {
+        chatId: 'chat-a',
+        chatIntegrity: 'integrity-a',
+        nodes: {
+            a: {
+                id: 'a', parentId: null, sourceIndex: 0, swipeIndex: 0,
+                role: 'assistant', content: 'first', name: 'Bot',
+                message: { name: 'Bot', swipes, swipe_info: swipeInfo, mes: 'first' },
+            },
+            b: {
+                id: 'b', parentId: null, sourceIndex: 0, swipeIndex: 1,
+                role: 'assistant', content: 'second', name: 'Bot',
+                message: { name: 'Bot', swipes, swipe_info: swipeInfo, mes: 'second' },
+            },
+        },
+        activePath: ['b'],
+    };
+
+    const compact = api.compactGraph(graph);
+    assert.equal(compact.nodes.a.message, undefined);
+    assert.equal(compact.nodes.b.message, undefined);
+    assert.equal(Object.keys(compact.messageRecords).length, 1);
+    assert.deepEqual(compact.messageRecords['root|0|assistant'].swipes, swipes);
+    assert.deepEqual(compact.messageRecords['root|0|assistant'].swipeInfo, swipeInfo);
+
+    api.hydrateGraph(compact);
+    assert.deepEqual(compact.nodes.a.message.swipes, swipes);
+    assert.equal(compact.nodes.a.message.mes, 'first');
+    assert.equal(compact.nodes.b.message.swipe_id, 1);
+    assert.equal(compact.nodes.b.message.mes, 'second');
+});
+
+test('chat metadata fallback keeps only the compact tree index', () => {
+    const api = loadApi();
+    const graph = {
+        chatId: 'chat-b',
+        nodes: {
+            a: {
+                id: 'a', parentId: null, sourceIndex: 0, swipeIndex: 0,
+                role: 'assistant', content: 'reply',
+                message: { swipes: ['reply'], mes: 'reply' },
+            },
+        },
+        activePath: ['a'],
+    };
+    const compact = api.compactGraph(graph, { includeRecords: false });
+    assert.equal(compact.messageRecords, undefined);
+    assert.equal(compact.nodes.a.message, undefined);
+    assert.equal(compact.nodes.a.messageRef, 'root|0|assistant');
 });
