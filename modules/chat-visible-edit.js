@@ -728,6 +728,34 @@ async function saveChat() {
     }
 }
 
+function rerenderEditedMessage(edit, message) {
+    if (!edit?.messageText?.isConnected) return;
+
+    // Use SillyTavern's own renderer so Markdown entered during a formatted
+    // edit (for example *emphasis*) is visible immediately, not only after a
+    // chat reload. This also keeps the extension aligned with native message
+    // rendering and display_text handling.
+    if (typeof context?.updateMessageBlock === 'function') {
+        context.updateMessageBlock(edit.messageId, message);
+        return;
+    }
+
+    // Older SillyTavern builds may expose the formatter without the block
+    // helper. Keep those builds functional without flattening the source.
+    if (typeof context?.messageFormatting === 'function') {
+        const text = message?.extra?.display_text ?? message?.mes ?? '';
+        edit.messageText.innerHTML = context.messageFormatting(
+            text,
+            message?.name,
+            message?.is_system,
+            message?.is_user,
+            edit.messageId,
+            {},
+            false,
+        );
+    }
+}
+
 async function confirmEdit() {
     const edit = activeEdit;
     if (!edit) return;
@@ -766,6 +794,7 @@ async function confirmEdit() {
         context.chatMetadata.tainted = true;
     }
     removeEditUi(edit, false);
+    rerenderEditedMessage(edit, message);
     await emitMessageEvent('MESSAGE_EDITED', edit.messageId);
     await emitMessageEvent('MESSAGE_UPDATED', edit.messageId);
     await saveChat();
