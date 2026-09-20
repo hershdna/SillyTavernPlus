@@ -232,6 +232,15 @@ function createSettingsWindow() {
             callbacks?.onGreetingModsChanged?.();
         },
     ));
+    charactersSection.append(createCheckbox(
+        'stplus-persona-combination-enabled',
+        'Persona combination',
+        'Replace single-persona clicks with checkboxes and inject the selected persona descriptions together.',
+        (enabled) => {
+            settings.personaCombinationEnabled = enabled;
+            callbacks?.onPersonaCombinationChanged?.();
+        },
+    ));
     body.append(charactersSection);
 
     const chatSection = createSettingsSection('Chat');
@@ -361,6 +370,7 @@ export function refresh() {
     installSettingsButton();
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
+    const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
     const formattedMessageEditCheckbox = document.getElementById('stplus-formatted-message-edit-enabled');
@@ -371,6 +381,7 @@ export function refresh() {
     const movingUiUnboundedResizeCheckbox = document.getElementById('stplus-movingui-unbounded-resize-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
+    if (personaCombinationCheckbox) personaCombinationCheckbox.checked = settings.personaCombinationEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;
     if (formattedMessageEditCheckbox) formattedMessageEditCheckbox.checked = settings.formattedMessageEditEnabled;

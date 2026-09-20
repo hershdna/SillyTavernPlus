@@ -1,5 +1,7 @@
 const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
+    personaCombinationEnabled: true,
+    personaCombinationSelected: [],
     branchingChatsEnabled: true,
     formattedMessageEditEnabled: true,
     lorebookModsEnabled: true,
@@ -38,6 +40,10 @@ export function initializeSettings(stContext) {
         ...DEFAULT_SETTINGS,
         ...saved,
         greetingModsEnabled: saved.greetingModsEnabled !== false,
+        personaCombinationEnabled: saved.personaCombinationEnabled !== false,
+        personaCombinationSelected: Array.isArray(saved.personaCombinationSelected)
+            ? [...new Set(saved.personaCombinationSelected.filter((value) => typeof value === 'string' && value))]
+            : [],
         branchingChatsEnabled: saved.branchingChatsEnabled !== false,
         formattedMessageEditEnabled: saved.formattedMessageEditEnabled !== false,
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,

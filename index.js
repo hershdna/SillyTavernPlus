@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.114';
+    const MODULE_CACHE_VERSION = '0.5.115';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -26,13 +26,14 @@
         }
 
         try {
-            const [settingsStore, greetingMods, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
+            const [settingsStore, greetingMods, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('lorebook-mods'),
                 loadModule('branching-chats'),
                 loadModule('chat-visible-edit'),
                 loadModule('chat-history'),
+                loadModule('persona-combination'),
                 loadModule('settings-panel'),
                 loadModule('movingui-resize'),
                 loadModule('movingui-drag'),
@@ -46,6 +47,7 @@
             branchingChats.initialize(context, settings);
             chatVisibleEdit.initialize(context, settings);
             chatHistory.initialize(context, settings);
+            personaCombination.initialize(context, settings);
             movingUiResize.initialize(context, settings);
             movingUiDrag.initialize(context, settings);
             movingUiFront.initialize(context, settings);
@@ -54,6 +56,7 @@
                 onGreetingModsChanged: () => greetingMods.refresh(),
                 onBranchingChatsChanged: () => branchingChats.refresh(),
                 onFormattedMessageEditChanged: () => chatVisibleEdit.refresh(),
+                onPersonaCombinationChanged: () => personaCombination.refresh(),
                 onChatHistoryChanged: () => chatHistory.refresh(),
                 onLorebookModsChanged: () => lorebookMods.refresh(),
                 onMovingUiResizeChanged: () => movingUiResize.refresh(),
@@ -75,6 +78,7 @@
                 settingsPanel.refresh();
                 chatVisibleEdit.refresh();
                 chatHistory.refresh();
+                personaCombination.refresh();
                 movingUiResize.refresh();
                 movingUiDrag.refresh();
                 movingUiFront.refresh();
