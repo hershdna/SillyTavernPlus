@@ -540,7 +540,9 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     justify-content: flex-end;
     gap: 4px;
     width: auto;
-    margin: 0 0 0 auto;
+    /* Keep the relocated native controls and message menu together at the
+     * right edge instead of pushing this menu away from the native group. */
+    margin: 0;
     visibility: visible !important;
 }
 
