@@ -251,6 +251,222 @@ function applyVisibleTextEdit(edit, currentRenderedText) {
     return result + edit.originalSource.slice(sourceCursor);
 }
 
+function getFormattingMarks(element) {
+    const marks = new Set();
+    for (let current = element.parentElement; current; current = current.parentElement) {
+        switch (current.tagName?.toLowerCase()) {
+            case 'b':
+            case 'strong':
+                marks.add('strong');
+                break;
+            case 'i':
+            case 'em':
+                marks.add('em');
+                break;
+            case 'u':
+                marks.add('underline');
+                break;
+            case 's':
+            case 'del':
+            case 'strike':
+                marks.add('strike');
+                break;
+            case 'mark':
+                marks.add('mark');
+                break;
+            case 'code':
+                marks.add('code');
+                break;
+            case 'span': {
+                const style = current.getAttribute('style') ?? '';
+                const supportedStyles = style.split(';')
+                    .map((declaration) => declaration.trim())
+                    .filter((declaration) => /^(color|background-color|font-weight|font-style|text-decoration(?:-line)?)\s*:/i.test(declaration))
+                    .map((declaration) => declaration.replace(/\s+/g, ' ').toLowerCase())
+                    .sort();
+                if (supportedStyles.length) marks.add(`style:${supportedStyles.join(';')}`);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return marks;
+}
+
+function collectFormattedText(root) {
+    const nodes = getEditableTextNodes(root);
+    const text = [];
+    const marks = [];
+    for (const node of nodes) {
+        const nodeText = node.nodeValue ?? '';
+        const nodeMarks = getFormattingMarks(node);
+        for (const character of nodeText) {
+            text.push(character);
+            marks.push(new Set(nodeMarks));
+        }
+    }
+    return { text: text.join(''), marks };
+}
+
+function formatMarkMarkup(mark, opening) {
+    const tags = {
+        strong: ['<strong>', '</strong>'],
+        em: ['<em>', '</em>'],
+        underline: ['<u>', '</u>'],
+        strike: ['<s>', '</s>'],
+        mark: ['<mark>', '</mark>'],
+        code: ['<code>', '</code>'],
+    };
+    if (tags[mark]) return tags[mark][opening ? 0 : 1];
+    if (!mark.startsWith('style:')) return '';
+
+    const style = mark.slice('style:'.length)
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    return opening ? `<span style="${style}">` : '</span>';
+}
+
+function getAddedFormattingRanges(originalView, currentView) {
+    const hunk = getVisibleTextHunk(originalView.text, currentView.text);
+    const active = new Map();
+    const ranges = [];
+
+    const originalIndexForCurrent = (index) => {
+        if (index < hunk.renderedStart) return index;
+        if (index >= hunk.renderedStart + hunk.insertedText.length) {
+            return hunk.renderedEnd + index - (hunk.renderedStart + hunk.insertedText.length);
+        }
+        return null;
+    };
+
+    const closeMark = (mark, end) => {
+        const start = active.get(mark);
+        if (start !== undefined) ranges.push({ mark, start, end });
+        active.delete(mark);
+    };
+
+    for (let index = 0; index <= currentView.text.length; index++) {
+        const originalIndex = originalIndexForCurrent(index);
+        const currentMarks = index < currentView.text.length ? currentView.marks[index] : new Set();
+        const originalMarks = originalIndex === null || originalIndex === undefined
+            ? new Set()
+            : (originalView.marks[originalIndex] ?? new Set());
+        const addedMarks = new Set([...currentMarks].filter((mark) => !originalMarks.has(mark)));
+
+        for (const mark of [...active.keys()]) {
+            if (!addedMarks.has(mark)) closeMark(mark, index);
+        }
+        for (const mark of addedMarks) {
+            if (!active.has(mark)) active.set(mark, index);
+        }
+    }
+
+    return ranges.filter((range) => range.end > range.start && formatMarkMarkup(range.mark, true));
+}
+
+function getSourceReplacementInfo(edit, currentRenderedText) {
+    const hunk = getVisibleTextHunk(edit.sourceMap.renderedText, currentRenderedText);
+    const ranges = edit.sourceMap.segments
+        .filter((segment) => segment.renderedStart < hunk.renderedEnd && segment.renderedEnd > hunk.renderedStart)
+        .map((segment) => ({
+            start: segment.sourceOffsets
+                ? segment.sourceOffsets[Math.max(hunk.renderedStart, segment.renderedStart) - segment.renderedStart]
+                : segment.sourceStart + Math.max(hunk.renderedStart, segment.renderedStart) - segment.renderedStart,
+            end: segment.sourceOffsets
+                ? segment.sourceOffsets[Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart]
+                : segment.sourceStart + Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart,
+        }));
+    const insertedText = escapeInsertedText(hunk.insertedText);
+    const insertionSource = ranges.length
+        ? ranges[0].start
+        : getSourceBoundary(edit.sourceMap, hunk.renderedStart);
+    return { hunk, ranges, insertedText, insertionSource };
+}
+
+function mapOriginalSourceBoundaryToEdited(boundary, replacement, preferEnd = false) {
+    if (boundary === null || boundary === undefined) return null;
+    const { ranges, insertedText, insertionSource } = replacement;
+    if (!ranges.length) {
+        if (boundary < insertionSource) return boundary;
+        if (boundary > insertionSource || preferEnd) return boundary + insertedText.length;
+        return boundary;
+    }
+
+    let delta = 0;
+    let inserted = false;
+    for (const range of ranges) {
+        if (boundary < range.start) return boundary + delta;
+        if (boundary <= range.end) {
+            if (!inserted) return insertionSource + (preferEnd ? insertedText.length : 0);
+            return range.start + delta;
+        }
+        if (!inserted) {
+            delta += insertedText.length;
+            inserted = true;
+        }
+        delta -= range.end - range.start;
+    }
+    return boundary + delta;
+}
+
+function mapCurrentRenderedBoundaryToEditedSource(edit, currentRenderedText, boundary, replacement, preferEnd = false) {
+    const { hunk, insertedText, insertionSource } = replacement;
+    const insertedEnd = hunk.renderedStart + hunk.insertedText.length;
+    if (boundary > hunk.renderedStart && boundary < insertedEnd) {
+        return insertionSource + escapeInsertedText(hunk.insertedText.slice(0, boundary - hunk.renderedStart)).length;
+    }
+
+    const originalBoundary = boundary >= insertedEnd
+        ? hunk.renderedEnd + boundary - insertedEnd
+        : boundary;
+    const sourceBoundary = getSourceBoundary(edit.sourceMap, originalBoundary, preferEnd);
+    return mapOriginalSourceBoundaryToEdited(sourceBoundary, replacement, preferEnd);
+}
+
+function applyFormattingMarkup(source, overlays) {
+    const events = new Map();
+    for (const overlay of overlays) {
+        const opening = formatMarkMarkup(overlay.mark, true);
+        const closing = formatMarkMarkup(overlay.mark, false);
+        if (!opening || !closing || overlay.end <= overlay.start) continue;
+        if (!events.has(overlay.start)) events.set(overlay.start, []);
+        if (!events.has(overlay.end)) events.set(overlay.end, []);
+        events.get(overlay.start).push({ type: 'open', markup: opening, range: overlay });
+        events.get(overlay.end).push({ type: 'close', markup: closing, range: overlay });
+    }
+
+    let result = '';
+    let cursor = 0;
+    for (const position of [...events.keys()].sort((a, b) => a - b)) {
+        result += source.slice(cursor, position);
+        const positionEvents = events.get(position).sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'close' ? -1 : 1;
+            return a.type === 'close' ? b.range.start - a.range.start : a.range.end - b.range.end;
+        });
+        result += positionEvents.map((event) => event.markup).join('');
+        cursor = position;
+    }
+    return result + source.slice(cursor);
+}
+
+function applyAddedFormatting(edit, currentRenderedText, source) {
+    if (!edit.originalFormattedView || !edit.currentFormattedView) return source;
+    const ranges = getAddedFormattingRanges(edit.originalFormattedView, edit.currentFormattedView);
+    if (!ranges.length) return source;
+
+    const replacement = getSourceReplacementInfo(edit, currentRenderedText);
+    if (replacement.insertionSource === null) return source;
+    const overlays = ranges.map((range) => ({
+        mark: range.mark,
+        start: mapCurrentRenderedBoundaryToEditedSource(edit, currentRenderedText, range.start, replacement),
+        end: mapCurrentRenderedBoundaryToEditedSource(edit, currentRenderedText, range.end, replacement, true),
+    })).filter((range) => range.start !== null && range.end !== null && range.end > range.start);
+
+    return applyFormattingMarkup(source, overlays);
+}
+
 function restoreAttributes(edit) {
     const { messageText, originalContentEditable, originalSpellcheck, originalRole, originalAriaLabel } = edit;
     if (!messageText.isConnected) return;
@@ -293,18 +509,15 @@ function insertPlainText(editor, text) {
 function bindEditorGuards(edit) {
     const editor = edit.messageText;
     const editorListeners = [];
-    const onBeforeInput = (event) => {
-        if (event.inputType?.startsWith('format') || event.inputType === 'insertHTML') event.preventDefault();
-    };
-    const onKeyDown = (event) => {
-        if ((event.ctrlKey || event.metaKey) && ['b', 'i', 'u'].includes(event.key.toLowerCase())) event.preventDefault();
-    };
     const onPaste = (event) => {
         event.preventDefault();
         insertPlainText(editor, event.clipboardData?.getData('text/plain') ?? '');
     };
     const onDrop = (event) => event.preventDefault();
-    [['beforeinput', onBeforeInput], ['keydown', onKeyDown], ['paste', onPaste], ['drop', onDrop]].forEach(([eventName, handler]) => {
+    // Leave native beforeinput/keyboard formatting enabled. The formatted
+    // editor records newly-created marks and maps them back to the original
+    // message source when the edit is confirmed.
+    [['paste', onPaste], ['drop', onDrop]].forEach(([eventName, handler]) => {
         editor.addEventListener(eventName, handler);
         editorListeners.push([eventName, handler]);
     });
@@ -520,6 +733,8 @@ async function confirmEdit() {
     let text;
     try {
         text = applyVisibleTextEdit(edit, collectRenderedText(edit.messageText));
+        edit.currentFormattedView = collectFormattedText(edit.messageText);
+        text = applyAddedFormatting(edit, edit.currentFormattedView.text, text);
     } catch (error) {
         console.warn('[SillyTavernPlus] Could not preserve message formatting while saving.', error);
         removeEditUi(edit, true);
@@ -571,6 +786,10 @@ function beginEdit(messageElement, messageText, event) {
         editorListeners: [],
     };
     edit.sourceMap = buildRenderedSourceMap(edit.originalSource, messageText);
+    const originalContainer = document.createElement('div');
+    originalContainer.innerHTML = edit.originalHTML;
+    edit.originalFormattedView = collectFormattedText(originalContainer);
+    edit.currentFormattedView = null;
     const confirm = createAction('fa-solid fa-check', 'Confirm', confirmEdit);
     const cancel = createAction('fa-solid fa-xmark', 'Cancel', cancelEdit);
     const actions = document.createElement('div');
