@@ -5,6 +5,7 @@ const NATIVE_ACTIONS_CLASS = 'stplus-native-edit-actions';
 const EDIT_MODE_TOGGLE_CLASS = 'stplus-edit-mode-toggle';
 const RELOCATED_MESSAGE_MENU_CLASS = 'stplus-relocated-message-menu';
 const EDIT_MODE_STORAGE_KEY = 'stplus-formatted-edit-mode';
+const RELOCATED_NATIVE_ACTIONS_CLASS = 'stplus-relocated-native-edit-buttons';
 
 let context = null;
 let settings = null;
@@ -15,6 +16,7 @@ let forcingVanillaEdit = false;
 let nativeEditObserver = null;
 let nativeEditRelocationScheduled = false;
 const nativeEditActionParents = new WeakMap();
+const nativeEditActionContainerParents = new WeakMap();
 const relocatedMessageMenuParents = new WeakMap();
 
 function isEnabled() {
@@ -732,18 +734,23 @@ function removeNativeEditActionRow(messageElement) {
     const actionRow = messageElement.querySelector(`.${NATIVE_ACTIONS_CLASS}`);
     if (!(actionRow instanceof HTMLElement)) return;
 
-    // The native editor reuses the same action elements on the next edit.
-    // Return the relocated controls to SillyTavern's original container before
-    // removing our row; otherwise cancel/confirm would disappear permanently
-    // after the first edit in a session.
-    const actionBlock = actionRow.closest('.mes_block');
-    const fallbackNativeActions = actionBlock?.querySelector('.mes_edit_buttons')
-        ?? messageElement.querySelector('.mes_edit_buttons');
-    for (const action of actionRow.querySelectorAll('.mes_edit_done, .mes_edit_cancel')) {
-        const nativeActions = nativeEditActionParents.get(action) ?? fallbackNativeActions;
-        if (nativeActions instanceof HTMLElement) {
-            nativeActions.append(action);
+    // The native editor reuses the same action container on the next edit.
+    // Return the whole relocated group to SillyTavern's original header before
+    // removing our row; otherwise its controls can disappear permanently after
+    // the first edit in a session.
+    for (const nativeActions of actionRow.querySelectorAll(`.mes_edit_buttons.${RELOCATED_NATIVE_ACTIONS_CLASS}`)) {
+        const original = nativeEditActionContainerParents.get(nativeActions);
+        if (original?.parent instanceof HTMLElement && original.parent.isConnected) {
+            const nextSibling = original.nextSibling?.parentNode === original.parent
+                ? original.nextSibling
+                : null;
+            original.parent.insertBefore(nativeActions, nextSibling);
         }
+        nativeActions.classList.remove(RELOCATED_NATIVE_ACTIONS_CLASS);
+        nativeEditActionContainerParents.delete(nativeActions);
+    }
+
+    for (const action of actionRow.querySelectorAll('.mes_edit_done, .mes_edit_cancel')) {
         action.classList.remove('stplus-visible-edit-action');
         nativeEditActionParents.delete(action);
     }
@@ -795,7 +802,17 @@ function relocateNativeEditActions(messageElement) {
         if (!(action instanceof HTMLElement)) continue;
         nativeEditActionParents.set(action, nativeActions);
         action.classList.add('stplus-visible-edit-action');
-        if (action.parentElement !== actionRow) actionRow.append(action);
+    }
+
+    if (nativeActions.parentElement !== actionRow) {
+        if (!nativeEditActionContainerParents.has(nativeActions)) {
+            nativeEditActionContainerParents.set(nativeActions, {
+                parent: nativeActions.parentNode,
+                nextSibling: nativeActions.nextSibling,
+            });
+        }
+        nativeActions.classList.add(RELOCATED_NATIVE_ACTIONS_CLASS);
+        actionRow.append(nativeActions);
     }
     relocateMessageMenu(messageElement, actionRow);
 }
