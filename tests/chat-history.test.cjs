@@ -81,13 +81,16 @@ test('incremental generation sends only previous summary and new range; retains 
     assert.doesNotMatch(prompt, /\[Message [01] \| Test\]/);
     assert.match(prompt, /do not repeat PREVIOUS CONTEXT/i);
     assert.equal(f.saved.stplusChatHistory.records.length, 2);
-    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\nUpdated facts\n\n[[history:3]]');
+    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\n[[history:2]]\n\nUpdated facts\n\n[[history:3]]');
     assert.doesNotMatch(prompt, /\[\[history:/);
-    f.chat.pop();
-    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\n[[history:2]]');
-    f.chat.push(message('c'));
-    await f.api.clearCurrentSummary();
-    assert.equal(f.api.getSnapshot().record, null);
+    f.chat.push(message('d'));
+    let secondPrompt;
+    f.setGenerator(async args => { secondPrompt = args.prompt; return 'More facts'; });
+    await f.api.generateSummary();
+    assert.match(secondPrompt, /\[Message 3 \| Test\]/);
+    assert.doesNotMatch(secondPrompt, /\[Message [012] \| Test\]/);
+    assert.equal(f.saved.stplusChatHistory.records.length, 3);
+    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\n[[history:2]]\n\nUpdated facts\n\n[[history:3]]\n\nMore facts\n\n[[history:4]]');
 });
 
 test('editing or deleting the visible bookmark controls the next range and survives reload', async () => {
