@@ -79,8 +79,9 @@ test('incremental generation sends only previous summary and new range; retains 
     assert.match(prompt, /Previous facts/);
     assert.match(prompt, /\[Message 2 \| Test\]/);
     assert.doesNotMatch(prompt, /\[Message [01] \| Test\]/);
+    assert.match(prompt, /do not repeat PREVIOUS CONTEXT/i);
     assert.equal(f.saved.stplusChatHistory.records.length, 2);
-    assert.equal(f.api.getSnapshot().record.summary, 'Updated facts\n\n[[history:3]]');
+    assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\nUpdated facts\n\n[[history:3]]');
     assert.doesNotMatch(prompt, /\[\[history:/);
     f.chat.pop();
     assert.equal(f.api.getSnapshot().record.summary, 'Previous facts\n\n[[history:2]]');
