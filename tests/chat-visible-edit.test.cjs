@@ -8,7 +8,7 @@ function loadApi() {
     const sandbox = vm.createContext({ console, structuredClone, window: {}, document: {} });
     const source = fs.readFileSync(path.join(__dirname, '../modules/chat-visible-edit.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { syncMessageSwipe, applyFormattingMarkup, getAddedFormattingRanges, getSourceBoundary, removeEmptyHtmlBlocks };', sandbox);
+    vm.runInContext(source + '\nthis.api = { syncMessageSwipe, applyVisibleTextEdit, applyFormattingMarkup, getAddedFormattingRanges, getSourceBoundary, normalizeMappingText, removeEmptyHtmlBlocks };', sandbox);
     return sandbox.api;
 }
 
@@ -37,6 +37,50 @@ test('new formatted marks are written as source markup without flattening other 
         ]),
         'Before <strong>added text</strong> after',
     );
+});
+
+test('pasted HTML is preserved as source markup during a formatted edit', () => {
+    const api = loadApi();
+    const edit = {
+        originalSource: '<p>STAGE TEST</p>',
+        sourceMap: {
+            renderedText: 'STAGE TEST',
+            complete: true,
+            segments: [{
+                renderedStart: 0,
+                renderedEnd: 10,
+                sourceStart: 3,
+                sourceEnd: 13,
+                sourceOffsets: Array.from({ length: 11 }, (_, index) => index + 3),
+            }],
+        },
+    };
+    const pasted = '<!-- GFX_START --><div style="color:red">Formatted</div><!-- GFX_END -->';
+
+    assert.equal(
+        api.applyVisibleTextEdit(edit, pasted),
+        '<p><!-- GFX_START --><div style="color:red">Formatted</div><!-- GFX_END --></p>',
+    );
+});
+
+test('pasted HTML can replace an empty markup-only message', () => {
+    const api = loadApi();
+    const edit = {
+        originalSource: '<hr>',
+        sourceMap: { renderedText: '', complete: true, segments: [] },
+    };
+    const pasted = '<div style="color:red">Formatted</div>';
+
+    assert.equal(api.applyVisibleTextEdit(edit, pasted), pasted);
+});
+
+test('HTML entities stay aligned with their visible text during mapping', () => {
+    const api = loadApi();
+    const mapped = api.normalizeMappingText('&lt;div&gt;');
+
+    assert.equal(mapped.text, '<div>');
+    assert.equal(mapped.normalizedToOriginal.at(-1), 11);
+    assert.equal(mapped.originalToNormalized[4], 1);
 });
 
 test('formatted editor identifies marks that were added to existing visible text', () => {
