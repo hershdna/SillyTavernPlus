@@ -1,38 +1,15 @@
-import { save } from './settings-store.js';
-
 const OWNED = 'data-stplus-greeting-groups';
-const TOOLBAR = 'stplus-greeting-group-toolbar';
-const SELECT = 'stplus-greeting-group-select';
 const BADGE = 'stplus-greeting-group-badge';
-const TREE_BADGE = 'stplus-greeting-group-tree-badge';
-
 let context = null;
 let settings = null;
-let refreshQueued = false;
-let refreshing = false;
+let queued = false;
 let observer = null;
+let editorObserver = null;
+let editorTarget = null;
+let poller = null;
 
-function enabled() {
-    return settings?.greetingGroupsEnabled !== false;
-}
-
-function currentCharacter() {
-    const ctx = context ?? globalThis.SillyTavern?.getContext?.() ?? {};
-    const characters = Array.isArray(ctx.characters) ? ctx.characters : [];
-    const rawId = ctx.this_chid ?? ctx.characterId;
-    const id = rawId === undefined || rawId === null || rawId === '' ? null : Number(rawId);
-    if (id !== null && characters[id]) return characters[id];
-    if (ctx.character && typeof ctx.character === 'object') return ctx.character;
-    return null;
-}
-
-function characterKey(character) {
-    return String(character?.avatar ?? character?.avatar_url ?? character?.name ?? 'unknown-character');
-}
-
-function greetingTexts(character) {
-    return [character?.first_mes ?? '', ...(Array.isArray(character?.alternate_greetings) ? character.alternate_greetings : [])]
-        .map(text => String(text ?? ''));
+function persistSettings() {
+    if (typeof globalThis.saveSettingsDebounced === 'function') globalThis.saveSettingsDebounced();
 }
 
 function fingerprint(text) {
@@ -44,106 +21,97 @@ function fingerprint(text) {
     return (hash >>> 0).toString(36);
 }
 
-function makeId(text, index) {
-    return 'greeting-' + fingerprint(text) + '-' + index;
-}
-
-function getStore() {
-    if (!settings) return {};
-    if (!settings.greetingGroupsByCharacter || typeof settings.greetingGroupsByCharacter !== 'object') {
-        settings.greetingGroupsByCharacter = {};
+function character() {
+    const ctx = context ?? globalThis.SillyTavern?.getContext?.() ?? {};
+    const characters = Array.isArray(ctx.characters) ? ctx.characters : [];
+    const rawId = ctx.this_chid ?? ctx.characterId;
+    const id = rawId === undefined || rawId === null || rawId === '' ? null : Number(rawId);
+    if (id !== null && Number.isInteger(id) && characters[id]) return characters[id];
+    const activeName = ctx.name2 ?? ctx.name1 ?? document.querySelector('#character_name_pole')?.value;
+    if (activeName) {
+        const match = characters.find(item => item?.name === activeName);
+        if (match) return match;
+        const first = document.querySelector('textarea.alternate_greeting_text:not([id])')?.value ?? '';
+        const alternates = Array.from(document.querySelectorAll('textarea.alternate_greeting_text[id^="alternate_greeting_"]')).map(item => item.value);
+        if (first || alternates.length) {
+            return { name: activeName, avatar: 'dom-' + activeName, first_mes: first, alternate_greetings: alternates };
+        }
     }
-    return settings.greetingGroupsByCharacter;
+    return ctx.character && typeof ctx.character === 'object' ? ctx.character : null;
 }
 
-function ensureModel(character, persist = true) {
-    const key = characterKey(character);
-    const texts = greetingTexts(character);
-    const store = getStore();
-    const old = store[key] && typeof store[key] === 'object' ? store[key] : { groups: [], greetings: [] };
+function texts(char) {
+    return [char?.first_mes ?? '', ...(Array.isArray(char?.alternate_greetings) ? char.alternate_greetings : [])]
+        .map(value => String(value ?? ''));
+}
+
+function key(char) {
+    return String(char?.avatar ?? char?.avatar_url ?? char?.name ?? 'unknown-character');
+}
+
+function model(char, persist = true) {
+    settings.greetingGroupsByCharacter ??= {};
+    const store = settings.greetingGroupsByCharacter;
+    const charKey = key(char);
+    const old = store[charKey] && typeof store[charKey] === 'object' ? store[charKey] : {};
     const oldGreetings = Array.isArray(old.greetings) ? old.greetings : [];
     const used = new Set();
-    const nextGreetings = texts.map((text, index) => {
-        const matches = oldGreetings
-            .map((item, oldIndex) => ({ item, oldIndex }))
-            .filter(({ item, oldIndex }) => !used.has(oldIndex) && item?.fingerprint === fingerprint(text));
-        const match = matches[0] ?? (oldGreetings[index] && !used.has(index) ? { item: oldGreetings[index], oldIndex: index } : null);
-        if (match) used.add(match.oldIndex);
+    const greetings = texts(char).map((text, index) => {
+        const fp = fingerprint(text);
+        const matchIndex = oldGreetings.findIndex((item, oldIndex) => !used.has(oldIndex) && item?.fingerprint === fp);
+        const match = matchIndex >= 0 ? oldGreetings[matchIndex] : oldGreetings[index];
+        if (matchIndex >= 0) used.add(matchIndex);
         return {
-            id: match?.item?.id ?? makeId(text, index),
-            fingerprint: fingerprint(text),
-            groupId: match?.item?.groupId ?? null,
+            id: match?.id ?? ('greeting-' + fp + '-' + index),
+            fingerprint: fp,
+            groupId: match?.groupId ?? null,
         };
     });
-    const model = {
-        groups: Array.isArray(old.groups) ? old.groups.filter(group => group && group.id && group.name) : [],
-        greetings: nextGreetings,
+    const result = {
+        groups: Array.isArray(old.groups) ? old.groups.filter(group => group?.id && group?.name) : [],
+        greetings,
     };
-    store[key] = model;
-    if (persist) save();
-    return model;
+    store[charKey] = result;
+    if (persist) persistSettings();
+    return result;
 }
 
-function groupFor(model, greetingIndex) {
-    const groupId = model?.greetings?.[greetingIndex]?.groupId;
-    return model?.groups?.find(group => group.id === groupId) ?? null;
+function groupFor(data, index) {
+    const id = data.greetings[index]?.groupId;
+    return data.groups.find(group => group.id === id) ?? null;
 }
 
-function removeOwned(root = document) {
-    root.querySelectorAll?.('[' + OWNED + ']').forEach(element => element.remove());
+function badge(text, tree = false) {
+    const element = document.createElement('span');
+    element.className = tree ? BADGE + ' stplus-greeting-group-tree-badge' : BADGE;
+    element.setAttribute(OWNED, '1');
+    element.textContent = text;
+    element.title = text;
+    return element;
 }
 
-function makeBadge(text, tree = false) {
-    const badge = document.createElement('span');
-    badge.className = tree ? BADGE + ' ' + TREE_BADGE : BADGE;
-    badge.setAttribute(OWNED, '1');
-    badge.textContent = text;
-    badge.title = text;
-    return badge;
+function greetingPopup() {
+    return Array.from(document.querySelectorAll('.alternate_grettings'))
+        .sort((left, right) => right.querySelectorAll('.alternate_greeting').length - left.querySelectorAll('.alternate_greeting').length)[0] ?? null;
 }
 
-function addGroup(model, name, character) {
-    const clean = String(name ?? '').trim();
-    if (!clean || model.groups.some(group => group.name.toLowerCase() === clean.toLowerCase())) return;
-    model.groups.push({
-        id: 'group-' + fingerprint(clean) + '-' + Date.now().toString(36),
-        name: clean,
-    });
-    ensureModel(character);
-}
-
-function buildGroupSelect(model, greetingIndex, character) {
-    const select = document.createElement('select');
-    select.className = SELECT;
-    select.setAttribute(OWNED, '1');
-    select.setAttribute('aria-label', 'Greeting ' + greetingIndex + ' group');
-    const none = document.createElement('option');
-    none.value = '';
-    none.textContent = 'Ungrouped';
-    select.append(none);
-    for (const group of model.groups) {
-        const option = document.createElement('option');
-        option.value = group.id;
-        option.textContent = group.name;
-        select.append(option);
-    }
-    select.value = model.greetings[greetingIndex]?.groupId ?? '';
-    select.addEventListener('change', () => {
-        model.greetings[greetingIndex].groupId = select.value || null;
-        ensureModel(character);
-        queueRefresh();
-    });
-    return select;
-}
-
-function refreshGreetingEditor(character, model) {
-    const popup = document.querySelector('.alternate_grettings');
+function refreshEditor(char, data) {
+    const popup = greetingPopup();
     const list = popup?.querySelector('.alternate_greetings_list');
     if (!popup || !list) return;
+    if (editorTarget !== list) {
+        editorObserver?.disconnect();
+        editorTarget = list;
+        editorObserver = new MutationObserver(mutations => {
+            const external = mutations.some(mutation => Array.from(mutation.addedNodes).concat(Array.from(mutation.removedNodes)).some(node => node.nodeType === 1 && !node.closest?.('[' + OWNED + ']')));
+            if (external) queue();
+        });
+        editorObserver.observe(list, { childList: true, subtree: true });
+    }
     popup.querySelectorAll('[' + OWNED + ']').forEach(element => element.remove());
 
     const toolbar = document.createElement('div');
-    toolbar.className = TOOLBAR;
+    toolbar.className = 'stplus-greeting-group-toolbar';
     toolbar.setAttribute(OWNED, '1');
     const label = document.createElement('span');
     label.className = 'stplus-greeting-group-toolbar-label';
@@ -158,93 +126,127 @@ function refreshGreetingEditor(character, model) {
     add.className = 'menu_button stplus-greeting-group-add';
     add.textContent = '+';
     add.title = 'Add greeting group';
-    add.addEventListener('click', () => {
-        addGroup(model, input.value, character);
+    const addGroup = () => {
+        const name = input.value.trim();
+        if (!name || data.groups.some(group => group.name.toLowerCase() === name.toLowerCase())) return;
+        data.groups.push({ id: 'group-' + fingerprint(name) + '-' + Date.now().toString(36), name });
         input.value = '';
-        queueRefresh();
+        persistSettings();
+        queue();
+    };
+    add.addEventListener('click', addGroup);
+    input.addEventListener('keydown', event => { if (event.key === 'Enter') addGroup(); });
+    const firstLabel = document.createElement('span');
+    firstLabel.className = 'stplus-greeting-group-toolbar-label';
+    firstLabel.textContent = 'First:';
+    const firstSelect = document.createElement('select');
+    firstSelect.className = 'stplus-greeting-group-select';
+    firstSelect.setAttribute(OWNED, '1');
+    firstSelect.setAttribute('aria-label', 'First greeting group');
+    const firstNone = document.createElement('option');
+    firstNone.value = '';
+    firstNone.textContent = 'Ungrouped';
+    firstSelect.append(firstNone);
+    data.groups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = group.name;
+        firstSelect.append(option);
     });
-    input.addEventListener('keydown', event => {
-        if (event.key === 'Enter') add.click();
+    firstSelect.value = data.greetings[0]?.groupId ?? '';
+    firstSelect.addEventListener('change', () => {
+        data.greetings[0].groupId = firstSelect.value || null;
+        persistSettings();
+        queue();
     });
-    toolbar.append(label, input, add);
+    toolbar.append(label, input, add, firstLabel, firstSelect);
     list.before(toolbar);
 
     popup.querySelectorAll('.alternate_greeting').forEach(block => {
-        const alternateIndex = Number(block.dataset.index);
-        if (!Number.isInteger(alternateIndex)) return;
-        const greetingIndex = alternateIndex + 1;
+        const index = Number(block.dataset.index) + 1;
+        if (!Number.isInteger(index)) return;
         const control = document.createElement('div');
         control.className = 'stplus-greeting-group-control';
         control.setAttribute(OWNED, '1');
-        control.append(buildGroupSelect(model, greetingIndex, character));
+        const select = document.createElement('select');
+        select.className = 'stplus-greeting-group-select';
+        select.setAttribute(OWNED, '1');
+        select.setAttribute('aria-label', 'Greeting ' + index + ' group');
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'Ungrouped';
+        select.append(none);
+        data.groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = group.name;
+            select.append(option);
+        });
+        select.value = data.greetings[index]?.groupId ?? '';
+        select.addEventListener('change', () => {
+            data.greetings[index].groupId = select.value || null;
+            persistSettings();
+            queue();
+        });
+        control.append(select);
         block.prepend(control);
     });
 }
 
-function refreshChatBadge(model) {
+function refreshChat(data) {
     document.querySelectorAll('#chat .mes [' + OWNED + ']').forEach(element => element.remove());
-    const group = groupFor(model, 0);
+    const group = groupFor(data, 0);
     const first = document.querySelector('#chat .mes[mesid="0"], #chat .mes[data-mesid="0"]');
     const name = first?.querySelector('.ch_name');
-    if (group && name) name.append(makeBadge('Greeting · ' + group.name));
+    if (group && name) name.append(badge('Greeting · ' + group.name));
 }
 
-function refreshSwipePicker(model) {
+function refreshPicker(data) {
     document.querySelectorAll('.swipe_picker_popup [' + OWNED + ']').forEach(element => element.remove());
     const popup = document.querySelector('.swipe_picker_popup');
     if (!popup) return;
     const messageId = popup.closest('.mes')?.getAttribute('mesid') ?? popup.dataset.mesid;
     if (messageId !== null && messageId !== undefined && messageId !== '0') return;
     popup.querySelectorAll('.swipe_picker_block').forEach((block, index) => {
-        const group = groupFor(model, index);
-        if (group) block.append(makeBadge(group.name));
+        const group = groupFor(data, index);
+        if (group) block.append(badge(group.name));
     });
 }
 
-function refreshTree(model) {
+function refreshTree(data) {
     const tree = document.querySelector('#stplus-branching-chats-window');
     if (!tree) return;
     tree.querySelectorAll('[' + OWNED + ']').forEach(element => element.remove());
     tree.querySelectorAll('button.stplus-branching-node[data-source-index="0"]').forEach(button => {
-        const swipeIndex = Number(button.dataset.swipeIndex);
-        const group = groupFor(model, Number.isInteger(swipeIndex) ? swipeIndex : 0);
-        if (!group) return;
-        button.append(makeBadge(group.name, true));
-        button.setAttribute('aria-label', (button.getAttribute('aria-label') ?? 'Greeting') + ' · ' + group.name);
+        const index = Number(button.dataset.swipeIndex);
+        const group = groupFor(data, Number.isInteger(index) ? index : 0);
+        if (group) button.append(badge(group.name, true));
     });
 }
 
-function doRefresh() {
-    refreshQueued = false;
-    if (refreshing) return;
-    refreshing = true;
+function refresh() {
+    queued = false;
     try {
-        if (!enabled()) {
-            removeOwned();
-            return;
-        }
-        const character = currentCharacter();
-        if (!character) return;
-        const model = ensureModel(character);
-        refreshGreetingEditor(character, model);
-        refreshChatBadge(model);
-        refreshSwipePicker(model);
-        refreshTree(model);
-    } finally {
-        refreshing = false;
+    if (settings?.greetingGroupsEnabled === false) {
+        document.querySelectorAll('[' + OWNED + ']').forEach(element => element.remove());
+        return;
+    }
+    const char = character();
+    if (!char) return;
+    const data = model(char);
+    refreshEditor(char, data);
+    refreshChat(data);
+    refreshPicker(data);
+    refreshTree(data);
+    } catch (error) {
+        console.error('[SillyTavernPlus] Greeting groups refresh failed:', error);
     }
 }
 
-function queueRefresh() {
-    if (refreshQueued) return;
-    refreshQueued = true;
-    setTimeout(doRefresh, 0);
-}
-
-function relevantMutation(mutation) {
-    const target = mutation.target?.nodeType === 1 ? mutation.target : mutation.target?.parentElement;
-    if (!target) return true;
-    return !target.closest?.('[' + OWNED + ']');
+function queue() {
+    if (queued) return;
+    queued = true;
+    setTimeout(refresh, 0);
 }
 
 const api = {
@@ -253,28 +255,29 @@ const api = {
         settings = nextSettings;
         if (!observer && document.body && globalThis.MutationObserver) {
             observer = new MutationObserver(mutations => {
-                if (mutations.some(relevantMutation)) queueRefresh();
+                const external = mutations.some(mutation => Array.from(mutation.addedNodes).concat(Array.from(mutation.removedNodes)).some(node => node.nodeType === 1 && !node.closest?.('[' + OWNED + ']')));
+                if (external) queue();
             });
             observer.observe(document.body, { childList: true, subtree: true });
         }
-        const events = context?.eventSource;
-        const eventTypes = context?.event_types ?? {};
-        for (const name of ['CHAT_CHANGED', 'CHAT_CREATED', 'CHAT_LOADED', 'MESSAGE_SWIPED', 'MESSAGE_RECEIVED', 'MESSAGE_UPDATED', 'GENERATION_ENDED']) {
-            const type = eventTypes[name];
-            if (type && events?.on) events.on(type, queueRefresh);
+        if (!poller) {
+            poller = setInterval(() => {
+                const popup = greetingPopup();
+                if (popup?.querySelector('.alternate_greeting') && !popup.querySelector('.stplus-greeting-group-control')) queue();
+            }, 300);
         }
-        queueRefresh();
+        const events = context?.eventSource;
+        const types = context?.event_types ?? {};
+        ['CHAT_CHANGED', 'CHAT_CREATED', 'CHAT_LOADED', 'MESSAGE_SWIPED', 'MESSAGE_RECEIVED', 'MESSAGE_UPDATED', 'GENERATION_ENDED']
+            .forEach(name => { if (types[name] && events?.on) events.on(types[name], queue); });
+        queue();
     },
-    refresh: queueRefresh,
+    refresh: queue,
     onSettingsChanged(nextSettings) {
         settings = nextSettings;
-        queueRefresh();
+        queue();
     },
     fingerprint,
-    getGreetingInfo(character) {
-        const model = ensureModel(character, false);
-        return greetingTexts(character).map((text, index) => ({ index, text, group: groupFor(model, index) }));
-    },
 };
 
 export default api;
