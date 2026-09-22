@@ -7,6 +7,7 @@ let observer = null;
 let editorObserver = null;
 let editorTarget = null;
 let poller = null;
+let activeCharacter = null;
 
 function persistSettings() {
     if (typeof globalThis.saveSettingsDebounced === 'function') globalThis.saveSettingsDebounced();
@@ -26,18 +27,18 @@ function character() {
     const characters = Array.isArray(ctx.characters) ? ctx.characters : [];
     const rawId = ctx.this_chid ?? ctx.characterId;
     const id = rawId === undefined || rawId === null || rawId === '' ? null : Number(rawId);
-    if (id !== null && Number.isInteger(id) && characters[id]) return characters[id];
+    if (id !== null && Number.isInteger(id) && characters[id]) return activeCharacter = characters[id];
     const activeName = ctx.name2 ?? ctx.name1 ?? document.querySelector('#character_name_pole')?.value;
     if (activeName) {
         const match = characters.find(item => item?.name === activeName);
-        if (match) return match;
+        if (match) return activeCharacter = match;
         const first = document.querySelector('textarea.alternate_greeting_text:not([id])')?.value ?? '';
         const alternates = Array.from(document.querySelectorAll('textarea.alternate_greeting_text[id^="alternate_greeting_"]')).map(item => item.value);
         if (first || alternates.length) {
-            return { name: activeName, avatar: 'dom-' + activeName, first_mes: first, alternate_greetings: alternates };
+            return activeCharacter = { name: activeName, avatar: 'dom-' + activeName, first_mes: first, alternate_greetings: alternates };
         }
     }
-    return ctx.character && typeof ctx.character === 'object' ? ctx.character : null;
+    return ctx.character && typeof ctx.character === 'object' ? activeCharacter = ctx.character : activeCharacter;
 }
 
 function texts(char) {
@@ -203,7 +204,8 @@ function refreshChat(data) {
 
 function refreshPicker(data) {
     document.querySelectorAll('.swipe_picker_popup [' + OWNED + ']').forEach(element => element.remove());
-    const popup = document.querySelector('.swipe_picker_popup');
+    const popup = Array.from(document.querySelectorAll('.swipe_picker_popup'))
+        .sort((left, right) => right.querySelectorAll('.swipe_picker_block').length - left.querySelectorAll('.swipe_picker_block').length)[0];
     if (!popup) return;
     const messageId = popup.closest('.mes')?.getAttribute('mesid') ?? popup.dataset.mesid;
     if (messageId !== null && messageId !== undefined && messageId !== '0') return;
@@ -264,6 +266,17 @@ const api = {
             poller = setInterval(() => {
                 const popup = greetingPopup();
                 if (popup?.querySelector('.alternate_greeting') && !popup.querySelector('.stplus-greeting-group-control')) queue();
+                const picker = Array.from(document.querySelectorAll('.swipe_picker_popup'))
+                    .sort((left, right) => right.querySelectorAll('.swipe_picker_block').length - left.querySelectorAll('.swipe_picker_block').length)[0];
+                if (picker?.querySelector('.swipe_picker_block') && !picker.querySelector('[' + OWNED + ']')) {
+                    const char = character();
+                    if (char) {
+                        const data = model(char, false);
+                        const group = groupFor(data, 0);
+                        const firstBlock = picker.querySelector('.swipe_picker_block');
+                        if (group && firstBlock) firstBlock.append(badge(group.name));
+                    }
+                }
             }, 300);
         }
         const events = context?.eventSource;
