@@ -19,7 +19,8 @@ function enabled() {
 function currentCharacter() {
     const ctx = context ?? globalThis.SillyTavern?.getContext?.() ?? {};
     const characters = Array.isArray(ctx.characters) ? ctx.characters : [];
-    const id = Number.isInteger(ctx.this_chid) ? ctx.this_chid : Number.isInteger(ctx.characterId) ? ctx.characterId : null;
+    const rawId = ctx.this_chid ?? ctx.characterId;
+    const id = rawId === undefined || rawId === null || rawId === '' ? null : Number(rawId);
     if (id !== null && characters[id]) return characters[id];
     if (ctx.character && typeof ctx.character === 'object') return ctx.character;
     return null;
