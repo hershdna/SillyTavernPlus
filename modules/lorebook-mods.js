@@ -43,6 +43,7 @@ function applyWorldWindowState(panel) {
     panel.style.setProperty('height', `${height}px`, 'important');
     panel.style.setProperty('left', `${left}px`, 'important');
     panel.style.setProperty('top', `${top}px`, 'important');
+    panel._stplusSyncWorldResizeHandles?.();
 }
 
 function closeFloatingWorlds() {
@@ -77,7 +78,23 @@ function addWorldWindowResizeHandles(panel) {
         ['se', 'bottom right'],
     ];
     let resizeState = null;
+    const handleElements = [];
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+    // World Info is itself the scroll container. Absolute children otherwise
+    // move with the scrolled content, putting the resize handles away from the
+    // visible panel corners. Keep their positions in the panel's viewport,
+    // while still leaving them inside the panel so they move with the window.
+    const syncHandlePositions = () => {
+        const scrollTop = panel.scrollTop;
+        const handleSize = handleElements[0]?.offsetHeight || 14;
+        const bottomTop = scrollTop + Math.max(0, panel.clientHeight - handleSize);
+        handleElements.forEach((handle) => {
+            const isBottom = handle.dataset.corner?.includes('s');
+            handle.style.top = `${Math.round(isBottom ? bottomTop : scrollTop)}px`;
+            handle.style.bottom = 'auto';
+        });
+    };
 
     const matchesPointer = (event) => {
         if (!resizeState) return false;
@@ -120,6 +137,7 @@ function addWorldWindowResizeHandles(panel) {
         panel.style.setProperty('top', `${Math.round(top)}px`, 'important');
         panel.style.setProperty('width', `${Math.round(width)}px`, 'important');
         panel.style.setProperty('height', `${Math.round(height)}px`, 'important');
+        syncHandlePositions();
     };
 
     corners.forEach(([corner, label]) => {
@@ -165,7 +183,12 @@ function addWorldWindowResizeHandles(panel) {
         handle.addEventListener('pointercancel', stopResizing);
         handle.addEventListener('lostpointercapture', stopResizing);
         panel.appendChild(handle);
+        handleElements.push(handle);
     });
+
+    panel.addEventListener('scroll', syncHandlePositions, { passive: true });
+    panel._stplusSyncWorldResizeHandles = syncHandlePositions;
+    syncHandlePositions();
 
     const resizeWithMouse = (event) => {
         if (resizeState?.pointerId === null) resize(event);
@@ -190,6 +213,8 @@ function addWorldWindowResizeHandles(panel) {
         document.removeEventListener('pointermove', resizeWithPointer);
         document.removeEventListener('pointerup', stopPointerResize);
         document.removeEventListener('pointercancel', stopPointerResize);
+        panel.removeEventListener('scroll', syncHandlePositions);
+        if (panel._stplusSyncWorldResizeHandles === syncHandlePositions) delete panel._stplusSyncWorldResizeHandles;
     };
 }
 
@@ -386,4 +411,3 @@ export function initialize(stContext, stSettings) {
 }
 
 export { refresh };
-
