@@ -117,10 +117,46 @@ function normalizeMappingText(text) {
     let originalOffset = 0;
     let normalizedOffset = 0;
 
-    for (const character of text) {
+    const decodeEntity = (entity) => {
+        const named = {
+            '&amp;': '&',
+            '&lt;': '<',
+            '&gt;': '>',
+            '&quot;': '"',
+            '&#39;': "'",
+            '&apos;': "'",
+            '&nbsp;': ' ',
+        };
+        if (named[entity]) return named[entity];
+        const decimal = entity.match(/^&#(\d+);$/);
+        const hexadecimal = entity.match(/^&#x([\da-f]+);$/i);
+        const codePoint = decimal ? Number(decimal[1]) : hexadecimal ? Number.parseInt(hexadecimal[1], 16) : null;
+        if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return null;
+        try {
+            return String.fromCodePoint(codePoint);
+        } catch {
+            return null;
+        }
+    };
+
+    while (originalOffset < text.length) {
         const originalStart = originalOffset;
-        const originalEnd = originalOffset + character.length;
-        const replacement = character === '…' ? '...' : character === '\u00a0' ? ' ' : character;
+        let originalEnd = originalOffset + 1;
+        let replacement = text[originalOffset];
+        if (replacement === '&') {
+            const entityEnd = text.indexOf(';', originalOffset + 1);
+            if (entityEnd !== -1 && entityEnd - originalOffset <= 12) {
+                const decoded = decodeEntity(text.slice(originalOffset, entityEnd + 1));
+                if (decoded !== null) {
+                    originalEnd = entityEnd + 1;
+                    replacement = decoded;
+                }
+            }
+        }
+        if (originalEnd === originalStart + 1) {
+            const character = text.slice(originalStart, originalEnd);
+            replacement = character === '…' ? '...' : character === '\u00a0' ? ' ' : character;
+        }
         const replacementUnits = replacement.split('');
 
         for (let offset = originalStart; offset < originalEnd; offset++) {
@@ -135,6 +171,7 @@ function normalizeMappingText(text) {
         originalOffset = originalEnd;
         normalizedOffset += replacementUnits.length;
     }
+    originalToNormalized[text.length] = normalizedOffset;
 
     return {
         text: normalizedUnits.join(''),
@@ -229,6 +266,21 @@ function escapeInsertedText(text) {
         .replaceAll('>', '&gt;');
 }
 
+function looksLikeSourceMarkup(text) {
+    if (typeof text !== 'string' || !text.includes('<')) return false;
+    return /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/i.test(text);
+}
+
+function getInsertedSourceText(edit, text) {
+    // A pasted HTML/CSS block is already the source representation the chat
+    // formatter should receive. Keep ordinary typed angle brackets escaped so
+    // visible text editing remains safe, while allowing explicit markup to be
+    // applied when the user pastes or inserts a complete HTML block.
+    return edit?.allowMarkupPaste || looksLikeSourceMarkup(text)
+        ? text
+        : escapeInsertedText(text);
+}
+
 function applyVisibleTextEdit(edit, currentRenderedText) {
     if (currentRenderedText === edit.sourceMap.renderedText) return edit.originalSource;
     if (!edit.sourceMap.complete) {
@@ -246,11 +298,20 @@ function applyVisibleTextEdit(edit, currentRenderedText) {
                 ? segment.sourceOffsets[Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart]
                 : segment.sourceStart + Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart,
         }));
-    const insertedText = escapeInsertedText(hunk.insertedText);
+    const insertedText = getInsertedSourceText(edit, hunk.insertedText);
 
     if (!ranges.length) {
         const sourceBoundary = getSourceBoundary(edit.sourceMap, hunk.renderedStart);
-        if (sourceBoundary === null) throw new Error('Could not locate the edit in the source text.');
+        if (sourceBoundary === null) {
+            // Empty/markup-only messages have no visible source segment to
+            // anchor against. A pasted source block is the entire replacement
+            // in that case; discard only the non-visible placeholder markup
+            // (for example an empty <hr>) rather than rejecting the edit.
+            if (edit.sourceMap.renderedText === '' && looksLikeSourceMarkup(hunk.insertedText)) {
+                return insertedText;
+            }
+            throw new Error('Could not locate the edit in the source text.');
+        }
         return edit.originalSource.slice(0, sourceBoundary) + insertedText + edit.originalSource.slice(sourceBoundary);
     }
 
@@ -491,7 +552,7 @@ function getSourceReplacementInfo(edit, currentRenderedText) {
                 ? segment.sourceOffsets[Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart]
                 : segment.sourceStart + Math.min(hunk.renderedEnd, segment.renderedEnd) - segment.renderedStart,
         }));
-    const insertedText = escapeInsertedText(hunk.insertedText);
+    const insertedText = getInsertedSourceText(edit, hunk.insertedText);
     const insertionSource = ranges.length
         ? ranges[0].start
         : getSourceBoundary(edit.sourceMap, hunk.renderedStart);
@@ -625,7 +686,9 @@ function bindEditorGuards(edit) {
     const editorListeners = [];
     const onPaste = (event) => {
         event.preventDefault();
-        insertPlainText(editor, event.clipboardData?.getData('text/plain') ?? '');
+        const pastedText = event.clipboardData?.getData('text/plain') ?? '';
+        if (looksLikeSourceMarkup(pastedText)) edit.allowMarkupPaste = true;
+        insertPlainText(editor, pastedText);
     };
     const onDrop = (event) => event.preventDefault();
     // Leave native beforeinput/keyboard formatting enabled. The formatted
@@ -1064,6 +1127,7 @@ function beginEdit(messageElement, messageText, event) {
             ? String(message.extra.display_text ?? '')
             : String(message.mes ?? ''),
         sourceKey: Object.prototype.hasOwnProperty.call(message.extra ?? {}, 'display_text') ? 'display_text' : 'mes',
+        allowMarkupPaste: false,
         originalContentEditable: messageText.getAttribute('contenteditable'),
         originalSpellcheck: messageText.getAttribute('spellcheck'),
         originalRole: messageText.getAttribute('role'),
