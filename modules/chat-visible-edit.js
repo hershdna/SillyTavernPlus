@@ -268,6 +268,99 @@ function applyVisibleTextEdit(edit, currentRenderedText) {
     return result + edit.originalSource.slice(sourceCursor);
 }
 
+const EMPTY_HTML_VOID_TAGS = new Set([
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+    'link', 'meta', 'param', 'source', 'track', 'wbr',
+]);
+
+const VISIBLE_HTML_VOID_TAGS = new Set([
+    'canvas', 'embed', 'iframe', 'img', 'object', 'video', 'audio', 'svg',
+]);
+
+/**
+ * Remove paired HTML elements whose visible contents were completely deleted
+ * during a formatted edit. Keep the original source spelling everywhere else
+ * instead of round-tripping it through a DOM serializer.
+ */
+function removeEmptyHtmlBlocks(source) {
+    if (typeof source !== 'string' || !source.includes('<')) return source;
+
+    const root = { start: 0, end: source.length, tagName: null, children: [] };
+    const stack = [root];
+    const tokenPattern = /<!--[\s\S]*?-->|<[^>]*>|[^<]+/g;
+    let match;
+
+    while ((match = tokenPattern.exec(source))) {
+        const token = match[0];
+        if (!token.startsWith('<')) {
+            stack.at(-1).children.push({ type: 'text', value: token });
+            continue;
+        }
+        if (token.startsWith('<!--') || /^<!|^<\?/.test(token)) {
+            stack.at(-1).children.push({ type: 'comment' });
+            continue;
+        }
+
+        const closing = /^<\s*\//.test(token);
+        const nameMatch = token.match(/^<\s*\/?\s*([A-Za-z][\w:-]*)/);
+        if (!nameMatch) {
+            stack.at(-1).children.push({ type: 'unknown', visible: true });
+            continue;
+        }
+        const tagName = nameMatch[1].toLowerCase();
+        if (closing) {
+            const openIndex = stack.length - 1;
+            if (openIndex > 0 && stack[openIndex].tagName === tagName) {
+                const node = stack.pop();
+                node.end = match.index + token.length;
+                continue;
+            }
+            stack.at(-1).children.push({ type: 'unknown', visible: true });
+            continue;
+        }
+
+        const node = {
+            type: 'element',
+            tagName,
+            start: match.index,
+            end: null,
+            children: [],
+            void: EMPTY_HTML_VOID_TAGS.has(tagName) || /\/\s*>$/.test(token),
+        };
+        stack.at(-1).children.push(node);
+        if (!node.void) stack.push(node);
+    }
+
+    // Unclosed elements are not safe to remove: retain their original source.
+    for (const node of stack.slice(1)) node.end = null;
+
+    const hasVisibleContent = (node) => {
+        if (node.type === 'text') return /\S/.test(node.value);
+        if (node.type !== 'element') return node.visible === true;
+        if (node.void) return VISIBLE_HTML_VOID_TAGS.has(node.tagName);
+        return node.children.some(hasVisibleContent);
+    };
+
+    const removals = [];
+    const collectEmptyBlocks = (node) => {
+        if (node.type !== 'element' || node.end === null) return;
+        node.children.forEach(collectEmptyBlocks);
+        if (!node.void && !hasVisibleContent(node)) removals.push([node.start, node.end]);
+    };
+    root.children.forEach(collectEmptyBlocks);
+    if (!removals.length) return source;
+
+    // Nested empty elements are covered by their outermost empty block. Only
+    // remove that outer interval so source offsets remain valid while applying
+    // the removals from right to left.
+    const outermostRemovals = removals.filter(([start, end]) => !removals.some(([outerStart, outerEnd]) =>
+        (outerStart < start && outerEnd >= end)));
+    outermostRemovals.sort((left, right) => right[0] - left[0]);
+    let result = source;
+    for (const [start, end] of outermostRemovals) result = result.slice(0, start) + result.slice(end);
+    return result;
+}
+
 function getFormattingMarks(element) {
     const marks = new Set();
     for (let current = element.parentElement; current; current = current.parentElement) {
@@ -926,6 +1019,7 @@ async function confirmEdit() {
         text = applyVisibleTextEdit(edit, collectRenderedText(edit.messageText));
         edit.currentFormattedView = collectFormattedText(edit.messageText);
         text = applyAddedFormatting(edit, edit.currentFormattedView.text, text);
+        text = removeEmptyHtmlBlocks(text);
     } catch (error) {
         console.warn('[SillyTavernPlus] Could not preserve message formatting while saving.', error);
         removeEditUi(edit, true);
