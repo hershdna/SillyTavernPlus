@@ -82,6 +82,21 @@ function groupFor(data, index) {
     return data.groups.find(group => group.id === id) ?? null;
 }
 
+function activeGreetingIndex() {
+    const liveContext = context ?? globalThis.SillyTavern?.getContext?.() ?? {};
+    const chat = Array.isArray(liveContext?.chat) ? liveContext.chat : [];
+    const firstMessage = chat[0];
+    if (!firstMessage) return 0;
+    const swipes = Array.isArray(firstMessage.swipes) ? firstMessage.swipes : [];
+    const swipeId = Number.parseInt(firstMessage.swipe_id, 10);
+    if (Number.isInteger(swipeId) && swipeId >= 0 && swipeId < swipes.length) return swipeId;
+    if (swipes.length > 0 && typeof firstMessage.mes === 'string') {
+        const matchingIndex = swipes.findIndex(value => String(value ?? '') === firstMessage.mes);
+        if (matchingIndex >= 0) return matchingIndex;
+    }
+    return 0;
+}
+
 function badge(text, tree = false) {
     const element = document.createElement('span');
     element.className = tree ? BADGE + ' stplus-greeting-group-tree-badge' : BADGE;
@@ -196,7 +211,7 @@ function refreshEditor(char, data) {
 
 function refreshChat(data) {
     document.querySelectorAll('#chat .mes [' + OWNED + ']').forEach(element => element.remove());
-    const group = groupFor(data, 0);
+    const group = groupFor(data, activeGreetingIndex());
     const first = document.querySelector('#chat .mes[mesid="0"], #chat .mes[data-mesid="0"]');
     const name = first?.querySelector('.ch_name');
     if (group && name) name.append(badge('Greeting · ' + group.name));
