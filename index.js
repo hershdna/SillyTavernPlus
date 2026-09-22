@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.152';
+    const MODULE_CACHE_VERSION = '0.5.153';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -42,12 +42,13 @@
                 loadModule('movingui-window-manager'),
             ]);
             const settings = settingsStore.initializeSettings(context);
-            const stplusGreetingGroupsModule = await loadModule('greeting-groups');
-            const stplusGreetingGroups = stplusGreetingGroupsModule.default ?? stplusGreetingGroupsModule;
-            stplusGreetingGroups.initialize(context, settings);
+            // greeting-groups is a default-exported module, unlike the other
+            // feature modules in this list. Normalize its namespace here so a
+            // fresh SillyTavern load initializes the complete extension.
+            const greetingGroupsApi = greetingGroups.default ?? greetingGroups;
 
             greetingMods.initialize(settings);
-            greetingGroups.initialize(context, settings);
+            greetingGroupsApi.initialize(context, settings);
             lorebookMods.initialize(context, settings);
             branchingChats.initialize(context, settings);
             chatVisibleEdit.initialize(context, settings);
@@ -59,7 +60,7 @@
             movingUiWindowManager.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
-                onGreetingGroupsChanged: () => greetingGroups.refresh(),
+                onGreetingGroupsChanged: () => greetingGroupsApi.refresh(),
                 onBranchingChatsChanged: () => branchingChats.refresh(),
                 onFormattedMessageEditChanged: () => chatVisibleEdit.refresh(),
                 onPersonaCombinationChanged: () => personaCombination.refresh(),
@@ -77,7 +78,7 @@
             const scan = () => {
                 scanScheduled = false;
                 greetingMods.refresh();
-                greetingGroups.refresh();
+                greetingGroupsApi.refresh();
                 lorebookMods.refresh();
                 // Branching chats owns its own chat lifecycle and graph
                 // synchronization. Do not refresh it for unrelated UI
