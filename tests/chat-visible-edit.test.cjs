@@ -8,7 +8,7 @@ function loadApi() {
     const sandbox = vm.createContext({ console, structuredClone, window: {}, document: {} });
     const source = fs.readFileSync(path.join(__dirname, '../modules/chat-visible-edit.js'), 'utf8')
         .replace(/^export /gm, '');
-    vm.runInContext(source + '\nthis.api = { syncMessageSwipe, applyFormattingMarkup, getAddedFormattingRanges, getSourceBoundary };', sandbox);
+    vm.runInContext(source + '\nthis.api = { syncMessageSwipe, applyFormattingMarkup, getAddedFormattingRanges, getSourceBoundary, removeEmptyHtmlBlocks };', sandbox);
     return sandbox.api;
 }
 
@@ -80,4 +80,30 @@ test('source boundaries prefer the next text segment for formatting starts', () 
 
     assert.equal(api.getSourceBoundary(sourceMap, 5), 7);
     assert.equal(api.getSourceBoundary(sourceMap, 5, true), 5);
+});
+
+test('formatted deletion removes empty HTML/CSS wrappers', () => {
+    const api = loadApi();
+
+    assert.equal(
+        api.removeEmptyHtmlBlocks('Before <span style="color: red"><strong></strong></span> after'),
+        'Before  after',
+    );
+    assert.equal(
+        api.removeEmptyHtmlBlocks('<div><span style="color: red"><!-- hidden --></span></div>Visible'),
+        'Visible',
+    );
+});
+
+test('empty-block cleanup preserves meaningful visible elements and text', () => {
+    const api = loadApi();
+
+    assert.equal(
+        api.removeEmptyHtmlBlocks('<span style="color: red"><img src="kept.png"></span>'),
+        '<span style="color: red"><img src="kept.png"></span>',
+    );
+    assert.equal(
+        api.removeEmptyHtmlBlocks('<span style="color: red">Visible</span>'),
+        '<span style="color: red">Visible</span>',
+    );
 });
