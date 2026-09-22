@@ -165,6 +165,82 @@ function updateGroupSelect(select, groups, selected) {
     select.value = groups.some(group => group.id === value) ? value : '';
 }
 
+function refreshGroupManager(toolbar, data, char) {
+    let manager = toolbar.querySelector('.stplus-greeting-group-list');
+    if (!manager) {
+        manager = document.createElement('div');
+        manager.className = 'stplus-greeting-group-list';
+        manager.setAttribute(OWNED, '1');
+        toolbar.append(manager);
+    }
+    manager.replaceChildren();
+    data.groups.forEach(group => {
+        const item = document.createElement('span');
+        item.className = 'stplus-greeting-group-item';
+        const name = document.createElement('span');
+        name.textContent = group.name;
+        name.title = group.name;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'menu_button stplus-greeting-group-remove';
+        remove.textContent = '\u00d7';
+        remove.title = 'Delete greeting group ' + group.name;
+        remove.setAttribute('aria-label', 'Delete greeting group ' + group.name);
+        // SillyTavern's popup/window handlers listen high in the event path;
+        // keep this small control from being treated as a request to close or
+        // refresh the surrounding alternate-greeting dialog.
+        ['pointerdown', 'mousedown', 'click'].forEach(type => {
+            remove.addEventListener(type, event => event.stopPropagation());
+        });
+        const activateDelete = () => {
+            if (remove.dataset.confirming !== '1') {
+                remove.dataset.confirming = '1';
+                remove.textContent = '?';
+                remove.classList.add('stplus-greeting-group-remove-confirm');
+                remove.title = 'Click again to delete greeting group ' + group.name;
+                remove.setAttribute('aria-label', 'Confirm delete greeting group ' + group.name);
+                setTimeout(() => {
+                    if (!remove.isConnected || remove.dataset.confirming !== '1') return;
+                    remove.dataset.confirming = '0';
+                    remove.textContent = '\u00d7';
+                    remove.classList.remove('stplus-greeting-group-remove-confirm');
+                    remove.title = 'Delete greeting group ' + group.name;
+                    remove.setAttribute('aria-label', 'Delete greeting group ' + group.name);
+                }, 3000);
+                return;
+            }
+            const index = data.groups.findIndex(candidate => candidate.id === group.id);
+            if (index < 0) return;
+            data.groups.splice(index, 1);
+            data.greetings.forEach(greeting => {
+                if (greeting.groupId === group.id) greeting.groupId = null;
+            });
+            const charKey = key(char);
+            runtimeGroupsByCharacter.set(charKey, data.groups);
+            const stored = settings?.greetingGroupsByCharacter?.[charKey];
+            if (stored && stored !== data) {
+                stored.groups = data.groups;
+                stored.greetings = data.greetings;
+            }
+            persistSettings();
+            queue();
+        };
+        // Use pointerdown so the action is not swallowed by the dialog's
+        // click-to-focus/close handlers. Keyboard activation remains supported.
+        remove.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            activateDelete();
+        });
+        remove.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            activateDelete();
+        });
+        item.append(name, remove);
+        manager.append(item);
+    });
+}
+
 function refreshEditor(char, data) {
     const popup = greetingPopup();
     const list = popup?.querySelector('.alternate_greetings_list');
@@ -192,6 +268,7 @@ function refreshEditor(char, data) {
             const select = block.querySelector('.stplus-greeting-group-select');
             updateGroupSelect(select, data.groups, data.greetings[index + 1]?.groupId ?? '');
         });
+        refreshGroupManager(existingToolbar, data, char);
         return;
     }
     popup.querySelectorAll('[' + OWNED + ']').forEach(element => element.remove());
@@ -253,6 +330,7 @@ function refreshEditor(char, data) {
         queue();
     });
     toolbar.append(label, input, add, firstLabel, firstSelect);
+    refreshGroupManager(toolbar, data, char);
     list.before(toolbar);
 
     popup.querySelectorAll('.alternate_greeting').forEach(block => {

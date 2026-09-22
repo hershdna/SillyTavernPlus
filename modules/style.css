@@ -1,0 +1,1303 @@
+.stplus-alt-greeting-reorder .stplus-alt-position-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    width: 100%;
+    margin: 6px 0;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.stplus-alt-position-label {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.stplus-alt-position-input {
+    width: 4.4em;
+    min-width: 4.4em;
+    padding: 2px 4px;
+    text-align: center;
+}
+
+.stplus-alt-position-apply {
+    padding: 2px 6px;
+    font-size: 0.85em;
+}
+
+.stplus-alt-reorder-status {
+    display: block;
+    min-height: 1.2em;
+    margin: 4px 0;
+    color: var(--SmartThemeQuoteColor, #9ecbff);
+}
+
+.stplus-alt-reorder-status.error {
+    color: var(--SmartThemeEmColor, #ff8a8a);
+}
+
+.stplus-greeting-group-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 6px 0;
+    padding: 4px 0;
+    border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.stplus-greeting-group-toolbar-label {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.stplus-greeting-group-new-name {
+    flex: 1 1 130px;
+    min-width: 110px;
+    padding: 2px 5px;
+}
+
+.stplus-greeting-group-add {
+    padding: 3px 7px;
+}
+
+.stplus-greeting-group-select {
+    display: block;
+    width: min(100%, 220px);
+    margin: 4px 0;
+    padding: 2px 5px;
+    font-size: 0.85em;
+}
+
+.stplus-greeting-group-list {
+    display: flex;
+    flex: 1 1 100%;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.stplus-greeting-group-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 220px;
+    padding: 2px 4px 2px 7px;
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 4px;
+    font-size: 0.82em;
+}
+
+.stplus-greeting-group-item > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stplus-greeting-group-remove {
+    min-width: 1.25em;
+    padding: 0 3px;
+    line-height: 1.15;
+}
+
+.stplus-greeting-group-remove-confirm {
+    color: var(--SmartThemeEmColor, #ffb0b0);
+}
+
+.stplus-greeting-group-badge {
+    display: inline-block;
+    margin-left: 7px;
+    padding: 1px 5px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #9ecbff) 60%, transparent);
+    border-radius: 4px;
+    color: var(--SmartThemeQuoteColor, #9ecbff);
+    font-size: 0.78em;
+    line-height: 1.25;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.stplus-greeting-group-tree-badge {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 50%;
+    max-width: 104px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transform: translateX(-50%);
+    pointer-events: none;
+    background: var(--SmartThemeBlurTintColor, #303238);
+}
+
+.stplus-branching-node {
+    overflow: visible;
+}
+
+/* SillyTavernPlus module manager toolbar icon */
+.stplus-module-manager-button {
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    flex-flow: row;
+    width: 100%;
+    min-width: 38px;
+    height: 42px;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.stplus-module-manager-button .stplus-settings-icon {
+    display: inline-block;
+    cursor: pointer;
+    font-size: var(--topBarIconSize, calc(var(--mainFontSize, 16px) * 2));
+    padding: 1px 3px;
+    opacity: 0.3;
+    transition: opacity var(--animation-duration-2x, 250ms);
+}
+
+.stplus-module-manager-button:hover .stplus-settings-icon,
+.stplus-module-manager-button:focus-visible .stplus-settings-icon {
+    opacity: 1;
+}
+
+#WorldInfo.stplus-floating-worlds {
+    position: fixed !important;
+    z-index: 4005 !important;
+    display: block !important;
+    visibility: visible !important;
+    box-sizing: border-box;
+    width: min(860px, calc(100vw - 48px)) !important;
+    height: min(720px, calc(100vh - 48px)) !important;
+    min-width: 320px !important;
+    min-height: 240px !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: auto !important;
+    resize: none !important;
+    transform: none !important;
+    margin: 0 !important;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-resize-handle {
+    position: absolute;
+    z-index: 3;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    pointer-events: auto !important;
+    touch-action: none;
+    user-select: none;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-resize-handle::after,
+.stplus-settings-window .stplus-settings-resize-handle::after {
+    position: absolute;
+    inset: 2px;
+    content: '';
+    border: 1px solid currentColor;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-resize-nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-resize-ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-resize-sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-resize-se {
+    right: 0;
+    bottom: 0;
+    cursor: nwse-resize;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-title-row {
+    position: relative;
+    cursor: move;
+    user-select: none;
+}
+
+#WorldInfo.stplus-floating-worlds .stplus-worlds-title-row > h3 {
+    padding-right: 76px;
+}
+
+.stplus-worlds-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+}
+
+.stplus-settings-window {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    top: 12vh;
+    left: 50%;
+    width: min(760px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    box-sizing: border-box;
+    overflow: auto;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: var(--SmartThemeBlurTintColor, #303238);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 6px;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 40%);
+    transform: translateX(-50%);
+    min-width: 280px;
+    min-height: 160px;
+    resize: none;
+}
+
+.stplus-settings-window .stplus-settings-resize-handle {
+    position: absolute;
+    z-index: 10001;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+}
+
+.stplus-settings-window .stplus-settings-resize-nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+}
+
+.stplus-settings-window .stplus-settings-resize-ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+}
+
+.stplus-settings-window .stplus-settings-resize-sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+}
+
+.stplus-settings-window .stplus-settings-resize-se {
+    right: 0;
+    bottom: 0;
+    cursor: nwse-resize;
+}
+
+/* Four-corner handles for every panel participating in MovingUI, including
+   windows supplied by third-party extensions. They are disabled with MovingUI
+   so the native window behavior remains untouched when MovingUI is off. */
+.stplus-movingui-resize-handle {
+    position: absolute;
+    z-index: 2002;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    color: var(--SmartThemeBodyColor, #eee);
+    opacity: 0.55;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+}
+
+body:not(.movingUI) .stplus-movingui-resize-handle {
+    display: none !important;
+}
+
+.stplus-movingui-resize-handle::after {
+    position: absolute;
+    inset: 2px;
+    content: '';
+    border: 1px solid currentColor;
+    pointer-events: none;
+}
+
+.stplus-movingui-resize-handle:hover {
+    opacity: 1;
+}
+
+.stplus-movingui-resize-nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+}
+
+.stplus-movingui-resize-ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+}
+
+.stplus-movingui-resize-sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+}
+
+.stplus-movingui-resize-se {
+    right: 0;
+    bottom: 0;
+    cursor: nwse-resize;
+}
+
+/* Keep ST+ headers positioned so the native-looking MovingUI grip sits beside
+   the close control without changing the native grip's appearance. */
+.stplus-movingui-header {
+    position: relative;
+}
+
+/* ST+ headers reserve the close button's space and place the native grip just
+   to its left. All other MovingUI styling comes from .drag-grabber. */
+.stplus-movingui-header .stplus-movingui-drag-handle {
+    right: 42px;
+}
+
+.stplus-settings-window.stplus-settings-window-open {
+    display: block;
+}
+
+.stplus-movingui-manager-window {
+    top: 16vh;
+    width: min(620px, calc(100vw - 24px));
+    max-height: min(620px, calc(100vh - 32px));
+    z-index: 10050 !important;
+}
+
+.stplus-movingui-window-manager-open {
+    display: flex;
+    flex-direction: column;
+}
+
+.stplus-movingui-manager-body {
+    min-height: 120px;
+}
+
+.stplus-movingui-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stplus-movingui-manager-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 36px;
+    padding: 5px 6px 5px 10px;
+    background: var(--SmartThemeBlurTintColor, #202124);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+}
+
+.stplus-movingui-manager-window-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stplus-movingui-manager-reset {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+}
+
+.stplus-movingui-manager-empty {
+    margin: 8px 0 0;
+    opacity: 0.75;
+}
+
+.stplus-settings-window-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 5px 8px 5px 12px;
+    background: inherit;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-settings-action {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+}
+
+.stplus-settings-action-button {
+    width: 100%;
+    text-align: left;
+}
+
+.stplus-settings-window-header h3 {
+    margin: 0;
+    padding-right: 76px;
+}
+
+.stplus-settings-window-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+}
+
+.stplus-settings-window-body {
+    padding: 10px 12px 12px;
+    font-size: 0.88em;
+}
+
+.stplus-settings-window-body > p {
+    margin-top: 0;
+    margin-bottom: 8px;
+    opacity: 0.8;
+}
+
+.stplus-settings-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0 18px;
+    margin-top: 12px;
+}
+
+.stplus-settings-section-title {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 5px 0;
+    color: var(--SmartThemeQuoteColor, #9ecbff);
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+    font-size: 1em;
+}
+
+.stplus-settings-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    min-width: 0;
+    padding: 7px 0;
+    cursor: pointer;
+}
+
+.stplus-settings-option input {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.stplus-settings-option span {
+    display: flex;
+    flex-flow: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.stplus-settings-option small {
+    display: none;
+    opacity: 0.75;
+    line-height: 1.25;
+}
+
+.stplus-settings-option:hover small {
+    display: block;
+}
+
+.stplus-visible-editing .mes_block {
+    position: relative;
+}
+
+.stplus-visible-editing .mes_block > .ch_name {
+    position: relative;
+}
+
+.stplus-visible-editing .mes_block > .ch_name > .mes_buttons {
+    visibility: hidden;
+}
+
+.stplus-visible-editing .mes_text {
+    cursor: text;
+    outline: 1px solid var(--SmartThemeQuoteColor, #5fa9d8);
+    outline-offset: 3px;
+}
+
+.stplus-edit-mode-toggle {
+    cursor: pointer;
+    width: 34px;
+    min-width: 34px;
+    height: 24px;
+    padding: 0;
+    line-height: 24px;
+    text-align: center;
+    border: 1px solid #666;
+    border-radius: 4px;
+    font-family: var(--mainFontFamily, sans-serif);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #d0d0d0;
+    background: #242424;
+}
+
+.stplus-edit-mode-toggle[data-mode="vanilla"] {
+    border-color: #777;
+    color: #e0e0e0;
+    background: #303030;
+}
+
+.stplus-edit-mode-toggle[data-mode="formatted"] {
+    border-color: var(--SmartThemeQuoteColor, #5fa9d8);
+    color: #fff;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #5fa9d8) 35%, #202020);
+}
+
+.stplus-edit-mode-toggle:focus-visible {
+    outline: 1px solid var(--SmartThemeQuoteColor, #5fa9d8);
+    outline-offset: 2px;
+}
+
+.stplus-visible-edit-editor {
+    user-select: text;
+    /* Match the normal rendered message surface exactly. */
+    white-space: normal !important;
+}
+
+.stplus-visible-edit-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    flex: 0 0 auto;
+    gap: 4px;
+    margin: 6px 0;
+    position: static;
+    z-index: 2;
+}
+
+.stplus-visible-edit-action {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    line-height: 1;
+    margin: 0;
+}
+
+/* Native vanilla-edit controls are moved into the same row as formatted-edit
+ * controls, while retaining SillyTavern's original classes and handlers. */
+.stplus-native-edit-actions .menu_button {
+    opacity: 0.5;
+    padding: 0;
+    font-size: 1rem;
+    height: 2rem;
+    margin-top: 0;
+    margin-bottom: 0;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* SillyTavern keeps copy/delete/move/confirm/cancel in one .mes_edit_buttons
+ * container. Move that complete native group below thinking while preserving
+ * its original delegated handlers and button order. */
+.stplus-visible-edit-actions > .mes_edit_buttons.stplus-relocated-native-edit-buttons {
+    position: static !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    width: auto;
+    margin: 0;
+    visibility: visible !important;
+}
+
+/* The native message menu and edit controls share one relocated row below
+ * reasoning. Override the native absolute positioning only while relocated. */
+.stplus-visible-edit-actions > .mes_buttons {
+    position: static !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    width: auto;
+    /* Keep the relocated native controls and message menu together at the
+     * right edge instead of pushing this menu away from the native group. */
+    margin: 0;
+    visibility: visible !important;
+}
+
+.stplus-visible-edit-actions > .mes_buttons .menu_button {
+    position: static !important;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    margin: 0;
+    padding: 0;
+}
+
+.stplus-native-edit-actions .mes_edit_cancel {
+    background-color: var(--crimson70a, rgba(180, 30, 50, 0.7));
+}
+
+.stplus-native-edit-actions .mes_edit_done {
+    background-color: var(--okGreen70a, rgba(30, 160, 80, 0.7));
+}
+
+.stplus-native-edit-actions .menu_button:hover {
+    opacity: 1;
+}
+
+.stplus-wi-reasoning-setting {
+    flex: 0 0 100%;
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    box-sizing: border-box;
+    border-top: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-wi-reasoning-setting .checkbox_label {
+    gap: 6px;
+}
+
+.stplus-wi-reasoning-depth {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    padding-left: 24px;
+}
+
+.stplus-wi-reasoning-depth small {
+    opacity: 0.8;
+}
+
+#stplus-reasoning-scan-depth {
+    width: 5em;
+}
+
+@media (max-width: 560px) {
+    .stplus-settings-section {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stplus-branching-window {
+    position: fixed;
+    z-index: 10010;
+    top: 8vh;
+    left: 50%;
+    display: none;
+    width: min(900px, calc(100vw - 24px));
+    height: min(720px, calc(100vh - 48px));
+    min-width: 420px;
+    min-height: 360px;
+    box-sizing: border-box;
+    overflow: hidden;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: var(--SmartThemeBlurTintColor, #202124);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 45%);
+    transform: translateX(-50%);
+}
+
+.stplus-branching-window.stplus-branching-window-open {
+    display: flex;
+    flex-direction: column;
+}
+
+.stplus-branching-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 5px 8px 5px 12px;
+    background: inherit;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-branching-header h3 {
+    margin: 0;
+    padding-right: 76px;
+}
+
+.stplus-branching-status {
+    flex: 1 1 auto;
+    opacity: 0.7;
+}
+
+.stplus-branching-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 1.35em;
+    line-height: 1;
+}
+
+.stplus-branching-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-branching-search {
+    flex: 1 1 220px;
+    min-width: 150px;
+    padding: 7px 9px;
+    color: inherit;
+    background: var(--SmartThemeBlurTintColor, #111);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+}
+
+.stplus-branching-tree {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 160px;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    background: radial-gradient(circle at 50% 0, rgb(255 255 255 / 5%), transparent 65%);
+}
+
+.stplus-branching-tree-panning {
+    cursor: grabbing;
+}
+
+.stplus-branching-tree-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
+.stplus-branching-edge-layer,
+.stplus-branching-node-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.stplus-branching-edge-layer {
+    pointer-events: none;
+}
+
+.stplus-branching-edge {
+    stroke: var(--SmartThemeQuoteColor, #5fa9d8);
+    stroke-width: 1.5;
+    opacity: 0.55;
+    vector-effect: non-scaling-stroke;
+}
+
+.stplus-branching-node {
+    position: absolute;
+    user-select: none;
+    touch-action: manipulation;
+    pointer-events: auto;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: #171717;
+    border: 2px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 50%;
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.stplus-branching-node:hover {
+    box-shadow: 0 0 0 3px rgb(95 169 216 / 25%);
+    transform: translateY(-50%) scale(1.08);
+}
+
+.stplus-branching-node-active {
+    background: var(--SmartThemeQuoteColor, #f39c12);
+    border-color: var(--SmartThemeQuoteColor, #f39c12);
+    color: #111;
+}
+
+.stplus-branching-node-selected {
+    box-shadow: 0 0 0 3px var(--SmartThemeEmColor, #5fa9d8);
+    transform: translateY(-50%) scale(1.08);
+}
+
+.stplus-branching-node-active.stplus-branching-node-selected {
+    box-shadow: 0 0 0 3px var(--SmartThemeEmColor, #5fa9d8), 0 0 0 5px rgb(243 156 18 / 20%);
+}
+
+.stplus-branching-node-search-match:not(.stplus-branching-node-active) {
+    background: #315f7e;
+    border-color: #8ac7ed;
+    color: #fff;
+}
+
+.stplus-branching-preview {
+    flex: 0 0 auto;
+    max-height: 180px;
+    overflow: auto;
+    padding: 10px 12px;
+    background: rgb(255 255 255 / 4%);
+    border-top: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-branching-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+}
+
+.stplus-branching-preview-jump {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.stplus-branching-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 5px;
+}
+
+.stplus-branching-preview-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.stplus-branching-preview-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    opacity: 0.85;
+}
+
+.stplus-branching-toolbar-button {
+    /* Native toolbar items are one top-bar block wide. The empty semantic
+       button has no text intrinsic width, so keep the icon slot from
+       collapsing while preserving the native block size at every font scale. */
+    flex: 0 0 var(--topBarBlockSize, 46px) !important;
+    width: var(--topBarBlockSize, 46px) !important;
+    min-width: var(--topBarBlockSize, 46px) !important;
+    height: var(--topBarBlockSize, 46px) !important;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+.stplus-branching-toolbar-button .drawer-icon {
+    margin: 0;
+}
+
+/* Branch-aware swipes for messages before the end of the active path. Mirror
+   SillyTavern's native layout: the previous arrow sits above the left edge,
+   while the next arrow has its counter directly underneath it on the right. */
+.stplus-branch-swipe-controls {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 9999;
+    height: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin) + 25px);
+    pointer-events: none;
+}
+
+.stplus-branch-swipe-button {
+    position: absolute;
+    display: flex;
+    width: 25px;
+    height: 25px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: transparent;
+    border: 0;
+    opacity: 0.5;
+    cursor: pointer;
+    pointer-events: auto;
+    font-size: 20px;
+}
+
+.stplus-branch-swipe-left {
+    bottom: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin));
+    left: 0;
+}
+
+.stplus-branch-swipe-right {
+    right: 0;
+    bottom: calc(var(--swipeCounterHeight) + var(--swipeCounterMargin));
+}
+
+.stplus-branch-swipe-button:hover:not(:disabled),
+.stplus-branch-swipe-button:focus-visible {
+    opacity: 0.9;
+}
+
+.stplus-branch-swipe-button:disabled {
+    opacity: 0.15;
+    cursor: default;
+}
+
+.stplus-branch-swipe-counter {
+    position: absolute;
+    right: 0;
+    bottom: var(--swipeCounterMargin);
+    display: flex;
+    height: var(--swipeCounterHeight);
+    min-width: 40px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    color: var(--SmartThemeBodyColor, #eee);
+    opacity: 0.45;
+    font-family: var(--mainFontFamily);
+    font-size: 12px;
+    text-align: center;
+    pointer-events: none;
+}
+
+body[data-generating="true"] .stplus-branch-swipe-controls {
+    visibility: hidden;
+}
+
+.stplus-chat-history-window {
+    position: fixed;
+    z-index: 10009;
+    top: 8vh;
+    left: 50%;
+    display: none;
+    width: min(760px, calc(100vw - 24px));
+    /* Leave room for the top offset. The old 100vh calculation could put
+       the bottom resize handle below the viewport on short windows. */
+    height: min(720px, calc(92vh - 16px));
+    max-height: calc(92vh - 16px);
+    min-width: 360px;
+    min-height: min(320px, calc(92vh - 16px));
+    box-sizing: border-box;
+    overflow: hidden;
+    color: var(--SmartThemeBodyColor, #eee);
+    background: var(--SmartThemeBlurTintColor, #202124);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgb(0 0 0 / 45%);
+    transform: translateX(-50%);
+}
+
+.stplus-chat-history-window.stplus-chat-history-window-open {
+    display: flex;
+    flex-direction: column;
+}
+
+.stplus-chat-history-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 5px 8px 5px 12px;
+    background: inherit;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #666);
+}
+
+.stplus-chat-history-header h3 {
+    margin: 0;
+    padding-right: 76px;
+}
+
+.stplus-chat-history-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.72;
+}
+
+.stplus-chat-history-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 1.2em;
+}
+
+.stplus-chat-history-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 10px 12px 12px;
+    overflow: auto;
+    font-size: 0.9em;
+}
+
+.stplus-chat-history-summary {
+    /* Keep the textarea's native vertical resize grip authoritative instead
+       of letting flex-grow immediately overwrite its manual height. */
+    flex: 0 1 auto;
+    height: 180px;
+    min-height: 140px;
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 8px;
+    color: inherit;
+    background: var(--SmartThemeBlurTintColor, #111);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+    font: inherit;
+    line-height: 1.35;
+}
+
+.stplus-chat-history-body .stplus-history-reasoning {
+    display: block;
+    flex: 0 0 auto;
+    height: auto;
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: none;
+}
+
+.stplus-history-reasoning[hidden],
+.stplus-chat-history-actions [hidden] {
+    display: none !important;
+}
+
+.stplus-history-reasoning > .mes_block {
+    width: 100%;
+    padding: 0;
+}
+
+.stplus-history-reasoning .mes_reasoning {
+    max-height: 35vh;
+}
+
+.stplus-chat-history-actions,
+.stplus-chat-history-stale-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.stplus-chat-history-settings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    padding: 9px;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+}
+
+.stplus-chat-history-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.stplus-chat-history-field-wide {
+    grid-column: 1 / -1;
+}
+
+.stplus-chat-history-field label {
+    opacity: 0.8;
+}
+
+.stplus-chat-history-field input,
+.stplus-chat-history-field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 6px 7px;
+    color: inherit;
+    background: var(--SmartThemeBlurTintColor, #111);
+    border: 1px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 4px;
+    font: inherit;
+}
+
+.stplus-chat-history-field textarea {
+    min-height: 72px;
+    resize: vertical;
+}
+
+.stplus-chat-history-inject-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    grid-column: 1 / -1;
+}
+
+.stplus-chat-history-stale {
+    padding: 8px;
+    color: var(--SmartThemeEmColor, #ffb38a);
+    background: rgb(180 100 30 / 15%);
+    border: 1px solid rgb(220 145 60 / 55%);
+    border-radius: 4px;
+}
+
+.stplus-chat-history-info {
+    margin: 0;
+    opacity: 0.72;
+    line-height: 1.35;
+}
+
+.stplus-chat-history-toolbar-button {
+    flex: 0 0 var(--topBarBlockSize, 46px) !important;
+    width: var(--topBarBlockSize, 46px) !important;
+    min-width: var(--topBarBlockSize, 46px) !important;
+    height: var(--topBarBlockSize, 46px) !important;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+
+.stplus-chat-history-toolbar-button .drawer-icon {
+    margin: 0;
+}
+
+@media (max-width: 700px) {
+    .stplus-chat-history-window {
+        min-width: 0;
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+    }
+
+    .stplus-chat-history-settings {
+        grid-template-columns: 1fr;
+    }
+
+    .stplus-chat-history-field-wide,
+    .stplus-chat-history-inject-toggle {
+        grid-column: auto;
+    }
+}
+
+/* Persona combination --------------------------------------------------- */
+#user_avatar_block .avatar-container {
+    position: relative;
+}
+
+#user_avatar_block .stplus-persona-combine-controls {
+    position: absolute;
+    z-index: 3;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 3px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #202020) 88%, transparent);
+}
+
+#user_avatar_block .stplus-persona-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    margin: 0;
+    cursor: pointer;
+}
+
+#user_avatar_block .stplus-persona-combine-checkbox,
+#user_avatar_block .stplus-persona-primary-checkbox {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+}
+
+#user_avatar_block .stplus-persona-combine-checkbox {
+    accent-color: var(--SmartThemeQuoteColor, #d88b36);
+}
+
+#user_avatar_block .stplus-persona-primary-checkbox {
+    accent-color: var(--SmartThemeEmColor, #6ca9e8);
+}
+
+#user_avatar_block .stplus-persona-control-marker {
+    width: 10px;
+    color: var(--SmartThemeBodyColor, #eee);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    pointer-events: none;
+}
+
+#user_avatar_block .avatar-container[data-stplus-persona-combine="1"] .character_name_block {
+    box-sizing: border-box;
+    padding-right: 78px;
+}
+
+#user_avatar_block .avatar-container.stplus-persona-combine-selected {
+    outline: 1px solid var(--SmartThemeQuoteColor, #d88b36);
+    outline-offset: -1px;
+}
+
+.stplus-persona-combination-toolbar {
+    min-width: 30px !important;
+    width: 30px;
+    height: 30px;
+    padding: 0 5px;
+    margin-left: 4px;
+}
+
+@media (max-width: 700px) {
+    .stplus-alt-greeting-reorder .stplus-alt-position-control {
+        margin-left: 2px;
+    }
+
+    .stplus-alt-position-label,
+    .stplus-alt-position-apply span {
+        display: none;
+    }
+
+    #WorldInfo.stplus-floating-worlds {
+        width: calc(100vw - 16px) !important;
+        height: calc(100vh - 16px) !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+    }
+
+    .stplus-branching-window {
+        min-width: 0;
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+    }
+}
