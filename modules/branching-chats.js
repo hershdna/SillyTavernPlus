@@ -2268,6 +2268,8 @@ function createNodeButton(node, position, query) {
     button.type = 'button';
     button.className = 'stplus-branching-node';
     button.dataset.nodeId = node.id;
+    button.dataset.sourceIndex = String(node.sourceIndex);
+    button.dataset.swipeIndex = String(node.swipeIndex);
     button.style.left = `${position.x}px`;
     button.style.top = `${position.y}px`;
     const isSelected = node.id === selectedNodeId;

@@ -247,6 +247,15 @@ function createSettingsWindow() {
         },
     ));
     charactersSection.append(createCheckbox(
+        'stplus-greeting-groups-enabled',
+        'Greeting groups',
+        'Assign alternate greetings to groups and show the group in chat, Swipe Selection, and Chat Tree.',
+        (enabled) => {
+            settings.greetingGroupsEnabled = enabled;
+            callbacks?.onGreetingGroupsChanged?.();
+        },
+    ));
+    charactersSection.append(createCheckbox(
         'stplus-persona-combination-enabled',
         'Persona combination',
         'Replace single-persona clicks with checkboxes and inject the selected persona descriptions together.',
@@ -379,6 +388,7 @@ export function refresh() {
     installNativeMovingUiManagerButton();
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
+    const greetingGroupsCheckbox = document.getElementById('stplus-greeting-groups-enabled');
     const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
@@ -390,6 +400,7 @@ export function refresh() {
     const movingUiUnboundedResizeCheckbox = document.getElementById('stplus-movingui-unbounded-resize-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
+    if (greetingGroupsCheckbox) greetingGroupsCheckbox.checked = settings.greetingGroupsEnabled;
     if (personaCombinationCheckbox) personaCombinationCheckbox.checked = settings.personaCombinationEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;

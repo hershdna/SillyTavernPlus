@@ -1,5 +1,7 @@
 const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
+    greetingGroupsEnabled: true,
+    greetingGroupsByCharacter: {},
     personaCombinationEnabled: true,
     personaCombinationSelected: [],
     personaCombinationPrimary: null,
@@ -41,6 +43,10 @@ export function initializeSettings(stContext) {
         ...DEFAULT_SETTINGS,
         ...saved,
         greetingModsEnabled: saved.greetingModsEnabled !== false,
+        greetingGroupsEnabled: saved.greetingGroupsEnabled !== false,
+        greetingGroupsByCharacter: saved.greetingGroupsByCharacter && typeof saved.greetingGroupsByCharacter === 'object'
+            ? saved.greetingGroupsByCharacter
+            : {},
         personaCombinationEnabled: saved.personaCombinationEnabled !== false,
         personaCombinationSelected: Array.isArray(saved.personaCombinationSelected)
             ? [...new Set(saved.personaCombinationSelected.filter((value) => typeof value === 'string' && value))]
