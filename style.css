@@ -37,6 +37,69 @@
     color: var(--SmartThemeEmColor, #ff8a8a);
 }
 
+.stplus-greeting-group-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 6px 0;
+    padding: 4px 0;
+    border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.stplus-greeting-group-toolbar-label {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.stplus-greeting-group-new-name {
+    flex: 1 1 130px;
+    min-width: 110px;
+    padding: 2px 5px;
+}
+
+.stplus-greeting-group-add {
+    padding: 3px 7px;
+}
+
+.stplus-greeting-group-select {
+    display: block;
+    width: min(100%, 220px);
+    margin: 4px 0;
+    padding: 2px 5px;
+    font-size: 0.85em;
+}
+
+.stplus-greeting-group-badge {
+    display: inline-block;
+    margin-left: 7px;
+    padding: 1px 5px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #9ecbff) 60%, transparent);
+    border-radius: 4px;
+    color: var(--SmartThemeQuoteColor, #9ecbff);
+    font-size: 0.78em;
+    line-height: 1.25;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.stplus-greeting-group-tree-badge {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 50%;
+    max-width: 104px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transform: translateX(-50%);
+    pointer-events: none;
+    background: var(--SmartThemeBlurTintColor, #303238);
+}
+
+.stplus-branching-node {
+    overflow: visible;
+}
+
 /* SillyTavernPlus module manager toolbar icon */
 .stplus-module-manager-button {
     align-items: center;
