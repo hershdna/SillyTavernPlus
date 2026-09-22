@@ -8,6 +8,31 @@ let editorObserver = null;
 let editorTarget = null;
 let poller = null;
 let activeCharacter = null;
+let groupInputListenersBound = false;
+const runtimeGroupsByCharacter = new Map();
+
+function bindGroupInputListeners() {
+    if (groupInputListenersBound) return;
+
+    const getInput = (event) => event.target instanceof Element
+        ? event.target.closest('.stplus-greeting-group-new-name')
+        : null;
+    const focusInput = (event) => {
+        const input = getInput(event);
+        if (!input) return;
+        // Run before SillyTavern's popup/MovingUI capture handlers. Explicit
+        // focus is needed because those handlers may leave focus on <body> for
+        // controls inserted into a live dialog.
+        input.focus();
+        event.stopPropagation();
+    };
+    window.addEventListener('pointerdown', focusInput, true);
+    window.addEventListener('mousedown', focusInput, true);
+    window.addEventListener('click', event => {
+        if (getInput(event)) event.stopPropagation();
+    }, true);
+    groupInputListenersBound = true;
+}
 
 function persistSettings() {
     if (typeof globalThis.saveSettingsDebounced === 'function') globalThis.saveSettingsDebounced();
@@ -55,6 +80,13 @@ function model(char, persist = true) {
     const store = settings.greetingGroupsByCharacter;
     const charKey = key(char);
     const old = store[charKey] && typeof store[charKey] === 'object' ? store[charKey] : {};
+    const runtimeGroups = runtimeGroupsByCharacter.get(charKey) ?? [];
+    const persistedGroups = Array.isArray(old.groups) ? old.groups.filter(group => group?.id && group?.name) : [];
+    const groups = [];
+    [...persistedGroups, ...runtimeGroups].forEach(group => {
+        if (!group?.id || !group?.name || groups.some(existing => existing.id === group.id || existing.name.toLowerCase() === group.name.toLowerCase())) return;
+        groups.push(group);
+    });
     const oldGreetings = Array.isArray(old.greetings) ? old.greetings : [];
     const used = new Set();
     const greetings = texts(char).map((text, index) => {
@@ -69,10 +101,11 @@ function model(char, persist = true) {
         };
     });
     const result = {
-        groups: Array.isArray(old.groups) ? old.groups.filter(group => group?.id && group?.name) : [],
+        groups,
         greetings,
     };
     store[charKey] = result;
+    runtimeGroupsByCharacter.set(charKey, result.groups);
     if (persist) persistSettings();
     return result;
 }
@@ -111,6 +144,27 @@ function greetingPopup() {
         .sort((left, right) => right.querySelectorAll('.alternate_greeting').length - left.querySelectorAll('.alternate_greeting').length)[0] ?? null;
 }
 
+function getGreetingBlocks(list) {
+    return Array.from(list?.querySelectorAll(':scope > .alternate_greeting') ?? []);
+}
+
+function updateGroupSelect(select, groups, selected) {
+    if (!(select instanceof HTMLSelectElement)) return;
+    const value = selected ?? select.value;
+    select.replaceChildren();
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'Ungrouped';
+    select.append(none);
+    groups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = group.name;
+        select.append(option);
+    });
+    select.value = groups.some(group => group.id === value) ? value : '';
+}
+
 function refreshEditor(char, data) {
     const popup = greetingPopup();
     const list = popup?.querySelector('.alternate_greetings_list');
@@ -124,6 +178,22 @@ function refreshEditor(char, data) {
         });
         editorObserver.observe(list, { childList: true, subtree: true });
     }
+
+    const blocks = getGreetingBlocks(list);
+    const existingToolbar = popup.querySelector('.stplus-greeting-group-toolbar');
+    const existingControls = popup.querySelectorAll('.stplus-greeting-group-control');
+    const existingSelects = popup.querySelectorAll('.stplus-greeting-group-select');
+    // Global MovingUI/frontmost scans can call refresh while the user is
+    // typing. Reuse a complete editor instead of replacing its focused input.
+    if (existingToolbar && existingControls.length === blocks.length && existingSelects.length === blocks.length + 1) {
+        const firstSelect = existingToolbar.querySelector('.stplus-greeting-group-select');
+        updateGroupSelect(firstSelect, data.groups, data.greetings[0]?.groupId ?? '');
+        blocks.forEach((block, index) => {
+            const select = block.querySelector('.stplus-greeting-group-select');
+            updateGroupSelect(select, data.groups, data.greetings[index + 1]?.groupId ?? '');
+        });
+        return;
+    }
     popup.querySelectorAll('[' + OWNED + ']').forEach(element => element.remove());
 
     const toolbar = document.createElement('div');
@@ -133,7 +203,7 @@ function refreshEditor(char, data) {
     label.className = 'stplus-greeting-group-toolbar-label';
     label.textContent = 'Greeting groups';
     const input = document.createElement('input');
-    input.className = 'stplus-greeting-group-new-name';
+    input.className = 'text_pole stplus-greeting-group-new-name';
     input.type = 'text';
     input.placeholder = 'New group name';
     input.setAttribute('aria-label', 'New greeting group name');
@@ -145,13 +215,30 @@ function refreshEditor(char, data) {
     const addGroup = () => {
         const name = input.value.trim();
         if (!name || data.groups.some(group => group.name.toLowerCase() === name.toLowerCase())) return;
-        data.groups.push({ id: 'group-' + fingerprint(name) + '-' + Date.now().toString(36), name });
+        const group = { id: 'group-' + fingerprint(name) + '-' + Date.now().toString(36), name };
+        data.groups.push(group);
+        const charKey = key(char);
+        runtimeGroupsByCharacter.set(charKey, data.groups);
+        // Keep the active settings object synchronized even if a queued
+        // SillyTavern settings save replaces the model object during refresh.
+        const stored = settings?.greetingGroupsByCharacter?.[charKey];
+        if (stored && stored !== data) stored.groups = data.groups;
         input.value = '';
         persistSettings();
         queue();
     };
     add.addEventListener('click', addGroup);
-    input.addEventListener('keydown', event => { if (event.key === 'Enter') addGroup(); });
+    // SillyTavern's popup and global hotkey handlers can observe pointer and
+    // key events before this dynamically-added control is focused. Explicitly
+    // focus on pointer down, then stop bubbling so those handlers cannot steal
+    // the interaction. Do not prevent the default pointer action: that keeps
+    // the browser's normal caret placement and selection behavior intact.
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            addGroup();
+        }
+    });
     const firstLabel = document.createElement('span');
     firstLabel.className = 'stplus-greeting-group-toolbar-label';
     firstLabel.textContent = 'First:';
@@ -159,17 +246,7 @@ function refreshEditor(char, data) {
     firstSelect.className = 'stplus-greeting-group-select';
     firstSelect.setAttribute(OWNED, '1');
     firstSelect.setAttribute('aria-label', 'First greeting group');
-    const firstNone = document.createElement('option');
-    firstNone.value = '';
-    firstNone.textContent = 'Ungrouped';
-    firstSelect.append(firstNone);
-    data.groups.forEach(group => {
-        const option = document.createElement('option');
-        option.value = group.id;
-        option.textContent = group.name;
-        firstSelect.append(option);
-    });
-    firstSelect.value = data.greetings[0]?.groupId ?? '';
+    updateGroupSelect(firstSelect, data.groups, data.greetings[0]?.groupId ?? '');
     firstSelect.addEventListener('change', () => {
         data.greetings[0].groupId = firstSelect.value || null;
         persistSettings();
@@ -188,17 +265,7 @@ function refreshEditor(char, data) {
         select.className = 'stplus-greeting-group-select';
         select.setAttribute(OWNED, '1');
         select.setAttribute('aria-label', 'Greeting ' + index + ' group');
-        const none = document.createElement('option');
-        none.value = '';
-        none.textContent = 'Ungrouped';
-        select.append(none);
-        data.groups.forEach(group => {
-            const option = document.createElement('option');
-            option.value = group.id;
-            option.textContent = group.name;
-            select.append(option);
-        });
-        select.value = data.greetings[index]?.groupId ?? '';
+        updateGroupSelect(select, data.groups, data.greetings[index]?.groupId ?? '');
         select.addEventListener('change', () => {
             data.greetings[index].groupId = select.value || null;
             persistSettings();
@@ -270,6 +337,7 @@ const api = {
     initialize(nextContext, nextSettings) {
         context = nextContext;
         settings = nextSettings;
+        bindGroupInputListeners();
         if (!observer && document.body && globalThis.MutationObserver) {
             observer = new MutationObserver(mutations => {
                 const external = mutations.some(mutation => Array.from(mutation.addedNodes).concat(Array.from(mutation.removedNodes)).some(node => node.nodeType === 1 && !node.closest?.('[' + OWNED + ']')));
