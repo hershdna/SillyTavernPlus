@@ -6,6 +6,15 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../modules/
 const pure = source.slice(source.indexOf('export function fingerprint'), source.indexOf('function live()')).replaceAll('export function', 'function');
 const api = vm.runInNewContext(`${pure}; ({fingerprint, normalizeTags, reconcileGreetings})`);
 const plain = value => JSON.parse(JSON.stringify(value));
+test('identical greeting texts can have distinct tags in the same chat', () => {
+    const recordSource = source.slice(source.indexOf('function recordFor('), source.indexOf('function tagsFor('));
+    const scope = vm.runInNewContext(`${pure}; const FIELD='tags'; const ctx={chatMetadata:{}}; function live(){return ctx;} ${recordSource}; ({reconcileGreetings,recordFor})`);
+    const data = scope.reconcileGreetings(null, ['Same text', 'Same text']);
+    data.greetings[0].tags = ['First']; data.greetings[1].tags = ['Second'];
+    assert.deepEqual(plain(scope.recordFor(data, 'Same text', 0).tags), ['First']);
+    assert.deepEqual(plain(scope.recordFor(data, 'Same text', 1).tags), ['Second']);
+    assert.deepEqual(plain(scope.recordFor(data, 'Same text', 0).tags), ['First']);
+});
 test('starts first and alternate greetings untagged and normalizes tags', () => {
     const data = api.reconcileGreetings(null, ['First', 'Second']);
     assert.deepEqual(plain(data.greetings.map(g => g.tags)), [[], []]);
