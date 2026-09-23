@@ -71,6 +71,53 @@
     font-size: 0.85em;
 }
 
+.stplus-greeting-group-control {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin: 4px 0;
+}
+
+.stplus-greeting-group-control .stplus-greeting-group-select {
+    margin: 0;
+}
+
+.stplus-greeting-group-list {
+    display: flex;
+    flex: 1 1 100%;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.stplus-greeting-group-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 220px;
+    padding: 2px 4px 2px 7px;
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 4px;
+    font-size: 0.82em;
+}
+
+.stplus-greeting-group-item > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stplus-greeting-group-remove {
+    min-width: 1.25em;
+    padding: 0 3px;
+    line-height: 1.15;
+}
+
+.stplus-greeting-group-remove-confirm {
+    color: var(--SmartThemeEmColor, #ffb0b0);
+}
+
 .stplus-greeting-group-badge {
     display: inline-block;
     margin-left: 7px;
