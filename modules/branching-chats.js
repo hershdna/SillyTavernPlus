@@ -2306,6 +2306,7 @@ function createNodeButton(node, position, query) {
     button.dataset.nodeId = node.id;
     button.dataset.sourceIndex = String(node.sourceIndex);
     button.dataset.swipeIndex = String(node.swipeIndex);
+    if (Number(node.sourceIndex) === 0) button.dataset.greetingText = node.content;
     button.style.left = `${position.x}px`;
     button.style.top = `${position.y}px`;
     const isSelected = node.id === selectedNodeId;
@@ -2431,7 +2432,7 @@ function createWindow() {
     search.type = 'search';
     search.className = 'stplus-branching-search';
     search.placeholder = 'Search messages…';
-    search.title = 'Filter the branch tree by message text or speaker';
+    search.title = 'Highlight matches in messages, speakers, or greeting tags';
     search.addEventListener('input', render);
     const jump = createButton('Jump to Here', 'Make the selected node the active chat path', jumpToSelected);
     jump.dataset.action = 'jump';

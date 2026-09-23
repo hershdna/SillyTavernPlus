@@ -247,12 +247,12 @@ function createSettingsWindow() {
         },
     ));
     charactersSection.append(createCheckbox(
-        'stplus-greeting-groups-enabled',
-        'Greeting groups',
-        'Assign alternate greetings to groups and show the group in chat, Swipe Selection, and Chat Tree.',
+        'stplus-greeting-tags-enabled',
+        'Greeting tags',
+        'Tag greetings and show their tags in chat, Swipe Selection, and Chat Tree. Press Enter to add a tag.',
         (enabled) => {
-            settings.greetingGroupsEnabled = enabled;
-            callbacks?.onGreetingGroupsChanged?.();
+            settings.greetingTagsEnabled = enabled;
+            callbacks?.onGreetingTagsChanged?.();
         },
     ));
     charactersSection.append(createCheckbox(
@@ -388,7 +388,7 @@ export function refresh() {
     installNativeMovingUiManagerButton();
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
-    const greetingGroupsCheckbox = document.getElementById('stplus-greeting-groups-enabled');
+    const greetingTagsCheckbox = document.getElementById('stplus-greeting-tags-enabled');
     const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
@@ -400,7 +400,7 @@ export function refresh() {
     const movingUiUnboundedResizeCheckbox = document.getElementById('stplus-movingui-unbounded-resize-enabled');
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
-    if (greetingGroupsCheckbox) greetingGroupsCheckbox.checked = settings.greetingGroupsEnabled;
+    if (greetingTagsCheckbox) greetingTagsCheckbox.checked = settings.greetingTagsEnabled;
     if (personaCombinationCheckbox) personaCombinationCheckbox.checked = settings.personaCombinationEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;
