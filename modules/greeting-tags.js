@@ -123,6 +123,33 @@ function element(tag, className, text) {
     return node;
 }
 function badge(text) { return element('span', 'stplus-greeting-tag-badge', text); }
+function setupTagDropdown(dropdown) {
+    dropdown.addEventListener('mouseenter', () => { dropdown.open = true; });
+    dropdown.addEventListener('mouseleave', () => {
+        if (!dropdown._pinned && !dropdown.contains(document.activeElement)) dropdown.open = false;
+    });
+    dropdown.addEventListener('focusin', () => { dropdown.open = true; });
+    dropdown.addEventListener('focusout', event => {
+        if (!dropdown._pinned && !dropdown.contains(event.relatedTarget)) dropdown.open = false;
+    });
+    return dropdown;
+}
+function tagDropdown(tags, className, matchingTags = tags) {
+    const dropdown = setupTagDropdown(element('details', `stplus-tag-dropdown ${className}`));
+    const summary = element('summary', 'stplus-tag-dropdown-toggle', `Tags (${tags.length})`);
+    const list = element('div', 'stplus-tag-dropdown-list');
+    list.replaceChildren(...matchingTags.map(badge));
+    dropdown.append(summary, list);
+    return dropdown;
+}
+function updateTagDropdown(dropdown, tags, matchingTags = tags) {
+    const signature = JSON.stringify([tags, matchingTags]);
+    if (dropdown.dataset.tags === signature) return dropdown;
+    dropdown.dataset.tags = signature;
+    dropdown.querySelector(':scope > summary').textContent = `Tags (${tags.length})`;
+    dropdown.querySelector(':scope > .stplus-tag-dropdown-list').replaceChildren(...matchingTags.map(badge));
+    return dropdown;
+}
 function place(block, control) {
     const summary = block.querySelector(':scope > details > summary');
     if (summary && control.previousElementSibling !== summary) summary.after(control);
@@ -186,11 +213,8 @@ function setBadges(parent, tags, className) {
     if (!parent) return;
     let container = parent.querySelector(`:scope > .${className}`);
     if (!tags.length) { container?.remove(); return; }
-    if (!container) { container = element('span', className); parent.append(container); }
-    const signature = JSON.stringify(tags);
-    if (container.dataset.tags === signature) return;
-    container.dataset.tags = signature;
-    container.replaceChildren(...tags.map(badge));
+    if (!container) { container = tagDropdown(tags, className); parent.append(container); }
+    updateTagDropdown(container, tags);
 }
 function refreshChat(data) {
     const first = live().chat?.[0];
@@ -222,26 +246,15 @@ function refreshTree(data) {
         let dropdown = button.parentElement.querySelector(`.stplus-tree-tags[data-for-node="${CSS.escape(button.dataset.nodeId)}"]`);
         if (!tags.length) { dropdown?.remove(); continue; }
         if (!dropdown) {
-            dropdown = element('details', 'stplus-tree-tags');
+            dropdown = tagDropdown(tags, 'stplus-tree-tags', matches);
             dropdown.dataset.forNode = button.dataset.nodeId;
-            const summary = element('summary', 'stplus-tree-tags-toggle');
-            dropdown.append(summary, element('div', 'stplus-tree-tag-list'));
             button.after(dropdown);
-            dropdown.addEventListener('mouseenter', () => { dropdown.open = true; });
-            dropdown.addEventListener('mouseleave', () => { if (!dropdown._pinned && !dropdown.contains(document.activeElement)) dropdown.open = false; });
-            dropdown.addEventListener('focusin', () => { dropdown.open = true; });
-            dropdown.addEventListener('focusout', event => { if (!dropdown._pinned && !dropdown.contains(event.relatedTarget)) dropdown.open = false; });
         }
         dropdown.style.left = button.style.left;
         dropdown.style.top = button.style.top;
         dropdown.classList.toggle('stplus-tag-search-match', Boolean(query && matches.length));
-        const signature = JSON.stringify([tags, matches, query]);
-        if (dropdown.dataset.tags !== signature) {
-            dropdown.dataset.tags = signature;
-            dropdown.querySelector('summary').textContent = `Tags (${tags.length})`;
-            dropdown.querySelector('.stplus-tree-tag-list').replaceChildren(...matches.map(badge));
-            if (query && !matches.length) dropdown.querySelector('.stplus-tree-tag-list').append(element('span', '', 'No matching tags'));
-        }
+        updateTagDropdown(dropdown, tags, matches);
+        if (query && !matches.length) dropdown.querySelector(':scope > .stplus-tag-dropdown-list').append(element('span', '', 'No matching tags'));
     }
 }
 function refresh() {
@@ -278,7 +291,7 @@ function bind() {
         window.addEventListener(type, event => {
             const target = event.target instanceof Element ? event.target : null;
             const control = target?.closest('.stplus-tag-editor');
-            const dropdown = target?.closest('.stplus-tree-tags');
+            const dropdown = target?.closest('.stplus-tag-dropdown');
             if (!control && !dropdown) return;
             event.stopPropagation();
             if (dropdown) {
