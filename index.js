@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.171';
+    const MODULE_CACHE_VERSION = '0.5.172';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -26,10 +26,10 @@
         }
 
         try {
-            const [settingsStore, greetingMods, greetingGroups, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
+            const [settingsStore, greetingMods, greetingTags, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
-                loadModule('greeting-groups'),
+                loadModule('greeting-tags'),
                 loadModule('lorebook-mods'),
                 loadModule('branching-chats'),
                 loadModule('chat-visible-edit'),
@@ -42,13 +42,13 @@
                 loadModule('movingui-window-manager'),
             ]);
             const settings = settingsStore.initializeSettings(context);
-            // greeting-groups is a default-exported module, unlike the other
+            // greeting-tags is a default-exported module, unlike the other
             // feature modules in this list. Normalize its namespace here so a
             // fresh SillyTavern load initializes the complete extension.
-            const greetingGroupsApi = greetingGroups.default ?? greetingGroups;
+            const greetingTagsApi = greetingTags.default ?? greetingTags;
 
             greetingMods.initialize(settings);
-            greetingGroupsApi.initialize(context, settings);
+            greetingTagsApi.initialize(context, settings);
             lorebookMods.initialize(context, settings);
             branchingChats.initialize(context, settings);
             chatVisibleEdit.initialize(context, settings);
@@ -60,7 +60,7 @@
             movingUiWindowManager.initialize(context, settings);
             settingsPanel.initialize(settings, {
                 onGreetingModsChanged: () => greetingMods.refresh(),
-                onGreetingGroupsChanged: () => greetingGroupsApi.refresh(),
+                onGreetingTagsChanged: () => greetingTagsApi.refresh(),
                 onBranchingChatsChanged: () => branchingChats.refresh(),
                 onFormattedMessageEditChanged: () => chatVisibleEdit.refresh(),
                 onPersonaCombinationChanged: () => personaCombination.refresh(),
@@ -78,7 +78,7 @@
             const scan = () => {
                 scanScheduled = false;
                 greetingMods.refresh();
-                greetingGroupsApi.refresh();
+                greetingTagsApi.refresh();
                 lorebookMods.refresh();
                 // Branching chats owns its own chat lifecycle and graph
                 // synchronization. Do not refresh it for unrelated UI
