@@ -10,6 +10,7 @@ let poller = null;
 let activeCharacter = null;
 let groupInputListenersBound = false;
 const runtimeGroupsByCharacter = new Map();
+const runtimeGreetingsByCharacter = new Map();
 
 function bindGroupInputListeners() {
     if (groupInputListenersBound) return;
@@ -81,6 +82,7 @@ function model(char, persist = true) {
     const charKey = key(char);
     const old = store[charKey] && typeof store[charKey] === 'object' ? store[charKey] : {};
     const runtimeGroups = runtimeGroupsByCharacter.get(charKey) ?? [];
+    const runtimeGreetings = runtimeGreetingsByCharacter.get(charKey) ?? [];
     const persistedGroups = Array.isArray(old.groups) ? old.groups.filter(group => group?.id && group?.name) : [];
     const groups = [];
     [...persistedGroups, ...runtimeGroups].forEach(group => {
@@ -92,7 +94,8 @@ function model(char, persist = true) {
     const greetings = texts(char).map((text, index) => {
         const fp = fingerprint(text);
         const matchIndex = oldGreetings.findIndex((item, oldIndex) => !used.has(oldIndex) && item?.fingerprint === fp);
-        const match = matchIndex >= 0 ? oldGreetings[matchIndex] : oldGreetings[index];
+        const runtimeMatch = runtimeGreetings.find(item => item?.fingerprint === fp);
+        const match = runtimeMatch ?? (matchIndex >= 0 ? oldGreetings[matchIndex] : oldGreetings[index]);
         if (matchIndex >= 0) used.add(matchIndex);
         return {
             id: match?.id ?? ('greeting-' + fp + '-' + index),
@@ -106,6 +109,7 @@ function model(char, persist = true) {
     };
     store[charKey] = result;
     runtimeGroupsByCharacter.set(charKey, result.groups);
+    runtimeGreetingsByCharacter.set(charKey, result.greetings);
     if (persist) persistSettings();
     return result;
 }
@@ -148,6 +152,30 @@ function getGreetingBlocks(list) {
     return Array.from(list?.querySelectorAll(':scope > .alternate_greeting') ?? []);
 }
 
+function syncData(char, data) {
+    const charKey = key(char);
+    runtimeGroupsByCharacter.set(charKey, data.groups);
+    runtimeGreetingsByCharacter.set(charKey, data.greetings);
+    const stored = settings?.greetingGroupsByCharacter?.[charKey];
+    if (stored && stored !== data) {
+        stored.groups = data.groups;
+        stored.greetings = data.greetings;
+    }
+}
+
+function placeGreetingControl(block, control) {
+    if (!control) return;
+    const details = block.querySelector(':scope > details');
+    const summary = details?.querySelector(':scope > summary');
+    if (details && summary) {
+        if (control.parentElement !== details || control.previousElementSibling !== summary) summary.after(control);
+        return;
+    }
+    const first = block.firstElementChild;
+    if (first && first !== control) first.after(control);
+    else if (!control.parentElement) block.append(control);
+}
+
 function updateGroupSelect(select, groups, selected) {
     if (!(select instanceof HTMLSelectElement)) return;
     const value = selected ?? select.value;
@@ -177,6 +205,7 @@ function refreshGroupManager(toolbar, data, char) {
     data.groups.forEach(group => {
         const item = document.createElement('span');
         item.className = 'stplus-greeting-group-item';
+        item.setAttribute(OWNED, '1');
         const name = document.createElement('span');
         name.textContent = group.name;
         name.title = group.name;
@@ -215,13 +244,7 @@ function refreshGroupManager(toolbar, data, char) {
             data.greetings.forEach(greeting => {
                 if (greeting.groupId === group.id) greeting.groupId = null;
             });
-            const charKey = key(char);
-            runtimeGroupsByCharacter.set(charKey, data.groups);
-            const stored = settings?.greetingGroupsByCharacter?.[charKey];
-            if (stored && stored !== data) {
-                stored.groups = data.groups;
-                stored.greetings = data.greetings;
-            }
+            syncData(char, data);
             persistSettings();
             queue();
         };
@@ -267,6 +290,7 @@ function refreshEditor(char, data) {
         blocks.forEach((block, index) => {
             const select = block.querySelector('.stplus-greeting-group-select');
             updateGroupSelect(select, data.groups, data.greetings[index + 1]?.groupId ?? '');
+            placeGreetingControl(block, select?.closest('.stplus-greeting-group-control'));
         });
         refreshGroupManager(existingToolbar, data, char);
         return;
@@ -294,12 +318,9 @@ function refreshEditor(char, data) {
         if (!name || data.groups.some(group => group.name.toLowerCase() === name.toLowerCase())) return;
         const group = { id: 'group-' + fingerprint(name) + '-' + Date.now().toString(36), name };
         data.groups.push(group);
-        const charKey = key(char);
-        runtimeGroupsByCharacter.set(charKey, data.groups);
         // Keep the active settings object synchronized even if a queued
         // SillyTavern settings save replaces the model object during refresh.
-        const stored = settings?.greetingGroupsByCharacter?.[charKey];
-        if (stored && stored !== data) stored.groups = data.groups;
+        syncData(char, data);
         input.value = '';
         persistSettings();
         queue();
@@ -326,6 +347,7 @@ function refreshEditor(char, data) {
     updateGroupSelect(firstSelect, data.groups, data.greetings[0]?.groupId ?? '');
     firstSelect.addEventListener('change', () => {
         data.greetings[0].groupId = firstSelect.value || null;
+        syncData(char, data);
         persistSettings();
         queue();
     });
@@ -344,13 +366,17 @@ function refreshEditor(char, data) {
         select.setAttribute(OWNED, '1');
         select.setAttribute('aria-label', 'Greeting ' + index + ' group');
         updateGroupSelect(select, data.groups, data.greetings[index]?.groupId ?? '');
+        ['pointerdown', 'mousedown', 'click'].forEach(type => {
+            select.addEventListener(type, event => event.stopPropagation());
+        });
         select.addEventListener('change', () => {
             data.greetings[index].groupId = select.value || null;
+            syncData(char, data);
             persistSettings();
             queue();
         });
         control.append(select);
-        block.prepend(control);
+        placeGreetingControl(block, control);
     });
 }
 
