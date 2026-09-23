@@ -1618,6 +1618,15 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     let stableFrames = 0;
     let observer = null;
     let scrollListener = null;
+    let resolveCompletion = null;
+    const completion = new Promise((resolve) => {
+        resolveCompletion = resolve;
+    });
+    const settle = () => {
+        if (!resolveCompletion) return;
+        resolveCompletion();
+        resolveCompletion = null;
+    };
     const cleanup = () => {
         if (retryTimer) window.clearTimeout(retryTimer);
         if (maxTimer) window.clearTimeout(maxTimer);
@@ -1638,11 +1647,14 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
             onComplete?.();
         } catch (error) {
             console.warn('[SillyTavernPlus] Scroll completion callback failed:', error);
+        } finally {
+            settle();
         }
     };
     const restore = () => {
         if (sequence !== scrollRestoreSequence) {
             cleanup();
+            settle();
             return;
         }
         restoreDocumentScroll(targetDocumentScroll);
@@ -1669,6 +1681,7 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     const restoreAfterMutation = () => {
         if (sequence !== scrollRestoreSequence) {
             cleanup();
+            settle();
             return;
         }
         stableFrames = 0;
@@ -1694,6 +1707,7 @@ function scheduleChatScrollRestore(anchor, fallbackSourceIndex = null, documentS
     // period: native auto-scroll is disabled for the operation that requested
     // this restore, so the anchor can be maintained continuously.
     window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(begin));
+    return completion;
 }
 
 async function navigateToSwipe(node, scrollAnchor = null, onScrollRestored = null) {
@@ -1774,6 +1788,7 @@ async function jumpToSelected(nodeId = selectedNodeId, {
 
     jumpInProgress = true;
     const ownsScrollLock = beginNativeAutoScrollLock();
+    let scrollRestoreCompletion = null;
     const jumpButton = panel?.querySelector('[data-action="jump"]');
     if (jumpButton instanceof HTMLButtonElement) jumpButton.disabled = true;
     try {
@@ -1835,7 +1850,17 @@ async function jumpToSelected(nodeId = selectedNodeId, {
         const scrollSourceIndex = (scrollToNodeId && graph?.nodes?.[scrollToNodeId])
             ? graph.nodes[scrollToNodeId].sourceIndex
             : selected.sourceIndex;
-        scheduleChatScrollRestore(scrollAnchor, scrollSourceIndex, documentScroll, { onComplete: onScrollRestored });
+        // Keep SillyTavern's auto-scroll override active until the anchor has
+        // survived the final redraw frames. Releasing it when reloadCurrentChat
+        // resolves is too early: the core can still run its own bottom scroll
+        // on the next mutation and undo the requested jump position.
+        scrollRestoreCompletion = scheduleChatScrollRestore(
+            scrollAnchor,
+            scrollSourceIndex,
+            documentScroll,
+            { onComplete: onScrollRestored },
+        );
+        await scrollRestoreCompletion;
         window.toastr?.success?.('Jumped to ' + selected.label);
         return true;
     } finally {
@@ -2102,7 +2127,10 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null) {
         // The promise has settled here, so do not leave the branch controls
         // permanently disabled.
         generationActive = false;
-        scheduleChatScrollRestore(anchor, node.sourceIndex);
+        // The outer branch-swipe lock must cover the restore as well as the
+        // generation. Otherwise the core can re-enable bottom scrolling in
+        // the gap between the API promise settling and the anchor restore.
+        await scheduleChatScrollRestore(anchor, node.sourceIndex);
     }
 }
 
@@ -2173,7 +2201,15 @@ function reconcileNativeSwipe() {
     // Native swiping only changes the selected message. If that swipe already
     // has a stored continuation, open the longest continuation exactly as a
     // tree jump does, while retaining the swiped message as the scroll target.
-    void navigateToSwipe(currentNode, scrollAnchor, releaseNativeSwipeScrollLock);
+    void navigateToSwipe(currentNode, scrollAnchor, releaseNativeSwipeScrollLock)
+        .catch((error) => {
+            console.warn('[SillyTavernPlus] Native swipe reconciliation failed:', error);
+        })
+        .finally(() => {
+            // A failed reload or an API-specific lifecycle path must not leave
+            // the user's normal auto-scroll setting disabled indefinitely.
+            releaseNativeSwipeScrollLock();
+        });
 }
 
 function scheduleNativeSwipeReconciliation() {
