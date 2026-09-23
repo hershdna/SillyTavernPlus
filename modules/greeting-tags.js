@@ -101,14 +101,15 @@ function recordFor(data, text, index) {
     const positional = data.greetings[index];
     const ctx = live();
     const bindings = ctx.chatMetadata?.[FIELD] ?? {};
+    const bindingKey = `${index}:${fp}`;
     // A chat's edited greeting can differ from the character card. Remember
     // its identity so later character reordering cannot change its tags.
-    const bound = all.find(item => item.id === bindings[fp]);
+    const bound = all.find(item => item.id === bindings[bindingKey]);
     const exact = positional && (positional.fingerprint === fp || positional.aliases.includes(fp))
         ? positional : all.find(item => item.fingerprint === fp || item.aliases.includes(fp));
     const record = bound ?? exact ?? positional;
-    if (record && text && ctx.chatMetadata && bindings[fp] !== record.id) {
-        ctx.chatMetadata[FIELD] = { ...bindings, [fp]: record.id };
+    if (record && text && ctx.chatMetadata && bindings[bindingKey] !== record.id) {
+        ctx.chatMetadata[FIELD] = { ...bindings, [bindingKey]: record.id };
         ctx.saveMetadataDebounced?.();
     }
     return record;
