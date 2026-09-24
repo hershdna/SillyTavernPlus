@@ -261,7 +261,7 @@ function refreshGreetingFilter(popup, data, list) {
         return;
     }
     if (!control) {
-        control = setupTagDropdown(element('details', 'stplus-tag-dropdown stplus-greeting-filter'));
+        control = element('details', 'stplus-tag-dropdown stplus-greeting-filter');
         const summary = element('summary', 'stplus-tag-dropdown-toggle', 'Filter tags');
         summary.setAttribute('aria-label', 'Filter alternate greetings by tag');
         const panel = element('div', 'stplus-greeting-filter-list');
