@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.181';
+    const MODULE_CACHE_VERSION = '0.5.182';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -26,7 +26,7 @@
         }
 
         try {
-            const [settingsStore, greetingMods, greetingTags, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
+            const [settingsStore, greetingMods, greetingTags, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, chatCounts, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('greeting-tags'),
@@ -35,6 +35,7 @@
                 loadModule('chat-visible-edit'),
                 loadModule('chat-history'),
                 loadModule('persona-combination'),
+                loadModule('chat-counts'),
                 loadModule('settings-panel'),
                 loadModule('movingui-resize'),
                 loadModule('movingui-drag'),
@@ -54,6 +55,7 @@
             chatVisibleEdit.initialize(context, settings);
             chatHistory.initialize(context, settings);
             personaCombination.initialize(context, settings);
+            chatCounts.initialize();
             movingUiResize.initialize(context, settings);
             movingUiDrag.initialize(context, settings);
             movingUiFront.initialize(context, settings);
@@ -87,6 +89,7 @@
                 chatVisibleEdit.refresh();
                 chatHistory.refresh();
                 personaCombination.refresh();
+                chatCounts.refresh();
                 movingUiResize.refresh();
                 movingUiDrag.refresh();
                 movingUiFront.refresh();
