@@ -6,6 +6,7 @@ let queued = false;
 let initialized = false;
 const saves = new Map();
 const models = new WeakMap();
+const greetingFilters = new WeakMap();
 
 export function fingerprint(text) {
     let hash = 2166136261;
@@ -24,6 +25,13 @@ export function normalizeTags(values) {
         seen.add(key);
         return true;
     });
+}
+
+export function matchesTagFilter(tags, selected) {
+    const wanted = normalizeTags(selected).map(tag => tag.toLowerCase());
+    if (!wanted.length) return true;
+    const available = new Set(normalizeTags(tags).map(tag => tag.toLowerCase()));
+    return wanted.some(tag => available.has(tag));
 }
 
 // Match unchanged greetings before assigning edits by position. This prevents a
@@ -185,10 +193,104 @@ function editorControl(record, label) {
     renderChips(control, record);
     return control;
 }
+
+function greetingFilterTags(data) {
+    return normalizeTags(data.greetings.flatMap(record => record.tags ?? []));
+}
+
+function updateFilterSummary(control, selected) {
+    const summary = control.querySelector(':scope > summary');
+    if (summary) summary.textContent = selected.size ? `Filter tags (${selected.size})` : 'Filter tags';
+}
+
+function applyGreetingFilter(popup, data) {
+    const list = popup.querySelector('.alternate_greetings_list');
+    if (!list) return;
+    const selected = greetingFilters.get(popup) ?? new Set();
+    [...list.querySelectorAll(':scope > .alternate_greeting')].forEach((block, index) => {
+        const record = data.greetings[index + 1];
+        block.classList.toggle('stplus-greeting-filter-hidden', !matchesTagFilter(record?.tags ?? [], [...selected]));
+    });
+}
+
+function renderFilterOptions(control, tags, selected) {
+    const options = control.querySelector(':scope .stplus-greeting-filter-options');
+    if (!options) return;
+    const signature = JSON.stringify(tags);
+    if (options.dataset.tags === signature) {
+        options.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.checked = selected.has(input.value);
+        });
+        return;
+    }
+    options.dataset.tags = signature;
+    options.replaceChildren(...tags.map(tag => {
+        const label = element('label', 'stplus-greeting-filter-option');
+        const input = element('input');
+        input.type = 'checkbox';
+        input.value = tag;
+        input.checked = selected.has(tag);
+        input.addEventListener('change', () => {
+            if (input.checked) selected.add(tag);
+            else selected.delete(tag);
+            updateFilterSummary(control, selected);
+            const popup = control.closest('.alternate_grettings');
+            const data = popup?._stplusGreetingTagData;
+            if (popup && data) applyGreetingFilter(popup, data);
+        });
+        label.append(input, element('span', 'stplus-greeting-filter-name', tag));
+        return label;
+    }));
+}
+
+function refreshGreetingFilter(popup, data, list) {
+    const tags = greetingFilterTags(data);
+    let selected = greetingFilters.get(popup);
+    if (!selected) {
+        selected = new Set();
+        greetingFilters.set(popup, selected);
+    }
+    for (const tag of [...selected]) {
+        if (!tags.includes(tag)) selected.delete(tag);
+    }
+    let control = popup.querySelector(':scope > .stplus-greeting-filter');
+    if (!tags.length) {
+        control?.remove();
+        greetingFilters.delete(popup);
+        list.querySelectorAll(':scope > .alternate_greeting').forEach(block => block.classList.remove('stplus-greeting-filter-hidden'));
+        return;
+    }
+    if (!control) {
+        control = setupTagDropdown(element('details', 'stplus-tag-dropdown stplus-greeting-filter'));
+        const summary = element('summary', 'stplus-tag-dropdown-toggle', 'Filter tags');
+        summary.setAttribute('aria-label', 'Filter alternate greetings by tag');
+        const panel = element('div', 'stplus-greeting-filter-list');
+        const options = element('div', 'stplus-greeting-filter-options');
+        const clear = element('button', 'menu_button stplus-greeting-filter-clear', 'Clear');
+        clear.type = 'button';
+        clear.addEventListener('click', event => {
+            event.preventDefault();
+            selected.clear();
+            updateFilterSummary(control, selected);
+            control.open = true;
+            applyGreetingFilter(popup, data);
+            renderFilterOptions(control, tags, selected);
+        });
+        panel.append(options, clear);
+        control.append(summary, panel);
+        list.before(control);
+    }
+    popup._stplusGreetingTagData = data;
+    updateFilterSummary(control, selected);
+    renderFilterOptions(control, tags, selected);
+    applyGreetingFilter(popup, data);
+}
+
 function refreshEditor(data) {
     for (const popup of document.querySelectorAll('.alternate_grettings')) {
         const list = popup.querySelector('.alternate_greetings_list');
         if (!list) continue;
+        refreshGreetingFilter(popup, data, list);
         let first = popup.querySelector('.stplus-first-greeting-tags');
         if (!first) {
             first = editorControl(data.greetings[0], 'First greeting tags');
@@ -291,7 +393,9 @@ function bind() {
         window.addEventListener(type, event => {
             const target = event.target instanceof Element ? event.target : null;
             const control = target?.closest('.stplus-tag-editor');
+            const filter = target?.closest('.stplus-greeting-filter');
             const dropdown = target?.closest('.stplus-tag-dropdown');
+            if (filter) return;
             if (!control && !dropdown) return;
             event.stopPropagation();
             if (dropdown) {
