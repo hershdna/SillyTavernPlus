@@ -118,6 +118,7 @@
     box-sizing: border-box;
     display: block;
 }
+.stplus-greeting-filter:not([open]) > .stplus-greeting-filter-list { display: none; }
 .stplus-greeting-filter-options {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
