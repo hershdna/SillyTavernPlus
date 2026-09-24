@@ -230,6 +230,19 @@ function renderFilterOptions(control, tags, selected) {
         input.type = 'checkbox';
         input.value = tag;
         input.checked = selected.has(tag);
+        input.addEventListener('click', event => {
+            event.preventDefault();
+            input.checked = !input.checked;
+            if (input.checked) selected.add(input.value);
+            else selected.delete(input.value);
+            const filter = input.closest('.stplus-greeting-filter');
+            const popup = filter?.closest('.alternate_grettings');
+            const data = popup?._stplusGreetingTagData;
+            if (filter && popup && data) {
+                updateFilterSummary(filter, selected);
+                applyGreetingFilter(popup, data);
+            }
+        });
         input.addEventListener('change', () => {
             if (input.checked) selected.add(tag);
             else selected.delete(tag);
@@ -261,7 +274,7 @@ function refreshGreetingFilter(popup, data, list) {
         return;
     }
     if (!control) {
-        control = element('details', 'stplus-tag-dropdown stplus-greeting-filter');
+        control = element('details', 'stplus-greeting-filter');
         const summary = element('summary', 'stplus-tag-dropdown-toggle', 'Filter tags');
         summary.setAttribute('aria-label', 'Filter alternate greetings by tag');
         const panel = element('div', 'stplus-greeting-filter-list');
@@ -275,16 +288,6 @@ function refreshGreetingFilter(popup, data, list) {
             control.open = true;
             applyGreetingFilter(popup, data);
             renderFilterOptions(control, tags, selected);
-        });
-        control.addEventListener('click', event => {
-            const input = event.target.closest?.('input[type="checkbox"]');
-            if (!input) return;
-            event.preventDefault();
-            input.checked = !input.checked;
-            if (input.checked) selected.add(input.value);
-            else selected.delete(input.value);
-            updateFilterSummary(control, selected);
-            applyGreetingFilter(popup, data);
         });
         panel.append(options, clear);
         control.append(summary, panel);
