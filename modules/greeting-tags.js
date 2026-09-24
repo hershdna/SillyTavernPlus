@@ -276,6 +276,16 @@ function refreshGreetingFilter(popup, data, list) {
             applyGreetingFilter(popup, data);
             renderFilterOptions(control, tags, selected);
         });
+        control.addEventListener('click', event => {
+            const input = event.target.closest?.('input[type="checkbox"]');
+            if (!input) return;
+            event.preventDefault();
+            input.checked = !input.checked;
+            if (input.checked) selected.add(input.value);
+            else selected.delete(input.value);
+            updateFilterSummary(control, selected);
+            applyGreetingFilter(popup, data);
+        });
         panel.append(options, clear);
         control.append(summary, panel);
         list.before(control);
