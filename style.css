@@ -81,7 +81,7 @@
     font-size: 12px;
     color: var(--SmartThemeBodyColor, #eee);
 }
-.stplus-tag-dropdown > summary {
+.stplus-tag-dropdown > summary, .stplus-greeting-filter > summary {
     padding: 1px 5px;
     border: 1px solid var(--SmartThemeBorderColor, #666);
     border-radius: 4px;
@@ -90,8 +90,9 @@
     white-space: nowrap;
     list-style: none;
 }
-.stplus-tag-dropdown > summary::-webkit-details-marker { display: none; }
+.stplus-tag-dropdown > summary::-webkit-details-marker, .stplus-greeting-filter > summary::-webkit-details-marker { display: none; }
 .stplus-tag-dropdown[open] { z-index: 5; }
+.stplus-greeting-filter[open] { z-index: 5; }
 .stplus-tag-dropdown-list {
     position: absolute;
     left: 50%;
