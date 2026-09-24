@@ -128,14 +128,13 @@
 .stplus-greeting-filter-option {
     display: flex;
     align-items: center;
-    gap: 5px;
     min-width: 0;
     padding: 2px;
     cursor: pointer;
     user-select: none;
 }
-.stplus-greeting-filter-option input { flex: 0 0 auto; margin: 0; }
-.stplus-greeting-filter-name { overflow-wrap: anywhere; }
+.stplus-greeting-filter-option.stplus-greeting-filter-selected { background: #315f7e; border-color: #8ac7ed; color: #fff; }
+.stplus-greeting-filter-option { overflow-wrap: anywhere; white-space: normal; }
 .stplus-greeting-filter-clear { margin-top: 6px; font-size: .82em; }
 .stplus-greeting-filter-hidden { display: none !important; }
 .stplus-tag-search-match > summary,
