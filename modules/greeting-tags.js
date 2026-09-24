@@ -218,24 +218,27 @@ function renderFilterOptions(control, tags, selected) {
     if (!options) return;
     const signature = JSON.stringify(tags);
     if (options.dataset.tags === signature) {
-        options.querySelectorAll('input[type="checkbox"]').forEach(input => {
-            input.checked = selected.has(input.value);
+        options.querySelectorAll('button[data-tag]').forEach(button => {
+            const active = selected.has(button.dataset.tag);
+            button.classList.toggle('stplus-greeting-filter-selected', active);
+            button.setAttribute('aria-pressed', String(active));
         });
         return;
     }
     options.dataset.tags = signature;
     options.replaceChildren(...tags.map(tag => {
-        const label = element('label', 'stplus-greeting-filter-option');
-        const input = element('input');
-        input.type = 'checkbox';
-        input.value = tag;
-        input.checked = selected.has(tag);
-        input.addEventListener('click', event => {
+        const button = element('button', 'menu_button stplus-greeting-filter-option', tag);
+        button.type = 'button';
+        button.dataset.tag = tag;
+        button.setAttribute('aria-pressed', String(selected.has(tag)));
+        button.addEventListener('click', event => {
             event.preventDefault();
-            input.checked = !input.checked;
-            if (input.checked) selected.add(input.value);
-            else selected.delete(input.value);
-            const filter = input.closest('.stplus-greeting-filter');
+            const active = !selected.has(tag);
+            if (active) selected.add(tag);
+            else selected.delete(tag);
+            button.classList.toggle('stplus-greeting-filter-selected', active);
+            button.setAttribute('aria-pressed', String(active));
+            const filter = button.closest('.stplus-greeting-filter');
             const popup = filter?.closest('.alternate_grettings');
             const data = popup?._stplusGreetingTagData;
             if (filter && popup && data) {
@@ -243,16 +246,7 @@ function renderFilterOptions(control, tags, selected) {
                 applyGreetingFilter(popup, data);
             }
         });
-        input.addEventListener('change', () => {
-            if (input.checked) selected.add(tag);
-            else selected.delete(tag);
-            updateFilterSummary(control, selected);
-            const popup = control.closest('.alternate_grettings');
-            const data = popup?._stplusGreetingTagData;
-            if (popup && data) applyGreetingFilter(popup, data);
-        });
-        label.append(input, element('span', 'stplus-greeting-filter-name', tag));
-        return label;
+        return button;
     }));
 }
 
