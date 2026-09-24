@@ -213,6 +213,33 @@ function applyGreetingFilter(popup, data) {
     });
 }
 
+function toggleGreetingFilter(filter, tag) {
+    const popup = filter.closest('.alternate_grettings');
+    const data = popup?._stplusGreetingTagData;
+    if (!popup || !data) return;
+    const selected = greetingFilters.get(popup) ?? new Set();
+    if (selected.has(tag)) selected.delete(tag);
+    else selected.add(tag);
+    greetingFilters.set(popup, selected);
+    const button = filter.querySelector(`button[data-tag="${CSS.escape(tag)}"]`);
+    button?.classList.toggle('stplus-greeting-filter-selected', selected.has(tag));
+    button?.setAttribute('aria-pressed', String(selected.has(tag)));
+    updateFilterSummary(filter, selected);
+    applyGreetingFilter(popup, data);
+}
+
+function clearGreetingFilter(filter) {
+    const popup = filter.closest('.alternate_grettings');
+    const data = popup?._stplusGreetingTagData;
+    if (!popup || !data) return;
+    const selected = greetingFilters.get(popup) ?? new Set();
+    selected.clear();
+    greetingFilters.set(popup, selected);
+    updateFilterSummary(filter, selected);
+    renderFilterOptions(filter, greetingFilterTags(data), selected);
+    applyGreetingFilter(popup, data);
+}
+
 function renderFilterOptions(control, tags, selected) {
     const options = control.querySelector(':scope .stplus-greeting-filter-options');
     if (!options) return;
@@ -231,21 +258,6 @@ function renderFilterOptions(control, tags, selected) {
         button.type = 'button';
         button.dataset.tag = tag;
         button.setAttribute('aria-pressed', String(selected.has(tag)));
-        button.addEventListener('click', event => {
-            event.preventDefault();
-            const active = !selected.has(tag);
-            if (active) selected.add(tag);
-            else selected.delete(tag);
-            button.classList.toggle('stplus-greeting-filter-selected', active);
-            button.setAttribute('aria-pressed', String(active));
-            const filter = button.closest('.stplus-greeting-filter');
-            const popup = filter?.closest('.alternate_grettings');
-            const data = popup?._stplusGreetingTagData;
-            if (filter && popup && data) {
-                updateFilterSummary(filter, selected);
-                applyGreetingFilter(popup, data);
-            }
-        });
         return button;
     }));
 }
@@ -275,14 +287,6 @@ function refreshGreetingFilter(popup, data, list) {
         const options = element('div', 'stplus-greeting-filter-options');
         const clear = element('button', 'menu_button stplus-greeting-filter-clear', 'Clear');
         clear.type = 'button';
-        clear.addEventListener('click', event => {
-            event.preventDefault();
-            selected.clear();
-            updateFilterSummary(control, selected);
-            control.open = true;
-            applyGreetingFilter(popup, data);
-            renderFilterOptions(control, tags, selected);
-        });
         panel.append(options, clear);
         control.append(summary, panel);
         list.before(control);
@@ -402,7 +406,22 @@ function bind() {
             const control = target?.closest('.stplus-tag-editor');
             const filter = target?.closest('.stplus-greeting-filter');
             const dropdown = target?.closest('.stplus-tag-dropdown');
-            if (filter) return;
+            if (filter) {
+                if (type === 'click') {
+                    const option = target.closest('.stplus-greeting-filter-option[data-tag]');
+                    const clear = target.closest('.stplus-greeting-filter-clear');
+                    if (option) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleGreetingFilter(filter, option.dataset.tag);
+                    } else if (clear) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        clearGreetingFilter(filter);
+                    }
+                }
+                return;
+            }
             if (!control && !dropdown) return;
             event.stopPropagation();
             if (dropdown) {
