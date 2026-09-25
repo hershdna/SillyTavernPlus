@@ -15,15 +15,22 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 - Open the floating Worlds/Lorebooks editor through SillyTavern's native World Info icon.
 - Use the native World Info editor in a floating window that can be moved and resized.
 - Resize the floating window from any corner.
-- Add four-corner resizing to every MovingUI panel, including dynamic windows from third-party extensions such as GalleryPlus.
+- Add four-corner resizing to every MovingUI panel, including dynamic gallery windows.
 - Bring any clicked MovingUI window to the front, including windows supplied by external extensions.
 - Open newly-created MovingUI windows on top automatically, including windows supplied by external extensions.
 - Keep the main chat text window out of click-to-front ordering so opening other windows cannot bury them behind it.
-- Keep transient controls such as Gallery folder autocomplete menus above their owning floating window.
+- Keep transient controls such as gallery folder autocomplete menus above their owning floating window.
+- Enhance SillyTavern's gallery with mixed-media slideshows, favorites, custom ordering, resume, zoom/pan, file-type filtering, and gallery organization controls. Enable or disable these tools under **Gallery** in the module settings.
 - Optionally include previous assistant thinking output in World Info scanning, with a configurable reasoning-turn depth.
 - Generate branch-aware chat history summaries from a custom prompt, store them in chat metadata, inject the active summary at a configurable in-chat depth, and detect when jumps, edits, swipes, or deletions make a summary stale.
 - Open a dedicated settings window from the top bar to enable or disable modules independently, organized under World Info / Lorebooks, Characters, Chat, and MovingUI. MovingUI resizing, reposition handles, frontmost behavior, open-on-top behavior, unbounded resizing, and formatted message editing are enabled by default.
 - Floating window position and size persist between sessions.
+
+## Gallery server features
+
+The gallery module's browser-only features work with a normal SillyTavernPlus extension install. Archiving gallery files, opening their source folder, and linking external media require its optional server component. Copy the included `server-plugin/gallery` folder to `SillyTavern/plugins/SillyTavernPlusGallery` and restart SillyTavern with server plugins enabled. The component registers `/api/plugins/stplus-gallery/*` routes and does not install or overwrite the frontend extension. Keep the standalone gallery extension disabled to avoid duplicate controls.
+
+The bundled gallery code's MIT notice is retained in `modules/gallery/LICENSE`.
 
 ## Chat branches
 

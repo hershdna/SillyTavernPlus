@@ -1,0 +1,8 @@
+{
+  "name": "sillytavernplus-gallery-server",
+  "version": "1.5.2",
+  "private": true,
+  "main": "index.js",
+  "type": "commonjs"
+}
+

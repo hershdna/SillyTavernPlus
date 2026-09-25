@@ -12,7 +12,7 @@
         : new URL('./', window.location.href);
     // Use a changing query parameter so reloaded extensions receive the
     // current module source instead of a stale ESM cache entry.
-    const MODULE_CACHE_VERSION = '0.5.183';
+    const MODULE_CACHE_VERSION = '0.5.184';
     const loadModule = (name) => {
         const moduleUrl = new URL('modules/' + name + '.js?v=' + MODULE_CACHE_VERSION, extensionRoot);
         return import(moduleUrl);
@@ -26,7 +26,7 @@
         }
 
         try {
-            const [settingsStore, greetingMods, greetingTags, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, chatCounts, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager] = await Promise.all([
+            const [settingsStore, greetingMods, greetingTags, lorebookMods, branchingChats, chatVisibleEdit, chatHistory, personaCombination, chatCounts, settingsPanel, movingUiResize, movingUiDrag, movingUiFront, movingUiWindowManager, gallery] = await Promise.all([
                 loadModule('settings-store'),
                 loadModule('greeting-mods'),
                 loadModule('greeting-tags'),
@@ -41,6 +41,7 @@
                 loadModule('movingui-drag'),
                 loadModule('movingui-front'),
                 loadModule('movingui-window-manager'),
+                loadModule('gallery/index'),
             ]);
             const settings = settingsStore.initializeSettings(context);
             // greeting-tags is a default-exported module, unlike the other
@@ -56,6 +57,7 @@
             chatHistory.initialize(context, settings);
             personaCombination.initialize(context, settings);
             chatCounts.initialize();
+            gallery.initialize();
             movingUiResize.initialize(context, settings);
             movingUiDrag.initialize(context, settings);
             movingUiFront.initialize(context, settings);
@@ -74,6 +76,7 @@
                 onMovingUiOpenOnTopChanged: () => movingUiFront.refresh(),
                 onMovingUiUnboundedResizeChanged: () => movingUiResize.refresh(),
                 onMovingUiWindowManager: () => movingUiWindowManager.open(),
+                onGalleryChanged: () => gallery.refresh(),
             });
 
             let scanScheduled = false;
