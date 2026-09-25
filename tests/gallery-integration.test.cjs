@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const galleryServer = require('../server-plugin/gallery');
 
 function response() {
@@ -65,4 +66,19 @@ test('external media URLs point to the integrated server component', async () =>
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test('slideshow navigation matches equivalent encoded gallery URLs', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../modules/gallery/ui-controls.js'), 'utf8')
+        .replace(/^import .*;\r?\n/gm, '')
+        .replace(/^export /gm, '');
+    const sandbox = { URL, location: { href: 'http://127.0.0.1:8000/' } };
+    vm.runInNewContext(`${source}\nthis.helpers = { indexInList, normalizeGalleryUrls };`, sandbox);
+    const list = [
+        'http://127.0.0.1:8000/user/images/Yes,%20My%20Liege/first.webp',
+        'http://127.0.0.1:8000/user/images/Yes,%20My%20Liege/second.webp',
+    ];
+    assert.equal(sandbox.helpers.indexInList(list, 'http://127.0.0.1:8000/user/images/Yes%2C%20My%20Liege/first.webp'), 0);
+    assert.equal(sandbox.helpers.indexInList(list, 'http://127.0.0.1:8000/user/images/Yes%2C%20My%20Liege/second.webp'), 1);
+    assert.equal(sandbox.helpers.normalizeGalleryUrls([list[0], list[0].replace('Yes,', 'Yes%2C')]).length, 1);
 });
