@@ -1,5 +1,6 @@
 const DEFAULT_SETTINGS = Object.freeze({
     greetingModsEnabled: true,
+    galleryEnabled: true,
     greetingTagsEnabled: true,
     personaCombinationEnabled: true,
     personaCombinationSelected: [],
@@ -42,6 +43,7 @@ export function initializeSettings(stContext) {
         ...DEFAULT_SETTINGS,
         ...saved,
         greetingModsEnabled: saved.greetingModsEnabled !== false,
+        galleryEnabled: saved.galleryEnabled !== false,
         greetingTagsEnabled: saved.greetingTagsEnabled !== false,
         personaCombinationEnabled: saved.personaCombinationEnabled !== false,
         personaCombinationSelected: Array.isArray(saved.personaCombinationSelected)

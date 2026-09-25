@@ -266,6 +266,18 @@ function createSettingsWindow() {
     ));
     body.append(charactersSection);
 
+    const gallerySection = createSettingsSection('Gallery');
+    gallerySection.append(createCheckbox(
+        'stplus-gallery-enabled',
+        'Enhanced gallery',
+        'Slideshow, media navigation, favorites, custom ordering, and gallery organization tools.',
+        (enabled) => {
+            settings.galleryEnabled = enabled;
+            callbacks?.onGalleryChanged?.();
+        },
+    ));
+    body.append(gallerySection);
+
     const chatSection = createSettingsSection('Chat');
     chatSection.append(createCheckbox(
         'stplus-chat-history-enabled',
@@ -389,6 +401,7 @@ export function refresh() {
     const lorebookCheckbox = document.getElementById('stplus-lorebook-mods-enabled');
     const greetingCheckbox = document.getElementById('stplus-greeting-mods-enabled');
     const greetingTagsCheckbox = document.getElementById('stplus-greeting-tags-enabled');
+    const galleryCheckbox = document.getElementById('stplus-gallery-enabled');
     const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
@@ -401,6 +414,7 @@ export function refresh() {
     if (lorebookCheckbox) lorebookCheckbox.checked = settings.lorebookModsEnabled;
     if (greetingCheckbox) greetingCheckbox.checked = settings.greetingModsEnabled;
     if (greetingTagsCheckbox) greetingTagsCheckbox.checked = settings.greetingTagsEnabled;
+    if (galleryCheckbox) galleryCheckbox.checked = settings.galleryEnabled;
     if (personaCombinationCheckbox) personaCombinationCheckbox.checked = settings.personaCombinationEnabled;
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;
