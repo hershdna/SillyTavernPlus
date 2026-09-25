@@ -1543,8 +1543,9 @@ function normalizeGalleryUrls(items) {
     } catch {
       // Keep the original value if URL normalization fails.
     }
-    if (!seen.has(url)) {
-      seen.add(url);
+    const identity = galleryMediaIdentity(url);
+    if (!seen.has(identity)) {
+      seen.add(identity);
       out.push(url);
     }
   }
@@ -1561,10 +1562,17 @@ function currentGalleryList(root) {
   }
   return root._stplusGalleryGalleryList;
 }
+function galleryMediaIdentity(value) {
+  try {
+    const url = new URL(value, location.href);
+    return `${url.origin}${decodeURIComponent(url.pathname)}${url.search}${url.hash}`;
+  } catch {
+    return String(value);
+  }
+}
 function indexInList(list, src) {
-  const norm = (u) => { try { return new URL(u, location.href).href; } catch { return u; } };
-  const target = norm(src);
-  return list.findIndex(u => norm(u) === target);
+  const target = galleryMediaIdentity(src);
+  return list.findIndex(u => galleryMediaIdentity(u) === target);
 }
 
 function preload(src) {

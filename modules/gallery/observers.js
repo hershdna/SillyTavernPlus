@@ -123,10 +123,9 @@ function installTopbarGalleryButton() {
     button.appendChild(toggle);
   }
 
-  // appendChild moves only our node, keeping other extensions' icons intact,
-  // while guaranteeing the gallery remains the right-most icon after a late
-  // Character Library/extension insertion.
-  if (button.parentElement !== host || host.lastElementChild !== button) {
+  // Append only when absent. Re-moving the button after every toolbar change
+  // can ping-pong with other extensions that also place their icon last.
+  if (button.parentElement !== host) {
     host.appendChild(button);
   }
 }
