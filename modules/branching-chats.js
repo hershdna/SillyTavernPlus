@@ -1345,6 +1345,21 @@ function getChatSignature(chat) {
     })));
 }
 
+export function treeMessageCount(targetGraph = graph) {
+    const nodes = targetGraph?.nodes;
+    if (!nodes || typeof nodes !== 'object') return 0;
+    return Object.values(nodes).filter((node) => Number(node?.sourceIndex) > 0).length;
+}
+
+function notifyTreeUpdated() {
+    window.dispatchEvent(new CustomEvent('stplus:chat-tree-updated', {
+        detail: {
+            chatKey: getChatKey(),
+            count: treeMessageCount(),
+        },
+    }));
+}
+
 
 function mergeGeneratedSiblingIntoSwipe(message, parentId, sourceIndex) {
     // Alternate greetings are already native swipes on the first message.
@@ -1459,6 +1474,7 @@ function syncGraph(force = false) {
     schedulePersist();
     render({ centerActiveNode: true });
     refreshMessageSwipeControls();
+    notifyTreeUpdated();
 }
 
 function getPathToNode(nodeId) {
