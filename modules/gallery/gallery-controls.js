@@ -12,8 +12,6 @@ const VIDEO_FILE_TYPES = ['mov', 'mp4', 'webm'];
 const SUPPORTED_FILE_TYPES = [...IMAGE_FILE_TYPES, ...VIDEO_FILE_TYPES];
 const EXTERNAL_CACHE_TTL_MS = 5000;
 const EXTERNAL_VALIDATION_BATCH_SIZE = 6;
-const EXTERNAL_INSERT_BATCH_SIZE = 8;
-const EXTERNAL_RESIZE_INTERVAL_MS = 160;
 const EXTERNAL_MEDIA_TIMEOUT_MS = 10000;
 const EXTERNAL_STATUS_EVENT = 'stplus-gallery:external-media-status';
 const AUTOMATIC_SOURCES_EVENT = 'stplus-gallery:automatic-sources-changed';
@@ -400,9 +398,12 @@ function getFullGalleryItemSource(filename) {
   if (typeof jq !== 'function') return '';
 
   try {
-    const items = jq('#dragGallery').nanogallery2('data')?.items;
+    const api = jq('#dragGallery');
+    if (!api.data('nanogallery2data')?.nG2) return '';
+    const items = api.nanogallery2('data')?.items;
     if (!Array.isArray(items)) return '';
     const match = items.find((item) => {
+      if (item.deleted) return false;
       const source = typeof item?.src === 'string' && item.src
         ? item.src
         : (typeof item?.responsiveURL === 'function' ? item.responsiveURL() : '');
@@ -1617,6 +1618,7 @@ async function validateExternalMediaProgressively(folder, signature, rawItems, s
     if (getExternalSourceSignature(getExternalSources(folder)) !== signature) return null;
     const batch = rawItems.slice(start, start + EXTERNAL_VALIDATION_BATCH_SIZE);
     const results = await Promise.all(batch.map(validateExternalMediaItem));
+    if (getExternalSourceSignature(getExternalSources(folder)) !== signature) return null;
     batch.forEach((item, index) => {
       if (results[index].valid) {
         item.thumbnail = results[index].thumbnail || '';
@@ -1791,13 +1793,19 @@ function syncOpenGalleryExternalMedia(folder, items) {
 
   try {
     const galleryApi = jq(gallery);
+    // Calling even a getter before initialization creates an empty default
+    // NanoGallery and prevents ST's later initialization from loading items.
+    const instance = galleryApi.data('nanogallery2data')?.nG2;
+    if (!instance || instance.galleryResizeEventEnabled === false || instance.GOM?.albumIdx < 0) return false;
     const data = galleryApi.nanogallery2('data');
-    const instance = galleryApi.nanogallery2('instance');
-    if (!Array.isArray(data?.items) || !instance) return false;
+    // A native rebuild/refresh temporarily clears the active album. Wait for
+    // it to finish before changing records or asking it to render again.
+    if (!Array.isArray(data?.items)) return false;
 
     const desired = new Map(items.map(item => [item.galleryPath, item]));
     const existing = new Map();
     [...data.items].forEach((item) => {
+      if (item.deleted) return;
       const filename = filenameFromGalleryItem(item);
       if (isExternalGalleryPath(filename)) existing.set(filename, item);
     });
@@ -1818,27 +1826,19 @@ function syncOpenGalleryExternalMedia(folder, items) {
         const newItem = itemFactory.New(instance, String(item.name || ''), '', id, '0', 'image', '');
         newItem.thumbSet(isVideo ? (item.thumbnail || VIDEO_THUMBNAIL) : mediaUrl, 240, 150);
         newItem.setMediaURL(mediaUrl, isVideo ? 'video' : 'img');
-        newItem.addToGOM();
       });
     });
 
-    const generation = (Number(root._stplusGalleryExternalSyncGeneration) || 0) + 1;
-    root._stplusGalleryExternalSyncGeneration = generation;
-    let lastResizeAt = 0;
-    const resizeGallery = (force = false) => {
-      const now = performance.now();
-      if (!force && now - lastResizeAt < EXTERNAL_RESIZE_INTERVAL_MS) return;
-      galleryApi.nanogallery2('resize');
-      lastResizeAt = now;
-    };
-    const runBatch = () => {
-      if (!root.isConnected || root._stplusGalleryExternalSyncGeneration !== generation) return;
-      const batch = operations.splice(0, EXTERNAL_INSERT_BATCH_SIZE);
-      batch.forEach(operation => operation());
-      if (batch.length) resizeGallery(!operations.length);
-      if (operations.length) scheduleGalleryWork(runBatch);
-    };
-    if (operations.length) scheduleGalleryWork(runBatch);
+    if (operations.length) {
+      // Change the records atomically, then let NanoGallery rebuild its own
+      // thumbnail model and pages. addToGOM + resize leaves stale page/index
+      // state, especially when deleting thumbnails that were never displayed.
+      // refresh retains the selected page, even if removing items makes that
+      // page invalid. Reset through the public API while the old model exists.
+      galleryApi.nanogallery2('paginationGotoPage', 0);
+      operations.forEach(operation => operation());
+      galleryApi.nanogallery2('refresh');
+    }
     return true;
   } catch (error) {
     console.warn('[SillyTavernPlus Gallery] Could not update the open gallery in place', error);
@@ -2163,9 +2163,11 @@ function readGalleryFilenames() {
   const jq = window.jQuery || window.$;
   if (typeof jq !== 'function') return [];
   try {
-    const items = jq('#dragGallery').nanogallery2('data')?.items;
+    const api = jq('#dragGallery');
+    if (!api.data('nanogallery2data')?.nG2) return [];
+    const items = api.nanogallery2('data')?.items;
     if (!Array.isArray(items)) return [];
-    return items.map(filenameFromGalleryItem).filter(Boolean);
+    return items.filter(item => !item.deleted).map(filenameFromGalleryItem).filter(Boolean);
   } catch {
     return [];
   }

@@ -1502,11 +1502,12 @@ function readGalleryDataList() {
 
   const gallery = jq('#dragGallery');
   if (!gallery.length || typeof gallery.nanogallery2 !== 'function') return null;
+  if (!gallery.data('nanogallery2data')?.nG2) return null;
 
   try {
     const items = gallery.nanogallery2('data')?.items;
     if (!Array.isArray(items)) return null;
-    return normalizeGalleryUrls(items.map(item => (
+    return normalizeGalleryUrls(items.filter(item => !item.deleted).map(item => (
       // NanoGallery may expose a responsive thumbnail through responsiveURL().
       // The slideshow must use the original media URL when it is available.
       typeof item?.src === 'string' && item.src
