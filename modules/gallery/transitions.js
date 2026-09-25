@@ -122,7 +122,7 @@ function revealWhenReady(root, id, next, reveal) {
     }
     delete next.dataset.stplusGalleryTransitionPending;
     reveal();
-    next.dispatchEvent(new CustomEvent(MEDIA_DISPLAYED_EVENT));
+    next.dispatchEvent(new CustomEvent(MEDIA_DISPLAYED_EVENT, { bubbles: true }));
   }).catch(() => {
     if (root._stplusGalleryTransitionId !== id) discardStaleMedia(root, next);
     // The viewer's media error handler removes failed files and chooses another.
