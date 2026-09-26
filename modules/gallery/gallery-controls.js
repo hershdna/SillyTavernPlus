@@ -134,6 +134,7 @@ export function wireGallery(root) {
   ensureCustomSortOption(sortSelect);
   installOpenFolderControl(root);
   installExternalSourcesControl(root);
+  installGalleryStorageControl(root, sortSelect);
   installFileTypeFilterControl(root, sortSelect);
   installResumeSlideshowControl(root, gallery);
   installGalleryFavorites(root, gallery);
@@ -817,6 +818,92 @@ function installResumeSlideshowControl(root, gallery) {
     lifecycleObserver.disconnect();
   });
   lifecycleObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+function installGalleryStorageControl(root, sortSelect) {
+  const topBar = root.querySelector('.gallery-folder-input')?.parentElement;
+  if (!topBar || topBar.querySelector('.stplus-gallery-storage-button')) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'right_menu_button fa-solid fa-hard-drive fa-fw stplus-gallery-storage-button';
+  button.title = 'Gallery storage location';
+  button.setAttribute('aria-label', button.title);
+  topBar.append(button);
+  button.addEventListener('click', () => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'stplus-gallery-external-sources-window';
+    dialog.setAttribute('aria-label', 'Gallery storage location');
+    const panel = document.createElement('div');
+    panel.className = 'stplus-gallery-external-sources-panel';
+    const title = document.createElement('strong');
+    title.textContent = 'Gallery storage location';
+    const help = document.createElement('p');
+    help.textContent = 'Redirect all gallery reads and writes for this account. Enter an existing, writable folder on the server (local drive, external disk, or network share). Character folders belong directly inside it. Network links require OS permission to create directory symlinks.';
+    const warning = document.createElement('small');
+    warning.textContent = 'Existing local images are retained separately, not moved or merged. Move them manually to the destination if needed. Restore local storage leaves external files untouched. This storage choice persists across restarts and disabling the module.';
+    const input = document.createElement('input');
+    input.className = 'text_pole';
+    input.setAttribute('aria-label', 'External gallery folder');
+    input.placeholder = 'Absolute folder path';
+    const status = document.createElement('div');
+    status.className = 'stplus-gallery-external-sources-status';
+    status.setAttribute('role', 'status');
+    status.style.overflowWrap = 'anywhere';
+    const actions = document.createElement('div');
+    actions.className = 'stplus-gallery-external-source-actions';
+    const makeButton = text => {
+      const element = document.createElement('button');
+      element.type = 'button';
+      element.className = 'menu_button';
+      element.textContent = text;
+      actions.append(element);
+      return element;
+    };
+    const apply = makeButton('Apply storage location');
+    const restore = makeButton('Restore local storage');
+    const close = makeButton('Close');
+    panel.append(title, help, input, warning, status, actions);
+    dialog.append(panel);
+    document.body.append(dialog);
+    let current = null;
+    let busy = false;
+    const update = async action => {
+      if (busy) return;
+      busy = true;
+      apply.disabled = restore.disabled = input.disabled = close.disabled = true;
+      status.textContent = 'Checking gallery storage…';
+      try {
+        const response = await fetch(`/api/plugins/stplus-gallery/storage/${action}`, {
+          method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ path: input.value }),
+        });
+        if (response.status === 404) throw new Error('Install/update the bundled gallery server component and restart SillyTavern to use storage redirection.');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not update gallery storage.');
+        current = data;
+        input.value = data.external ? data.path : '';
+        status.textContent = `${data.external ? 'External' : 'Local'} storage: ${data.path}${data.available ? '' : ' — UNAVAILABLE; reconnect the drive or restore local storage.'}${data.retainedLocalPath ? ` · Original local images: ${data.retainedLocalPath}` : ''}`;
+        if (action !== 'status') {
+          // Native rebuild discards old thumbnails and pagination without changing gallery URLs.
+          const currentSelect = document.querySelector('.gallery-sort-select');
+          if (currentSelect instanceof HTMLSelectElement) refreshGallery(currentSelect);
+        }
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        busy = false;
+        input.disabled = close.disabled = false;
+        apply.disabled = !current;
+        restore.disabled = !current?.external;
+      }
+    };
+    apply.addEventListener('click', () => void update('set'));
+    restore.addEventListener('click', () => void update('restore'));
+    close.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.showModal();
+    void update('status');
+  });
 }
 
 function installExternalSourcesControl(root) {
