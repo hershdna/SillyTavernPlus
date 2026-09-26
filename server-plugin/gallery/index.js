@@ -4,8 +4,9 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { version } = require('./package.json');
+const { getStorage, setStorage, restoreStorage } = require('./storage.js');
 
-const CAPABILITIES = ['archive', 'open-folder', 'external-media', 'source-folders'];
+const CAPABILITIES = ['archive', 'open-folder', 'external-media', 'source-folders', 'gallery-storage'];
 const USABLE_MEDIA_EXTENSIONS = new Set([
   '.bmp', '.gif', '.jfif', '.jpeg', '.jpg', '.png', '.webp',
   '.mov', '.mp4', '.webm',
@@ -163,6 +164,20 @@ async function listGallerySourceFolders(imagesRoot, folder, sources = []) {
 }
 
 async function init(router) {
+  for (const action of ['status', 'set', 'restore']) {
+    router.post(`/storage/${action}`, (request, response) => {
+      if (!request.user?.directories?.userImages) return response.sendStatus(401);
+      try {
+        const root = request.user.directories.userImages;
+        const result = action === 'set' ? setStorage(root, request.body?.path)
+          : action === 'restore' ? restoreStorage(root) : getStorage(root);
+        return response.json(result);
+      } catch (error) {
+        console.error('[SillyTavernPlus Gallery] Storage operation failed', error);
+        return response.status(400).json({ error: error.message });
+      }
+    });
+  }
   router.get('/health', (_request, response) => {
     response.json({ ok: true, version, capabilities: CAPABILITIES });
   });
