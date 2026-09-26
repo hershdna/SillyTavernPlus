@@ -134,7 +134,7 @@ export function wireGallery(root) {
   ensureCustomSortOption(sortSelect);
   installOpenFolderControl(root);
   installExternalSourcesControl(root);
-  installGalleryStorageControl(root, sortSelect);
+  installGalleryStorageControl(root);
   installFileTypeFilterControl(root, sortSelect);
   installResumeSlideshowControl(root, gallery);
   installGalleryFavorites(root, gallery);
@@ -820,7 +820,7 @@ function installResumeSlideshowControl(root, gallery) {
   lifecycleObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-function installGalleryStorageControl(root, sortSelect) {
+function installGalleryStorageControl(root) {
   const topBar = root.querySelector('.gallery-folder-input')?.parentElement;
   if (!topBar || topBar.querySelector('.stplus-gallery-storage-button')) return;
   const button = document.createElement('button');
@@ -856,6 +856,9 @@ function installGalleryStorageControl(root, sortSelect) {
       element.type = 'button';
       element.className = 'menu_button';
       element.textContent = text;
+      element.style.width = 'auto';
+      element.style.whiteSpace = 'nowrap';
+      element.style.flex = '0 0 auto';
       actions.append(element);
       return element;
     };
