@@ -28,7 +28,9 @@ A SillyTavern extension with small quality-of-life tools for the character and W
 
 ## Gallery server features
 
-The gallery module's browser-only features work with a normal SillyTavernPlus extension install. Archiving gallery files, opening their source folder, and linking external media require its optional server component. Copy the included `server-plugin/gallery` folder to `SillyTavern/plugins/SillyTavernPlusGallery` and restart SillyTavern with server plugins enabled. The component registers `/api/plugins/stplus-gallery/*` routes and does not install or overwrite the frontend extension. Keep the standalone gallery extension disabled to avoid duplicate controls.
+The gallery module's browser-only features work with a normal SillyTavernPlus extension install. Archiving gallery files, opening their source folder, linking external media, and redirecting gallery storage require its optional server component. Copy the entire included `server-plugin/gallery` folder to `SillyTavern/plugins/SillyTavernPlusGallery` and restart SillyTavern with server plugins enabled. The component registers `/api/plugins/stplus-gallery/*` routes and does not install or overwrite the frontend extension. Keep the standalone gallery extension disabled to avoid duplicate controls.
+
+The gallery toolbar's **Gallery storage location** button redirects reads and writes for every character in the current account to an existing external folder. Original local media is retained, not migrated or deleted. **Restore local storage** switches back without changing external files. See [storage setup and limitations](server-plugin/gallery/STORAGE.md).
 
 The bundled gallery code's MIT notice is retained in `modules/gallery/LICENSE`.
 
