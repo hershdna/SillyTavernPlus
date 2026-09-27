@@ -2,6 +2,7 @@ import { normalizeDepth, save } from './settings-store.js';
 
 const WORLD_WINDOW_CLASS = 'stplus-floating-worlds';
 const WORLD_WINDOW_STATE_KEY = 'stplus.worldsWindow';
+const WORLD_WINDOW_MIGRATED_KEY = 'stplus.worldsWindow.nativeStateMigrated';
 const REASONING_PROMPT_ID = 'SillyTavernPlusReasoning';
 const REASONING_SETTING_ID = 'stplus-reasoning-scan-setting';
 const RESIZE_HANDLE_CLASS = 'stplus-worlds-resize-handle';
@@ -10,39 +11,51 @@ const CLOSE_BUTTON_CLASS = 'stplus-worlds-close';
 let context = null;
 let settings = null;
 
-function readWorldWindowState() {
+function migrateWorldWindowState() {
+    const power = context?.powerUserSettings;
+    if (!power) return;
     try {
-        const value = JSON.parse(localStorage.getItem(WORLD_WINDOW_STATE_KEY) || '{}');
-        return value && typeof value === 'object' ? value : {};
-    } catch {
-        return {};
-    }
+        if (localStorage.getItem(WORLD_WINDOW_MIGRATED_KEY)) return;
+        const legacy = JSON.parse(localStorage.getItem(WORLD_WINDOW_STATE_KEY) || '{}');
+        power.movingUIState ??= {};
+        // Never replace native/preset geometry with the older standalone record.
+        if (!power.movingUIState.WorldInfo && ['left', 'top', 'width', 'height'].every(key => Number.isFinite(legacy[key]))) {
+            power.movingUIState.WorldInfo = { ...legacy, right: 'unset', bottom: 'unset', margin: 'unset', transform: 'none' };
+            context.saveSettingsDebounced?.();
+        }
+        localStorage.setItem(WORLD_WINDOW_MIGRATED_KEY, '1');
+    } catch { /* Native state remains authoritative when local storage is unavailable. */ }
+}
+
+function readWorldWindowState() {
+    return context?.powerUserSettings?.movingUIState?.WorldInfo ?? {};
 }
 
 function writeWorldWindowState(panel) {
-    try {
-        const rect = panel.getBoundingClientRect();
-        localStorage.setItem(WORLD_WINDOW_STATE_KEY, JSON.stringify({
-            left: Math.round(rect.left),
-            top: Math.round(rect.top),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
-        }));
-    } catch {
-        // Storage may be unavailable in private or restricted contexts.
-    }
+    const power = context?.powerUserSettings;
+    if (!power?.movingUI || !panel.classList.contains(WORLD_WINDOW_CLASS)) return;
+    const rect = panel.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    power.movingUIState ??= {};
+    power.movingUIState.WorldInfo = { ...readWorldWindowState(),
+        left: Math.round(rect.left), top: Math.round(rect.top),
+        width: Math.round(rect.width), height: Math.round(rect.height),
+        right: 'unset', bottom: 'unset', margin: 'unset', transform: 'none' };
+    context.saveSettingsDebounced?.();
 }
 
 function applyWorldWindowState(panel) {
-    const state = readWorldWindowState();
-    const width = Number.isFinite(state.width) ? Math.max(320, Math.min(state.width, window.innerWidth - 24)) : Math.min(860, window.innerWidth - 48);
-    const height = Number.isFinite(state.height) ? Math.max(240, Math.min(state.height, window.innerHeight - 24)) : Math.min(720, window.innerHeight - 48);
-    const left = Number.isFinite(state.left) ? Math.max(8, Math.min(state.left, window.innerWidth - width - 8)) : Math.max(8, (window.innerWidth - width) / 2);
-    const top = Number.isFinite(state.top) ? Math.max(8, Math.min(state.top, window.innerHeight - height - 8)) : Math.max(8, (window.innerHeight - height) / 2);
-    panel.style.setProperty('width', `${width}px`, 'important');
-    panel.style.setProperty('height', `${height}px`, 'important');
-    panel.style.setProperty('left', `${left}px`, 'important');
-    panel.style.setProperty('top', `${top}px`, 'important');
+    const state = context?.powerUserSettings?.movingUI ? readWorldWindowState() : {};
+    const valid = (key, fallback) => state[key] !== null && state[key] !== undefined
+        && Number.isFinite(Number(state[key])) && (!['width', 'height'].includes(key) || Number(state[key]) > 0)
+        ? Number(state[key]) : fallback;
+    const width = valid('width', Math.min(860, window.innerWidth - 48));
+    const height = valid('height', Math.min(720, window.innerHeight - 48));
+    const left = valid('left', Math.max(8, (window.innerWidth - width) / 2));
+    const top = valid('top', Math.max(8, (window.innerHeight - height) / 2));
+    for (const [key, value] of Object.entries({ width, height, left, top })) panel.style.setProperty(key, `${value}px`);
+    panel.style.right = 'unset';
+    panel.style.bottom = 'unset';
     panel._stplusSyncWorldResizeHandles?.();
 }
 
@@ -52,8 +65,7 @@ function closeFloatingWorlds() {
     writeWorldWindowState(panel);
     panel.classList.add('closedDrawer');
     panel.classList.remove('openDrawer', WORLD_WINDOW_CLASS);
-    if (panel.dataset.stplusOriginalStyle) panel.setAttribute('style', panel.dataset.stplusOriginalStyle);
-    else panel.removeAttribute('style');
+    panel.style.display = 'none';
 }
 
 function openFloatingWorlds() {
@@ -133,10 +145,10 @@ function addWorldWindowResizeHandles(panel) {
             height = bottom - top;
         }
 
-        panel.style.setProperty('left', `${Math.round(left)}px`, 'important');
-        panel.style.setProperty('top', `${Math.round(top)}px`, 'important');
-        panel.style.setProperty('width', `${Math.round(width)}px`, 'important');
-        panel.style.setProperty('height', `${Math.round(height)}px`, 'important');
+        panel.style.setProperty('left', `${Math.round(left)}px`);
+        panel.style.setProperty('top', `${Math.round(top)}px`);
+        panel.style.setProperty('width', `${Math.round(width)}px`);
+        panel.style.setProperty('height', `${Math.round(height)}px`);
         syncHandlePositions();
     };
 
@@ -229,6 +241,7 @@ function setupWorldWindow(panel) {
         nativeWorldInfoIcon.dataset.stplusToggleReady = '1';
         nativeWorldInfoIcon.addEventListener('click', () => {
             window.setTimeout(() => {
+                if (!settings.lorebookModsEnabled) return;
                 if (panel.classList.contains('openDrawer')) openFloatingWorlds();
                 else closeFloatingWorlds();
             }, 0);
@@ -251,34 +264,11 @@ function setupWorldWindow(panel) {
         });
         titleRow.appendChild(close);
 
-        let dragState = null;
-        titleRow.addEventListener('pointerdown', (event) => {
-            if (!panel.classList.contains(WORLD_WINDOW_CLASS) || event.target.closest('button, input, select, textarea, a')) return;
-            const rect = panel.getBoundingClientRect();
-            dragState = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
-            titleRow.setPointerCapture?.(event.pointerId);
-            event.preventDefault();
-        });
-        titleRow.addEventListener('pointermove', (event) => {
-            if (!dragState) return;
-            const width = panel.offsetWidth;
-            const height = panel.offsetHeight;
-            panel.style.setProperty('left', `${Math.max(8, Math.min(window.innerWidth - width - 8, event.clientX - dragState.offsetX))}px`, 'important');
-            panel.style.setProperty('top', `${Math.max(8, Math.min(window.innerHeight - height - 8, event.clientY - dragState.offsetY))}px`, 'important');
-        });
-        const stopDragging = () => {
-            if (!dragState) return;
-            dragState = null;
-            writeWorldWindowState(panel);
-        };
-        titleRow.addEventListener('pointerup', stopDragging);
-        titleRow.addEventListener('pointercancel', stopDragging);
     }
 
     if (typeof ResizeObserver === 'function') {
-        new ResizeObserver(() => {
-            if (panel.classList.contains(WORLD_WINDOW_CLASS)) writeWorldWindowState(panel);
-        }).observe(panel);
+        panel._stplusWorldResizeObserver = new ResizeObserver(() => panel._stplusSyncWorldResizeHandles?.());
+        panel._stplusWorldResizeObserver.observe(panel);
     }
 }
 
@@ -286,6 +276,8 @@ function teardownWorldWindow(panel) {
     if (!(panel instanceof HTMLElement)) return;
     closeFloatingWorlds();
     panel._stplusResizeCleanup?.();
+    panel._stplusWorldResizeObserver?.disconnect();
+    delete panel._stplusWorldResizeObserver;
     delete panel._stplusResizeCleanup;
     panel.querySelectorAll(`.${RESIZE_HANDLE_CLASS}, .${CLOSE_BUTTON_CLASS}`).forEach((element) => element.remove());
     panel.querySelector('.stplus-worlds-title-row')?.classList.remove('stplus-worlds-title-row');
@@ -390,7 +382,7 @@ function refresh() {
     installReasoningSettings();
     if (!settings.lorebookModsEnabled) {
         const panel = document.getElementById('WorldInfo');
-        if (panel?.classList.contains(WORLD_WINDOW_CLASS)) teardownWorldWindow(panel);
+        if (panel?.dataset.stplusWindowReady === '1') teardownWorldWindow(panel);
         updateReasoningPrompt();
         syncReasoningSettings();
         return;
@@ -405,6 +397,7 @@ function refresh() {
 export function initialize(stContext, stSettings) {
     context = stContext;
     settings = stSettings;
+    migrateWorldWindowState();
     context.eventSource?.on?.(context.eventTypes?.GENERATION_STARTED, (_type, _params, isDryRun) => {
         if (!isDryRun) updateReasoningPrompt();
     });
