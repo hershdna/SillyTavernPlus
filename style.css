@@ -178,8 +178,8 @@
     display: block !important;
     visibility: visible !important;
     box-sizing: border-box;
-    width: min(860px, calc(100vw - 48px)) !important;
-    height: min(720px, calc(100vh - 48px)) !important;
+    width: min(860px, calc(100vw - 48px));
+    height: min(720px, calc(100vh - 48px));
     min-width: 320px !important;
     min-height: 240px !important;
     max-width: none !important;
@@ -237,8 +237,10 @@
 
 #WorldInfo.stplus-floating-worlds .stplus-worlds-title-row {
     position: relative;
-    cursor: move;
-    user-select: none;
+}
+
+#WorldInfo.stplus-floating-worlds #WorldInfoheader {
+    right: 42px;
 }
 
 #WorldInfo.stplus-floating-worlds .stplus-worlds-title-row > h3 {
