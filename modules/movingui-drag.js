@@ -4,7 +4,6 @@ const MOVINGUI_PANEL_SELECTOR = [
     '.stplus-settings-window',
     '.stplus-branching-window',
     '.stplus-chat-history-window',
-    '#WorldInfo.stplus-floating-worlds',
 ].join(',');
 
 const LATE_LOADED_PANEL_SELECTOR = [
@@ -211,6 +210,7 @@ function getHeader(panel) {
 }
 
 function addDragHandle(panel) {
+    if (panel.querySelector('.drag-grabber')) return () => {};
     if (panel.hasAttribute(READY_ATTRIBUTE)) return;
     panel.setAttribute(READY_ATTRIBUTE, '1');
 
