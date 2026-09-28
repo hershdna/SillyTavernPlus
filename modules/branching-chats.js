@@ -40,6 +40,7 @@ let observedChatIdentity = null;
 let observedChatState = '';
 let chatDomWatcher = null;
 let chatDomSyncTimer = null;
+let settledSwipeControlRefreshTimers = [];
 // CHAT_CHANGED/CHAT_LOADED are the authoritative lifecycle signals. Keep
 // the filename they report separately from the context snapshot because
 // Connection Manager profile application can briefly leave getContext()
@@ -206,6 +207,17 @@ function isGenerationInProgress() {
     // API or another extension omits GENERATION_ENDED. Do not let that stale
     // fence disable a visible branch control after the core state is clear.
     return document.body?.dataset.generating === 'true';
+}
+
+function scheduleSettledSwipeControlRefresh() {
+    // Several SillyTavern/API paths emit GENERATION_ENDED before the final
+    // chat-message container is committed. A one-shot refresh can therefore
+    // inspect the truncated branch and never add controls to the new endpoint.
+    // Reconcile through the short, bounded DOM-settlement window instead.
+    settledSwipeControlRefreshTimers.forEach((timer) => window.clearTimeout(timer));
+    settledSwipeControlRefreshTimers = [0, SYNC_DELAY, 240, 600].map((delay) => window.setTimeout(() => {
+        if (!isGenerationInProgress()) syncGraph(true);
+    }, delay));
 }
 
 function getNativeAutoScrollOwner() {
@@ -2143,6 +2155,7 @@ async function generateFromPreviousAssistant(node, scrollAnchor = null) {
         // The promise has settled here, so do not leave the branch controls
         // permanently disabled.
         generationActive = false;
+        scheduleSettledSwipeControlRefresh();
         // The outer branch-swipe lock must cover the restore as well as the
         // generation. Otherwise the core can re-enable bottom scrolling in
         // the gap between the API promise settling and the anchor restore.
@@ -2530,6 +2543,7 @@ function bindEvents() {
         generationActive = false;
         scheduleSync(0);
         refreshMessageSwipeControls();
+        scheduleSettledSwipeControlRefresh();
     };
     const onSafeChatMutation = () => {
         if (!generationActive) scheduleSync(0);
