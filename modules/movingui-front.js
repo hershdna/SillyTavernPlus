@@ -8,6 +8,7 @@ const MOVINGUI_PANEL_SELECTOR = [
     '#right-nav-panel',
     '#WorldInfo',
     '#floatingPrompt',
+    '#completion_prompt_manager_popup',
     '#logprobsViewer',
     '#cfgConfig',
     '#expression-holder',
@@ -34,6 +35,11 @@ const MOVINGUI_PANEL_SELECTOR = [
 ].join(',');
 
 const MAIN_TEXT_PANEL_SELECTOR = '#sheld';
+// SillyTavern's Chat Completion Prompt Manager editor has a hard-coded
+// `z-index: 3010 !important`. It is an absolute drawer, not a MovingUI
+// window, but it must still be able to appear above a fronted floating panel.
+const IMPORTANT_Z_INDEX_PANEL_SELECTOR = '#completion_prompt_manager_popup';
+const PROMPT_MANAGER_EDIT_TRIGGER_SELECTOR = '#completion_prompt_manager .prompt-manager-edit-action';
 let context = null;
 let settings = null;
 let listenersBound = false;
@@ -112,8 +118,17 @@ function bringToFront(panel) {
 
     const nextZIndex = getHighestZIndex() + 1;
     for (const target of getStackingTargets(panel)) {
-        if (!originalZIndexes.has(target)) originalZIndexes.set(target, target.style.zIndex);
-        target.style.zIndex = String(nextZIndex);
+        if (!originalZIndexes.has(target)) {
+            originalZIndexes.set(target, {
+                value: target.style.getPropertyValue('z-index'),
+                priority: target.style.getPropertyPriority('z-index'),
+            });
+        }
+        target.style.setProperty(
+            'z-index',
+            String(nextZIndex),
+            target.matches(IMPORTANT_Z_INDEX_PANEL_SELECTOR) ? 'important' : '',
+        );
     }
 }
 
@@ -129,7 +144,17 @@ function handlePointerDown(event) {
     }
 }
 
-function handleClick() {
+function handleClick(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    const promptManagerEdit = target?.closest(PROMPT_MANAGER_EDIT_TRIGGER_SELECTOR);
+    if (promptManagerEdit && settings?.movingUiBringToFrontEnabled !== false) {
+        // The native handler opens this sibling drawer after the pencil click.
+        // Resolve it after that handler runs, even if Open on top is disabled.
+        window.setTimeout(() => {
+            const promptEditor = document.querySelector('#completion_prompt_manager_popup');
+            if (isPanelVisible(promptEditor)) bringToFront(promptEditor);
+        }, 0);
+    }
     if (settings?.movingUiOpenOnTopEnabled === false) return;
     // A drawer can be an existing hidden node whose class/display changes in
     // a click handler. Scan after that handler has completed.
@@ -156,8 +181,10 @@ function unbindListeners() {
 }
 
 function restoreZIndexes() {
-    for (const [panel, zIndex] of originalZIndexes) {
-        if (panel.isConnected) panel.style.zIndex = zIndex;
+    for (const [panel, original] of originalZIndexes) {
+        if (!panel.isConnected) continue;
+        if (original.value) panel.style.setProperty('z-index', original.value, original.priority);
+        else panel.style.removeProperty('z-index');
     }
     originalZIndexes.clear();
 }
