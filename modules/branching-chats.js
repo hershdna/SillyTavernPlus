@@ -2021,6 +2021,21 @@ function createBranchSwipeButton(direction, node, enabled, title) {
     return button;
 }
 
+function hasUsableNativeSwipeControls(messageElement) {
+    const nativeControls = [...messageElement.querySelectorAll('.swipe_left, .swipe_right')];
+    // A single visible native action is enough: SillyTavern intentionally
+    // hides the unavailable arrow (for example, previous on swipe 1/1).
+    return nativeControls.some((control) => {
+        if (!(control instanceof HTMLElement) || control.classList.contains('disabled')) return false;
+        const style = window.getComputedStyle(control);
+        return style.display !== 'none'
+            && style.visibility !== 'hidden'
+            && style.pointerEvents !== 'none'
+            && Number(style.opacity || 1) > 0
+            && control.getClientRects().length > 0;
+    });
+}
+
 function refreshMessageSwipeControls() {
     const chatElement = document.querySelector('#chat');
     const chat = getChat();
@@ -2037,12 +2052,12 @@ function refreshMessageSwipeControls() {
         if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= chat.length) return;
         liveMessageIds.add(messageIndex);
         let controls = messageElement.querySelector('.stplus-branch-swipe-controls');
-        // SillyTavern renders the native swipe controls in every message
-        // template, but CSS intentionally hides them except on the last
-        // message. These controls are the branch-aware equivalent for every
-        // earlier message and are deliberately kept outside .mes_block so
-        // formatted editing cannot change the rendered text layout.
-        if (messageIndex === chat.length - 1) {
+        // The endpoint normally uses SillyTavern's native controls. During a
+        // branch-generation redraw those controls can be present but not yet
+        // usable, leaving an otherwise valid endpoint without a way to swipe.
+        // Keep the branch-aware controls as a temporary fallback in that gap.
+        const isEndpoint = messageIndex === chat.length - 1;
+        if (isEndpoint && hasUsableNativeSwipeControls(messageElement)) {
             controls?.remove();
             return;
         }
@@ -2103,7 +2118,8 @@ function refreshMessageSwipeControls() {
     chatElement.querySelectorAll('.stplus-branch-swipe-controls').forEach((controls) => {
         const messageElement = controls.closest('.mes[mesid]');
         const messageIndex = Number(messageElement?.getAttribute('mesid'));
-        if (!messageElement || !liveMessageIds.has(messageIndex) || messageIndex === chat.length - 1) controls.remove();
+        if (!messageElement || !liveMessageIds.has(messageIndex)
+            || (messageIndex === chat.length - 1 && hasUsableNativeSwipeControls(messageElement))) controls.remove();
     });
 }
 
@@ -2167,9 +2183,9 @@ async function handleBranchSwipe(button, scrollAnchor = null) {
     if (branchSwipeInProgress || isGenerationInProgress()) return;
     const node = graph?.nodes?.[button?.dataset?.nodeId];
     if (!node) return;
-    // The native swipe control is only meaningful for a prior message. The
-    // current endpoint is intentionally left to SillyTavern's own controls.
-    if (node.id === getCurrentNodeId()) return;
+    // The endpoint ordinarily uses SillyTavern's own controls. This handler
+    // also supports the short-lived endpoint fallback rendered while native
+    // controls are unavailable after a branch-generation redraw.
     const siblings = getDepthSiblings(node);
     const direction = button.dataset.stplusBranchSwipe;
     const action = getBranchSwipeAction(node, siblings, direction);
