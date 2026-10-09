@@ -1,3 +1,5 @@
+import { saveSettings } from '/script.js';
+
 const DRAG_HANDLE_CLASS = 'stplus-movingui-drag-handle';
 const READY_ATTRIBUTE = 'data-stplus-movingui-drag-ready';
 const MOVINGUI_PANEL_SELECTOR = [
@@ -55,6 +57,7 @@ const DIMENSIONAL_MOVINGUI_STYLE_PROPERTIES = new Set([
 let context = null;
 let settings = null;
 let lifecycleListenersBound = false;
+let presetListenerBound = false;
 const managedPanels = new Map();
 
 function isMovingUiActive() {
@@ -154,6 +157,24 @@ function bindLifecycleListeners() {
         .filter(Boolean)
         .forEach((eventName) => eventSource.on(eventName, scheduleSavedStateRefresh));
     lifecycleListenersBound = true;
+}
+
+function bindPresetPersistence() {
+    if (presetListenerBound) return;
+    // Native MovingUI sets its selected name before it asynchronously clears
+    // the previous layout and installs the new state. Save only after that
+    // work settles: relying on its debounced save means a browser refresh can
+    // otherwise restore the prior (usually Default) preset.
+    document.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLSelectElement) || target.id !== 'movingUIPresets') return;
+        window.setTimeout(() => {
+            if (!isMovingUiActive()) return;
+            refreshSavedMovingUiState();
+            void saveSettings();
+        }, 100);
+    }, true);
+    presetListenerBound = true;
 }
 
 function getContainingBlockPosition(panel, left, top) {
@@ -323,6 +344,7 @@ export function initialize(stContext, stSettings) {
     context = stContext;
     settings = stSettings;
     bindLifecycleListeners();
+    bindPresetPersistence();
     scheduleSavedStateRefresh();
 }
 

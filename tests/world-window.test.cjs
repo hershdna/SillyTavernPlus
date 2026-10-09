@@ -64,7 +64,9 @@ test('native geometry wins migration; reset does not resurrect old standalone ge
 test('shared drag module does not add a second handle to an already draggable window', () => {
     const sandbox = {};
     vm.createContext(sandbox);
-    const source = fs.readFileSync(path.join(__dirname,'../modules/movingui-drag.js'),'utf8').replace(/export function /g,'function ');
+    const source = fs.readFileSync(path.join(__dirname,'../modules/movingui-drag.js'),'utf8')
+        .replace(/^import .*;\r?\n/gm, '')
+        .replace(/export function /g,'function ');
     vm.runInContext(source+'\nthis.add = addDragHandle; this.selector = MOVINGUI_PANEL_SELECTOR;',sandbox);
     const panel = {querySelector: selector => selector === '.drag-grabber' ? {} : null};
     assert.equal(typeof sandbox.add(panel),'function');
