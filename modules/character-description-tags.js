@@ -83,7 +83,19 @@ function scheduleCardSave(characterId, value) {
     });
 }
 
-function getLatestBotMessageText() {
+function getLatestBotMessageText(promptChat = []) {
+    // The prompt-ready event contains the exact serialized conversation that
+    // reaches the API. Context can lag behind it after a swipe or branch jump.
+    const serializedChat = Array.isArray(promptChat) ? promptChat : [];
+    const lastUserIndex = serializedChat.map((message) => message?.role).lastIndexOf('user');
+    const priorConversation = lastUserIndex >= 0 ? serializedChat.slice(0, lastUserIndex) : serializedChat;
+    const latestSerializedBot = [...priorConversation].reverse().find((message) => (
+        message?.role === 'assistant'
+        && typeof message?.content === 'string'
+    ));
+    if (latestSerializedBot) return latestSerializedBot.content;
+
+    // Fallback for prompt formats that do not serialize conversation turns.
     const chat = Array.isArray(getLiveContext()?.chat) ? getLiveContext().chat : [];
     const latestBotMessage = [...chat].reverse().find((message) => (
         message?.is_system !== true
@@ -180,7 +192,7 @@ function handleChatCompletionPrompt(data) {
     if (!cardSettings.tags.length) return;
     const descriptionPrompt = findDescriptionPrompt(data.chat, cardSettings.tags);
     if (!descriptionPrompt) return;
-    descriptionPrompt.content = getFilteredDescription(descriptionPrompt.content, getLatestBotMessageText(), cardSettings.tags, cardSettings);
+    descriptionPrompt.content = getFilteredDescription(descriptionPrompt.content, getLatestBotMessageText(data.chat), cardSettings.tags, cardSettings);
 }
 
 function findDescriptionPrompt(chat, tags) {

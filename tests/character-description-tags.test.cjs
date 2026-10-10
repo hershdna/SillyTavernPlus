@@ -65,12 +65,13 @@ test('adjacent-tag options include only direct neighbors in the card tag order',
     assert.match(result, /Stage 3 text/);
 });
 
-test('Chat Completion hook finds the serialized description prompt using its Tag: headers', () => {
+test('Chat Completion hook uses the serialized preceding assistant message for active tags', () => {
     const api = loadApi();
     let listener;
     api.initialize({
         chat: [
-            { is_user: false, mes: '[Stage 1]' },
+            // Deliberately stale context: the prompt payload must win.
+            { is_user: false, mes: '[Stage 0]' },
             { is_user: true, mes: 'Continue without changing the stage.' },
         ],
         characterId: 0,
@@ -84,6 +85,8 @@ test('Chat Completion hook finds the serialized description prompt using its Tag
         chat: [
             { role: 'system', content: 'Other system prompt.' },
             { role: 'system', content: description },
+            { role: 'assistant', content: '<!--[Day 163, Stage 1, UserRel 0]-->' },
+            { role: 'user', content: 'Continue without changing the stage.' },
         ],
     };
     listener(data);
