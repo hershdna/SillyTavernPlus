@@ -34,7 +34,10 @@ function createCheckbox(id, labelText, description, onChange) {
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.id = id;
-    input.addEventListener('change', () => {
+    // The global UI observer can refresh this settings window while a user is
+    // typing. Commit on each input event so a refresh never restores the old
+    // value over text that has not yet blurred.
+    input.addEventListener('input', () => {
         onChange(input.checked);
         save();
     });
@@ -57,6 +60,26 @@ function createSettingsSection(titleText) {
     title.textContent = titleText;
     section.appendChild(title);
     return section;
+}
+
+function createTagListControl() {
+    const wrapper = document.createElement('label');
+    wrapper.className = 'stplus-settings-tag-list';
+    const title = document.createElement('strong');
+    title.textContent = 'Character description tags';
+    const help = document.createElement('small');
+    help.textContent = 'One tag per line. The latest message activates exact [Tag] markers; only matching - Tag: description sections are sent.';
+    const input = document.createElement('textarea');
+    input.id = 'stplus-character-description-tags';
+    input.rows = 5;
+    input.placeholder = 'Stage 0\nStage 1\nUserRel 1';
+    input.addEventListener('input', () => {
+        settings.characterDescriptionTags = [...new Set(input.value.split(/\r?\n/).map((tag) => tag.trim()).filter(Boolean))];
+        save();
+        callbacks?.onCharacterDescriptionTagsChanged?.();
+    });
+    wrapper.append(title, help, input);
+    return wrapper;
 }
 
 function installNativeMovingUiManagerButton() {
@@ -264,6 +287,16 @@ function createSettingsWindow() {
             callbacks?.onPersonaCombinationChanged?.();
         },
     ));
+    charactersSection.append(createCheckbox(
+        'stplus-character-description-tag-filter-enabled',
+        'Character description tags',
+        'Filter - Tag: sections from the outgoing character description using [Tag] markers in the latest message.',
+        (enabled) => {
+            settings.characterDescriptionTagFilterEnabled = enabled;
+            callbacks?.onCharacterDescriptionTagsChanged?.();
+        },
+    ));
+    charactersSection.append(createTagListControl());
     body.append(charactersSection);
 
     const gallerySection = createSettingsSection('Gallery');
@@ -403,6 +436,8 @@ export function refresh() {
     const greetingTagsCheckbox = document.getElementById('stplus-greeting-tags-enabled');
     const galleryCheckbox = document.getElementById('stplus-gallery-enabled');
     const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');
+    const characterDescriptionTagFilterCheckbox = document.getElementById('stplus-character-description-tag-filter-enabled');
+    const characterDescriptionTags = document.getElementById('stplus-character-description-tags');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
     const formattedMessageEditCheckbox = document.getElementById('stplus-formatted-message-edit-enabled');
@@ -416,6 +451,9 @@ export function refresh() {
     if (greetingTagsCheckbox) greetingTagsCheckbox.checked = settings.greetingTagsEnabled;
     if (galleryCheckbox) galleryCheckbox.checked = settings.galleryEnabled;
     if (personaCombinationCheckbox) personaCombinationCheckbox.checked = settings.personaCombinationEnabled;
+    if (characterDescriptionTagFilterCheckbox) characterDescriptionTagFilterCheckbox.checked = settings.characterDescriptionTagFilterEnabled;
+    if (characterDescriptionTags instanceof HTMLTextAreaElement
+        && document.activeElement !== characterDescriptionTags) characterDescriptionTags.value = (settings.characterDescriptionTags ?? []).join('\n');
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;
     if (formattedMessageEditCheckbox) formattedMessageEditCheckbox.checked = settings.formattedMessageEditEnabled;
