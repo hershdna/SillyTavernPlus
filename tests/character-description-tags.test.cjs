@@ -65,7 +65,7 @@ test('adjacent-tag options include only direct neighbors in the card tag order',
     assert.match(result, /Stage 3 text/);
 });
 
-test('Chat Completion hook filters the charDescription prompt using the most recent bot message', () => {
+test('Chat Completion hook finds the serialized description prompt using its Tag: headers', () => {
     const api = loadApi();
     let listener;
     api.initialize({
@@ -82,12 +82,12 @@ test('Chat Completion hook filters the charDescription prompt using the most rec
     });
     const data = {
         chat: [
-            { identifier: 'otherPrompt', content: description },
-            { identifier: 'charDescription', content: description },
+            { role: 'system', content: 'Other system prompt.' },
+            { role: 'system', content: description },
         ],
     };
     listener(data);
-    assert.equal(data.chat[0].content, description);
+    assert.equal(data.chat[0].content, 'Other system prompt.');
     assert.match(data.chat[1].content, /Stage 1/);
     assert.doesNotMatch(data.chat[1].content, /Stage 0/);
 });

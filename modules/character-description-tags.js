@@ -178,9 +178,35 @@ function handleChatCompletionPrompt(data) {
     if (!isEnabled() || !Array.isArray(data?.chat)) return;
     const cardSettings = getCardSettings();
     if (!cardSettings.tags.length) return;
-    const descriptionPrompt = data.chat.find((prompt) => prompt?.identifier === 'charDescription' && typeof prompt.content === 'string');
+    const descriptionPrompt = findDescriptionPrompt(data.chat, cardSettings.tags);
     if (!descriptionPrompt) return;
     descriptionPrompt.content = getFilteredDescription(descriptionPrompt.content, getLatestBotMessageText(), cardSettings.tags, cardSettings);
+}
+
+function findDescriptionPrompt(chat, tags) {
+    // Prompt identifiers exist before ChatCompletion#getChat(), but SillyTavern
+    // intentionally removes them from the public prompt-ready payload.
+    const identified = chat.find((prompt) => prompt?.identifier === 'charDescription' && typeof prompt.content === 'string');
+    if (identified) return identified;
+
+    // The serialized payload retains content. The character description is the
+    // system message containing the most configured Tag: headers. This also
+    // works when SillyTavern has merged adjacent system messages.
+    let bestPrompt = null;
+    let bestScore = 0;
+    for (const prompt of chat) {
+        if (prompt?.role !== 'system' || typeof prompt.content !== 'string') continue;
+        const matchedTags = new Set();
+        for (const line of prompt.content.split(/\r?\n/)) {
+            const header = getHeaderInfo(line, tags);
+            if (header.tag) matchedTags.add(header.tag);
+        }
+        if (matchedTags.size > bestScore) {
+            bestPrompt = prompt;
+            bestScore = matchedTags.size;
+        }
+    }
+    return bestPrompt;
 }
 
 function createControl() {
