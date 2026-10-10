@@ -68,11 +68,14 @@ test('adjacent-tag options include only direct neighbors in the card tag order',
     assert.match(result, /Stage 3 text/);
 });
 
-test('generation hook filters only the outgoing prompt description using the latest message', () => {
+test('generation hook filters using the most recent bot message, not a later user message', () => {
     const api = loadApi();
     let listener;
     api.initialize({
-        chat: [{ mes: '[Stage 1]' }],
+        chat: [
+            { is_user: false, mes: '[Stage 1]' },
+            { is_user: true, mes: 'Continue without changing the stage.' },
+        ],
         characterId: 0,
         characters: [{ data: { extensions: { stplus_character_description_tags: { tags: ['Stage 0', 'Stage 1'] } } } }],
         eventTypes: { GENERATE_BEFORE_COMBINE_PROMPTS: 'before-combine' },

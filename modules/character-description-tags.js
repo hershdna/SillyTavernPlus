@@ -83,10 +83,14 @@ function scheduleCardSave(characterId, value) {
     });
 }
 
-function getLatestMessageText() {
+function getLatestBotMessageText() {
     const chat = Array.isArray(getLiveContext()?.chat) ? getLiveContext().chat : [];
-    const latest = chat.at(-1);
-    return typeof latest?.mes === 'string' ? latest.mes : '';
+    const latestBotMessage = [...chat].reverse().find((message) => (
+        message?.is_system !== true
+        && (message?.is_user === false || message?.role === 'assistant')
+        && typeof message?.mes === 'string'
+    ));
+    return latestBotMessage?.mes ?? '';
 }
 
 export function findActiveTags(message, tags) {
@@ -171,7 +175,7 @@ function handleBeforeCombinePrompts(data) {
     if (!isEnabled() || !data || typeof data.description !== 'string') return;
     const cardSettings = getCardSettings();
     if (!cardSettings.tags.length) return;
-    data.description = getFilteredDescription(data.description, getLatestMessageText(), cardSettings.tags, cardSettings);
+    data.description = getFilteredDescription(data.description, getLatestBotMessageText(), cardSettings.tags, cardSettings);
 }
 
 function createControl() {
@@ -182,7 +186,7 @@ function createControl() {
     const heading = document.createElement('strong');
     heading.textContent = 'Description tags';
     const help = document.createElement('small');
-    help.textContent = 'Per card. One tag per line. The latest message activates exact [Tag] markers; matching Tag: sections are sent.';
+    help.textContent = 'Per card. One tag per line. The latest bot message activates exact [Tag] markers; matching Tag: sections are sent.';
     const input = document.createElement('textarea');
     input.id = 'stplus-character-description-tag-list';
     input.rows = 3;
