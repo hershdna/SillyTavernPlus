@@ -6,7 +6,6 @@ const DEFAULT_SETTINGS = Object.freeze({
     personaCombinationSelected: [],
     personaCombinationPrimary: null,
     characterDescriptionTagFilterEnabled: true,
-    characterDescriptionTags: [],
     branchingChatsEnabled: true,
     formattedMessageEditEnabled: true,
     lorebookModsEnabled: true,
@@ -55,9 +54,6 @@ export function initializeSettings(stContext) {
             ? saved.personaCombinationPrimary
             : null,
         characterDescriptionTagFilterEnabled: saved.characterDescriptionTagFilterEnabled !== false,
-        characterDescriptionTags: Array.isArray(saved.characterDescriptionTags)
-            ? [...new Set(saved.characterDescriptionTags.map((tag) => String(tag ?? '').trim()).filter(Boolean))]
-            : [],
         branchingChatsEnabled: saved.branchingChatsEnabled !== false,
         formattedMessageEditEnabled: saved.formattedMessageEditEnabled !== false,
         lorebookModsEnabled: saved.lorebookModsEnabled !== false,

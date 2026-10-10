@@ -529,6 +529,31 @@ body:not(.movingUI) .stplus-movingui-resize-handle {
     display: block;
 }
 
+.stplus-character-description-tag-panel {
+    gap: 5px;
+    margin: 8px 0;
+}
+
+.stplus-character-description-tag-panel small {
+    opacity: 0.75;
+    line-height: 1.25;
+}
+
+.stplus-character-description-tag-panel textarea {
+    min-height: 4.5em;
+    resize: vertical;
+}
+
+.stplus-character-description-tag-options {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.stplus-character-description-tag-option {
+    margin: 0;
+}
+
 .stplus-visible-editing .mes_block {
     position: relative;
 }

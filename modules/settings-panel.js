@@ -62,26 +62,6 @@ function createSettingsSection(titleText) {
     return section;
 }
 
-function createTagListControl() {
-    const wrapper = document.createElement('label');
-    wrapper.className = 'stplus-settings-tag-list';
-    const title = document.createElement('strong');
-    title.textContent = 'Character description tags';
-    const help = document.createElement('small');
-    help.textContent = 'One tag per line. The latest message activates exact [Tag] markers; only matching - Tag: description sections are sent.';
-    const input = document.createElement('textarea');
-    input.id = 'stplus-character-description-tags';
-    input.rows = 5;
-    input.placeholder = 'Stage 0\nStage 1\nUserRel 1';
-    input.addEventListener('input', () => {
-        settings.characterDescriptionTags = [...new Set(input.value.split(/\r?\n/).map((tag) => tag.trim()).filter(Boolean))];
-        save();
-        callbacks?.onCharacterDescriptionTagsChanged?.();
-    });
-    wrapper.append(title, help, input);
-    return wrapper;
-}
-
 function installNativeMovingUiManagerButton() {
     const movingUiReset = document.getElementById('movingUIreset');
     if (!(movingUiReset instanceof HTMLElement) || !(movingUiReset.parentElement instanceof HTMLElement)) return;
@@ -290,13 +270,12 @@ function createSettingsWindow() {
     charactersSection.append(createCheckbox(
         'stplus-character-description-tag-filter-enabled',
         'Character description tags',
-        'Filter - Tag: sections from the outgoing character description using [Tag] markers in the latest message.',
+        'Filter per-card Tag: sections from the outgoing character description using [Tag] markers in the latest message. Configure tags in Character Management.',
         (enabled) => {
             settings.characterDescriptionTagFilterEnabled = enabled;
             callbacks?.onCharacterDescriptionTagsChanged?.();
         },
     ));
-    charactersSection.append(createTagListControl());
     body.append(charactersSection);
 
     const gallerySection = createSettingsSection('Gallery');
@@ -437,7 +416,6 @@ export function refresh() {
     const galleryCheckbox = document.getElementById('stplus-gallery-enabled');
     const personaCombinationCheckbox = document.getElementById('stplus-persona-combination-enabled');
     const characterDescriptionTagFilterCheckbox = document.getElementById('stplus-character-description-tag-filter-enabled');
-    const characterDescriptionTags = document.getElementById('stplus-character-description-tags');
     const branchingChatsCheckbox = document.getElementById('stplus-branching-chats-enabled');
     const chatHistoryCheckbox = document.getElementById('stplus-chat-history-enabled');
     const formattedMessageEditCheckbox = document.getElementById('stplus-formatted-message-edit-enabled');
@@ -452,8 +430,6 @@ export function refresh() {
     if (galleryCheckbox) galleryCheckbox.checked = settings.galleryEnabled;
     if (personaCombinationCheckbox) personaCombinationCheckbox.checked = settings.personaCombinationEnabled;
     if (characterDescriptionTagFilterCheckbox) characterDescriptionTagFilterCheckbox.checked = settings.characterDescriptionTagFilterEnabled;
-    if (characterDescriptionTags instanceof HTMLTextAreaElement
-        && document.activeElement !== characterDescriptionTags) characterDescriptionTags.value = (settings.characterDescriptionTags ?? []).join('\n');
     if (branchingChatsCheckbox) branchingChatsCheckbox.checked = settings.branchingChatsEnabled;
     if (chatHistoryCheckbox) chatHistoryCheckbox.checked = settings.chatHistoryEnabled;
     if (formattedMessageEditCheckbox) formattedMessageEditCheckbox.checked = settings.formattedMessageEditEnabled;
