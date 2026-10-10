@@ -97,9 +97,12 @@ export function findActiveTags(message, tags) {
     const source = String(message ?? '');
     const active = new Set();
     for (const tag of normalizeTags(tags)) {
-        // Tags must be explicitly bracketed in the latest message. This keeps
-        // ordinary prose from changing the outgoing character description.
-        if (source.includes(`[${tag}]`)) active.add(tag);
+        // Tags may appear in normal prose or in a generated comment block.
+        // Bound the match so a shorter tag ("Stage 1") cannot match the start
+        // of another defined state ("Stage 10").
+        const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapedTag}(?=$|[^\\p{L}\\p{N}_])`, 'iu');
+        if (pattern.test(source)) active.add(tag);
     }
     return active;
 }
@@ -186,7 +189,7 @@ function createControl() {
     const heading = document.createElement('strong');
     heading.textContent = 'Description tags';
     const help = document.createElement('small');
-    help.textContent = 'Per card. One tag per line. The latest bot message activates exact [Tag] markers; matching Tag: sections are sent.';
+    help.textContent = 'Per card. One tag per line. Tags found in the latest bot message activate matching Tag: sections.';
     const input = document.createElement('textarea');
     input.id = 'stplus-character-description-tag-list';
     input.rows = 3;

@@ -24,16 +24,13 @@ const description = [
     '- UserRel 2: Trusted ally state.',
 ].join('\n');
 
-test('only bracketed, defined latest-message tags activate matching headers', () => {
+test('defined tags activate from flexible bot text without partial tag matches', () => {
     const api = loadApi();
-    const tags = ['Stage 0', 'Stage 1', 'UserRel 2'];
-    const active = api.findActiveTags('Advance to [Stage 1] with [UserRel 2]. Stage 0 stays prose.', tags);
-    assert.deepEqual([...active], ['Stage 1', 'UserRel 2']);
+    const tags = ['Stage 0', 'Stage 1', 'Stage 10', 'UserRel 2'];
+    const active = api.findActiveTags('<!-- Day 3, stage 10, USERREL 2 -->', tags);
+    assert.deepEqual([...active], ['Stage 10', 'UserRel 2']);
     assert.equal(api.filterDescriptionByTags(description, active, tags), [
         'Permanent character information.',
-        '',
-        '- Stage 1: Second state.',
-        'Still part of Stage 1.',
         '',
         '- UserRel 2: Trusted ally state.',
     ].join('\n'));
