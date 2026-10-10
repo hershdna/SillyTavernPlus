@@ -174,11 +174,13 @@ export function getFilteredDescription(description, latestMessage, tags, options
     return filterDescriptionByTags(description, activeTags, definedTags);
 }
 
-function handleBeforeCombinePrompts(data) {
-    if (!isEnabled() || !data || typeof data.description !== 'string') return;
+function handleChatCompletionPrompt(data) {
+    if (!isEnabled() || !Array.isArray(data?.chat)) return;
     const cardSettings = getCardSettings();
     if (!cardSettings.tags.length) return;
-    data.description = getFilteredDescription(data.description, getLatestBotMessageText(), cardSettings.tags, cardSettings);
+    const descriptionPrompt = data.chat.find((prompt) => prompt?.identifier === 'charDescription' && typeof prompt.content === 'string');
+    if (!descriptionPrompt) return;
+    descriptionPrompt.content = getFilteredDescription(descriptionPrompt.content, getLatestBotMessageText(), cardSettings.tags, cardSettings);
 }
 
 function createControl() {
@@ -245,9 +247,9 @@ export function initialize(stContext, stSettings) {
     context = stContext;
     settings = stSettings;
     if (listenerBound) return;
-    const event = context?.eventTypes?.GENERATE_BEFORE_COMBINE_PROMPTS;
+    const event = context?.eventTypes?.CHAT_COMPLETION_PROMPT_READY;
     if (!event || !context?.eventSource?.on) return;
-    context.eventSource.on(event, handleBeforeCombinePrompts);
+    context.eventSource.on(event, handleChatCompletionPrompt);
     listenerBound = true;
     if (typeof document !== 'undefined') refreshControl();
 }

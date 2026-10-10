@@ -65,7 +65,7 @@ test('adjacent-tag options include only direct neighbors in the card tag order',
     assert.match(result, /Stage 3 text/);
 });
 
-test('generation hook filters using the most recent bot message, not a later user message', () => {
+test('Chat Completion hook filters the charDescription prompt using the most recent bot message', () => {
     const api = loadApi();
     let listener;
     api.initialize({
@@ -75,13 +75,19 @@ test('generation hook filters using the most recent bot message, not a later use
         ],
         characterId: 0,
         characters: [{ data: { extensions: { stplus_character_description_tags: { tags: ['Stage 0', 'Stage 1'] } } } }],
-        eventTypes: { GENERATE_BEFORE_COMBINE_PROMPTS: 'before-combine' },
+        eventTypes: { CHAT_COMPLETION_PROMPT_READY: 'chat-prompt-ready' },
         eventSource: { on: (_event, callback) => { listener = callback; } },
     }, {
         characterDescriptionTagFilterEnabled: true,
     });
-    const data = { description };
+    const data = {
+        chat: [
+            { identifier: 'otherPrompt', content: description },
+            { identifier: 'charDescription', content: description },
+        ],
+    };
     listener(data);
-    assert.match(data.description, /Stage 1/);
-    assert.doesNotMatch(data.description, /Stage 0/);
+    assert.equal(data.chat[0].content, description);
+    assert.match(data.chat[1].content, /Stage 1/);
+    assert.doesNotMatch(data.chat[1].content, /Stage 0/);
 });
