@@ -68,6 +68,21 @@ test('external media URLs point to the integrated server component', async () =>
     }
 });
 
+test('automatic external folder links exclude the native gallery root', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stplus-gallery-test-'));
+    const external = fs.mkdtempSync(path.join(os.tmpdir(), 'stplus-gallery-external-'));
+    try {
+        fs.mkdirSync(path.join(root, 'Character', 'native-child'), { recursive: true });
+        fs.mkdirSync(path.join(external, 'linked-child'));
+        const folders = await galleryServer.listGallerySourceFolders(root, 'Character', [external]);
+        assert.deepEqual(folders, [path.join(external, 'linked-child')]);
+        assert.doesNotMatch(folders.join('\n'), /native-child/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(external, { recursive: true, force: true });
+    }
+});
+
 test('slideshow navigation matches equivalent encoded gallery URLs', () => {
     const source = fs.readFileSync(path.join(__dirname, '../modules/gallery/ui-controls.js'), 'utf8')
         .replace(/^import .*;\r?\n/gm, '')

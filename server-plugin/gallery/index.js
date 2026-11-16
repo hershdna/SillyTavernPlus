@@ -146,13 +146,13 @@ async function collectSubdirectories(directory, folders, seen, limit = 2000) {
 }
 
 async function listGallerySourceFolders(imagesRoot, folder, sources = []) {
-  const sourceDirectory = resolveGalleryDirectory(imagesRoot, folder);
-  if (!sourceDirectory) return null;
-  const stat = await fs.promises.stat(sourceDirectory).catch(() => null);
-  if (!stat?.isDirectory()) return null;
+  // Validate the gallery folder without inspecting it. Native gallery folders
+  // are not external links: when storage is redirected, inspecting this root
+  // would leak the redirect target into the external-links list and replace
+  // its automatic entries.
+  if (!resolveGalleryDirectory(imagesRoot, folder)) return null;
   const folders = [];
   const seen = new Set();
-  await collectSubdirectories(sourceDirectory, folders, seen);
   for (const source of Array.isArray(sources) ? sources.slice(0, 100) : []) {
     const resolved = normalizeSourceAddress(source);
     if (!resolved) continue;
