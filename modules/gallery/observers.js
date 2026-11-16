@@ -61,7 +61,27 @@ function applyGalleryTitle() {
   }
 }
 
+function hasActiveGalleryTarget() {
+  const context = window.SillyTavern?.getContext?.();
+  const characterId = Number(context?.characterId);
+  return Boolean(String(context?.groupId || '').trim()) || Number.isInteger(characterId) && characterId >= 0;
+}
+
+function notifyGalleryTargetRequired() {
+  const message = 'Select a character or group chat before opening its gallery.';
+  if (typeof window.toastr?.info === 'function') window.toastr.info(message);
+  else console.info(`[SillyTavernPlus Gallery] ${message}`);
+}
+
 function openGalleryFromTopbar() {
+  // Native Gallery calls /api/images/list with an undefined folder while on
+  // the welcome page. The server correctly returns an error object, but core
+  // Gallery assumes an array and crashes trying to iterate it.
+  if (!hasActiveGalleryTarget()) {
+    notifyGalleryTargetRequired();
+    return;
+  }
+
   // The core Gallery extension owns the actual gallery-opening routine. Use
   // its existing action so the toolbar button stays compatible with ST.
   const galleryAction = document.querySelector('#show_gallery_wand_button');
